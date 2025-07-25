@@ -1,0 +1,2605 @@
+[{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9c4"
+    },
+    "Ingredient": "Potato",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/potato.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9c5"
+    },
+    "Ingredient": "Onion",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/onion.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9c6"
+    },
+    "Ingredient": "Spring Onion",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/spring_onion.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9c7"
+    },
+    "Ingredient": "Tomato",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/tomato.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9c8"
+    },
+    "Ingredient": "Lemon",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/lemon.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9c9"
+    },
+    "Ingredient": "Coriander Leaves",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/coriander.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9ca"
+    },
+    "Ingredient": "Ginger",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/ginger.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9cb"
+    },
+    "Ingredient": "Garlic",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/garlic.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9cc"
+    },
+    "Ingredient": "Green Capsicum",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/capsium.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9cd"
+    },
+    "Ingredient": "Red Bell Pepper",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/red-bell.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9ce"
+    },
+    "Ingredient": "Yellow Bell Pepper",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/yello_bell.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9cf"
+    },
+    "Ingredient": "Broccoli",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/broccoli.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9d0"
+    },
+    "Ingredient": "Button Mushroom",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/mushroom.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9d1"
+    },
+    "Ingredient": "Mint Leaves",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/mint.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9d2"
+    },
+    "Ingredient": "Basil Leaves",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/basil.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9d3"
+    },
+    "Ingredient": "Spinach",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/spinach.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9d4"
+    },
+    "Ingredient": "Pineapple Slices",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/pineapple.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9d5"
+    },
+    "Ingredient": "Apple",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/apple.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9d6"
+    },
+    "Ingredient": "Pomegranate",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img8f6e30ad-012f-4cca-a7ce-2296ca25fa45.jpeg?v=1609166867602"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9d7"
+    },
+    "Ingredient": "Kiwi",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/kiwi.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9d8"
+    },
+    "Ingredient": "Grapes Red",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img0217b4e9-59ff-4969-a638-a990e8bfd320.jpeg?v=1597682333247"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9d9"
+    },
+    "Ingredient": "Banana",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgb2904d13-33b2-4649-8d6e-192337de8100.jpeg?v=1604698141195"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9da"
+    },
+    "Ingredient": "Black Pepper Powder",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img22c92901-a3cb-4443-8916-6393b7d81c65.jpeg?v=1640228998569"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9db"
+    },
+    "Ingredient": "Salt",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/salt.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9dc"
+    },
+    "Ingredient": "Sugar",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/sugar.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9dd"
+    },
+    "Ingredient": "Degi Mirch",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img40759bbd-3768-4784-81f3-d61caccac3d7.jpeg?v=1640229451257"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9de"
+    },
+    "Ingredient": "Oregano",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img16adc08a-ea4c-4a1e-8586-5d0023deff9a.jpeg?v=1602192671306"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9df"
+    },
+    "Ingredient": "Saffron",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img8c026b6f-b28d-49d5-a8e6-33ddd1740f29.jpeg?v=1640228757863"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9e0"
+    },
+    "Ingredient": "Refined Oil",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/cooking_oil.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9e1"
+    },
+    "Ingredient": "Cashew Nuts",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/cashew.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9e2"
+    },
+    "Ingredient": "Cornflour",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/corn_flour.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9e3"
+    },
+    "Ingredient": "Refined Flour",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/maida.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9e4"
+    },
+    "Ingredient": "Honey",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/honey.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9e5"
+    },
+    "Ingredient": "Olive Oil",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/olive_oil.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9e6"
+    },
+    "Ingredient": "Sweet Corn Kernels",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/sweet_corn.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9e7"
+    },
+    "Ingredient": "Arborio Rice",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img6b9df106-a2c6-4f0b-88bc-d607c79d4e98.jpeg?v=1600894596642"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9e8"
+    },
+    "Ingredient": "Sesame Seeds",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/sesame_seeds.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9e9"
+    },
+    "Ingredient": "Almonds",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgfd6d15fa-ddfa-41fd-a2ac-820ecc3c7b05.jpeg?v=1597681878783"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9ea"
+    },
+    "Ingredient": "Tortilla Wraps",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img148c6ca3-b764-4b53-872a-3987f41c9e22.jpeg?v=1598180509724"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9eb"
+    },
+    "Ingredient": "Bao Buns",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgcb8560a6-59fa-4b1a-ade6-9893b700bb3d.jpeg?v=1652380194978"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9ec"
+    },
+    "Ingredient": "Red Chilly Sauce",
+    "Type": "Spreads & Sauces",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/red_chilly_sauce.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9ed"
+    },
+    "Ingredient": "Soya Sauce",
+    "Type": "Spreads & Sauces",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/soya_sauce.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9ee"
+    },
+    "Ingredient": "Vinegar",
+    "Type": "Spreads & Sauces",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/vinegar.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9ef"
+    },
+    "Ingredient": "Tomato Ketchup",
+    "Type": "Spreads & Sauces",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/tomato_ketchup.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9f0"
+    },
+    "Ingredient": "Red Chilly Paste",
+    "Type": "Spreads & Sauces",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img0e115422-6b6a-46ee-94a8-0a83b0ec698c.jpeg?v=1608568555075"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9f1"
+    },
+    "Ingredient": "Ginger Garlic Paste",
+    "Type": "Spreads & Sauces",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/ginger_garlic_paste.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9f2"
+    },
+    "Ingredient": "Oyster Sauce",
+    "Type": "Spreads & Sauces",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/oyster_sauce.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9f3"
+    },
+    "Ingredient": "Butter",
+    "Type": "Dairy Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/butter.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9f4"
+    },
+    "Ingredient": "Milk",
+    "Type": "Dairy Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/milk.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9f5"
+    },
+    "Ingredient": "Fresh Cream",
+    "Type": "Dairy Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/fresh_cream.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9f6"
+    },
+    "Ingredient": "Processed Cheese",
+    "Type": "Dairy Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img8f692d72-adc6-466f-ade3-13e533360621.jpeg?v=1598177353428"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9f7"
+    },
+    "Ingredient": "Whipped Cream",
+    "Type": "Dairy Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgf9c86f3e-065f-4615-ad2d-6a2f6afde690.jpeg?v=1601638710306"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9f8"
+    },
+    "Ingredient": "Condensed Milk",
+    "Type": "Dairy Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img10e14062-cdeb-440f-86b1-4aed9131f310.jpeg?v=1603786709183"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9f9"
+    },
+    "Ingredient": "Chicken Breast",
+    "Type": "Meat Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/chicken_breast.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9fa"
+    },
+    "Ingredient": "Prawns",
+    "Type": "Meat Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgbd44ddc0-e3a8-4da7-bbbb-9140b5e8ea17.jpeg?v=1602291727221"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9fb"
+    },
+    "Ingredient": "Chicken Thigh Boneless",
+    "Type": "Meat Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/chicken_tigh_boneless.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9fc"
+    },
+    "Ingredient": "White Wine",
+    "Type": "Wines & Spirits",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img24999b1c-40db-452f-a211-73502dc5b8ff.jpeg?v=1602191014096"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9fd"
+    },
+    "Ingredient": "Carrot",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/carrot.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9fe"
+    },
+    "Ingredient": "Beans",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/beans.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9c9ff"
+    },
+    "Ingredient": "Peas",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/peas.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca00"
+    },
+    "Ingredient": "Green Chilly",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/greenchilli.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca01"
+    },
+    "Ingredient": "Cabbage",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/cabbage.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca02"
+    },
+    "Ingredient": "Cucumber",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/cucumber.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca03"
+    },
+    "Ingredient": "Ladyfinger",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img43ce4b38-6318-4163-9b68-17ac573d90a9.jpeg?v=1597680997016"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca04"
+    },
+    "Ingredient": "Haldi",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img7c40b938-2b52-4799-a44b-99a28d62eb38.jpeg?v=1640229831763"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca05"
+    },
+    "Ingredient": "Cumin Powder",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgd21332a9-571e-4dce-9246-092e836878df.jpeg?v=1640229972945"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca06"
+    },
+    "Ingredient": "Garam Masala",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgbe6fe9b8-bafe-417d-b042-227404fa07ba.jpeg?v=1640231722644"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca07"
+    },
+    "Ingredient": "Dry Mango Powder",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img55e54c88-eae5-4a21-bac8-43f469ae29e0.jpeg?v=1640231040645"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca08"
+    },
+    "Ingredient": "Dhania Powder",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img5b7dede1-a45e-48c1-ace3-24b671893f6d.jpeg?v=1640229588484"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca09"
+    },
+    "Ingredient": "Heeng",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img6404e8d6-71d4-4bd3-ab98-a9046b23b848.jpeg?v=1608204018847"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca0a"
+    },
+    "Ingredient": "Cumin Whole",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/cumin_whole.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca0b"
+    },
+    "Ingredient": "Kasuri Methi",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgf7a6015a-afec-4666-990e-5e98c0e943ff.jpeg?v=1640230505360"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca0c"
+    },
+    "Ingredient": "Chaat Masala",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img182a0038-cfe3-4b83-9a2e-f868b622764d.jpeg?v=1640231417569"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca0d"
+    },
+    "Ingredient": "Bay Leaves",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/bay-.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca0e"
+    },
+    "Ingredient": "Green Cardamom",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/green_cardamom.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca0f"
+    },
+    "Ingredient": "Black Cardamom",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/black_cardamom.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca10"
+    },
+    "Ingredient": "Clove",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/clove.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca11"
+    },
+    "Ingredient": "Musk melon Seeds",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img25721672-4070-473f-a3d4-2550866e4b02.jpeg?v=1604698472087"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca12"
+    },
+    "Ingredient": "Ajinomoto",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/ajinomoto.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca13"
+    },
+    "Ingredient": "Wheat Flour",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/aata.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca14"
+    },
+    "Ingredient": "Gram Flour",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img1150a24c-a7f5-4fa7-82f4-2f8421218c5a.jpeg?v=1598385323824"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca15"
+    },
+    "Ingredient": "Spring Roll Sheet",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/spring_roll_sheet.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca16"
+    },
+    "Ingredient": "Black Urad Whole Dal",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/sabut_urad_dal.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca17"
+    },
+    "Ingredient": "Chana Dal",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img233014f9-868c-4d7e-977a-e278966551fb.jpeg?v=1608204129736"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca18"
+    },
+    "Ingredient": "Bread",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img73ed716d-e61f-4b2e-98ee-33561965fa3d.jpeg?v=1608204049934"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca19"
+    },
+    "Ingredient": "Bread Crumbs",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img440f8b08-b92f-4636-a0c6-bc9e3e0132af.jpeg?v=1597764824752"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca1a"
+    },
+    "Ingredient": "Basmati Rice",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgcf92124b-3afb-42cd-b4a1-d3aed60fa7fb.jpeg?v=1608739071131"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca1b"
+    },
+    "Ingredient": "Rajma",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img97c85df0-cc49-4817-9d68-4cac544be231.jpeg?v=1598102408448"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca1c"
+    },
+    "Ingredient": "Papad",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgc31f0cf4-4ecc-47ae-9336-a914d1ae47c1.jpeg?v=1603785956260"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca1d"
+    },
+    "Ingredient": "Pista",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img67dcd55a-f8ce-403c-a4b4-94e924262143.jpeg?v=1607238470513"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca1e"
+    },
+    "Ingredient": "Bedmi Atta",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img44b95c0a-6b0f-40be-8b36-540a7ad3c5be.jpeg?v=1607504650933"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca1f"
+    },
+    "Ingredient": "Curd",
+    "Type": "Dairy Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/curd.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca20"
+    },
+    "Ingredient": "Paneer",
+    "Type": "Dairy Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/c8eb3274-7e6f-4398-ab9e-3d5c262dff2b-ingredient-img.jpeg?v=1595634643286"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca21"
+    },
+    "Ingredient": "Ghee",
+    "Type": "Dairy Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/ghee.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca22"
+    },
+    "Ingredient": "Khoya",
+    "Type": "Dairy Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgc011af56-ea04-4b17-8c4a-ec45c15fa05a.jpeg?v=1608204464255"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca23"
+    },
+    "Ingredient": "Green Chilly Sauce",
+    "Type": "Spreads & Sauces",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/green_chilly_sauce.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca24"
+    },
+    "Ingredient": "Tomato Puree",
+    "Type": "Spreads & Sauces",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/tomato_puree.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca25"
+    },
+    "Ingredient": "Cauliflower",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/cauliflower.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca26"
+    },
+    "Ingredient": "Cinnamon Stick",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/cinnamon_stick.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca27"
+    },
+    "Ingredient": "Coriander Seeds",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img209c4b33-60ae-47fa-8431-b7d863f49ef0.jpeg?v=1598636197987"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca28"
+    },
+    "Ingredient": "Kewra Water",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img648ee94a-8b20-45a9-8148-ec4a735f694c.jpeg?v=1608204080794"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca29"
+    },
+    "Ingredient": "Chicken Keema Mince",
+    "Type": "Meat Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/chicken_keema.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca2a"
+    },
+    "Ingredient": "Mutton Boneless",
+    "Type": "Meat Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img62fde4b8-8f75-40f7-ae8e-a08f51f65cf0.jpeg?v=1609167497625"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca2b"
+    },
+    "Ingredient": "Chicken Lollipop",
+    "Type": "Meat Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img917f0dbb-48f9-4e83-a0c6-b057aed3cfb6.jpeg?v=1604251881783"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca2c"
+    },
+    "Ingredient": "Garlic",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgfe05c29e-0b56-4ac1-8286-a3541ffa7ba1.jpeg?v=1606218217754"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca2d"
+    },
+    "Ingredient": "Red Chilly Powder",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/red_cilli_power.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca2e"
+    },
+    "Ingredient": "Black Salt",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/black_salt.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca2f"
+    },
+    "Ingredient": "Ajwain",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img1f126d14-6694-4e07-8958-0cdcc17e7d94.jpeg?v=1609230366566"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca30"
+    },
+    "Ingredient": "Vanilla Custard Powder",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img4cb85706-c356-484a-af3f-dce17ad97301.jpeg?v=1609011540113"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca31"
+    },
+    "Ingredient": "Red Chilly Flakes",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img3dfa3caf-a10e-43ab-8193-880387fcb68d.jpeg?v=1602192557863"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca32"
+    },
+    "Ingredient": "Mace",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/mace.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca33"
+    },
+    "Ingredient": "Biryani Masala",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img87760619-1b49-4ff3-a87d-ec190bf37287.jpeg?v=1640231108891"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca34"
+    },
+    "Ingredient": "White Pepper Powder",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img6fde7b21-a3f9-4253-b387-a9d3ea3a9b32.jpeg?v=1640230644433"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca35"
+    },
+    "Ingredient": "Star Anise",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgec45969b-9cbc-44b9-af45-74344f08a364.jpeg?v=1608821878297"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca36"
+    },
+    "Ingredient": "Noodles",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img8ab6fae8-1eda-4169-bb90-775a26438a1b.jpeg?v=1598385810529"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca37"
+    },
+    "Ingredient": "Black Olives",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/black_olives.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca38"
+    },
+    "Ingredient": "Pizza Base",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/pizza_base.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca39"
+    },
+    "Ingredient": "Garlic Bread",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img518d8039-ba2a-4a09-8e0a-78ce8261c91e.jpeg?v=1600007541660"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca3a"
+    },
+    "Ingredient": "Pasta",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/pasta.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca3b"
+    },
+    "Ingredient": "Rose Water",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/rose_water.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca3c"
+    },
+    "Ingredient": "Boondi",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img266bc49f-7441-4f49-a0f8-2d9e33a4fe09.jpeg?v=1605694406712"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca3d"
+    },
+    "Ingredient": "Pizza Sauce",
+    "Type": "Spreads & Sauces",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/pizza_sauce.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca3e"
+    },
+    "Ingredient": "Lettuce Leaves Iceberg",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/lettuce.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca3f"
+    },
+    "Ingredient": "Mango",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgc47529df-9185-4414-9d25-fee651b2de21.jpeg?v=1597682109763"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca40"
+    },
+    "Ingredient": "Fennel Powder",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/fennel_powder.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca41"
+    },
+    "Ingredient": "Raisins",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/raisins.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca42"
+    },
+    "Ingredient": "Mutton Mix with Bone",
+    "Type": "Meat Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/mutton_mix.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca43"
+    },
+    "Ingredient": "Pasta Sauce",
+    "Type": "Spreads & Sauces",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/pasta_sauce.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca44"
+    },
+    "Ingredient": "Curry Leaves",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/1218e0b0-2595-4a43-b21f-a5fc872311d9-ingredient-img.jpeg?v=1596203542256"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca45"
+    },
+    "Ingredient": "Baby Corn",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/baby_corn.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca46"
+    },
+    "Ingredient": "Grapes Green",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgf4091555-a2d5-40c4-9645-86a08d1512fd.jpeg?v=1651673255730"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca47"
+    },
+    "Ingredient": "Mustard Seeds",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgfa65b92f-5448-44d7-a506-49ad316ad001.jpeg?v=1619195955831"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca48"
+    },
+    "Ingredient": "Red Chilly Whole",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/red_chilly.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca49"
+    },
+    "Ingredient": "Jaljeera Masala",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img441639b7-7198-41fb-ac34-adbe30d6d9a1.jpeg?v=1641292042808"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca4a"
+    },
+    "Ingredient": "White Urad Whole Dal",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img3186527b-28ea-4050-b7ec-530df94cf4bb.jpeg?v=1609168290992"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca4b"
+    },
+    "Ingredient": "Thai Green Curry Paste",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imga5913590-ce83-463d-ad30-5aafe2a4989d.jpeg?v=1610982872954"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca4c"
+    },
+    "Ingredient": "Jasmine Rice",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img8e0eec71-cd9e-4498-9fc6-42c5ab96b3d2.jpeg?v=1610207678212"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca4d"
+    },
+    "Ingredient": "Roasted Chana",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img4ef34683-c295-4c44-99d5-4057771e4d2d.jpeg?v=1612353734427"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca4e"
+    },
+    "Ingredient": "Coconut Powder",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img6ba35ba6-06e5-4e83-bb79-d14db42d6959.jpeg?v=1606324059994"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca4f"
+    },
+    "Ingredient": "Eggs",
+    "Type": "Dairy Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img37d5248c-a7e6-478f-8a69-551e1203adf2.jpeg?v=1602291471116"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca50"
+    },
+    "Ingredient": "Coconut Milk",
+    "Type": "Dairy Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img68f34deb-7f6c-4b23-8bc5-0438b5b0de17.jpeg?v=1598385116946"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca51"
+    },
+    "Ingredient": "Tea",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgeb692158-1c50-4a81-a49f-5b1785711a61.jpeg?v=1614683970168"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca52"
+    },
+    "Ingredient": "Raw Papaya",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/papaya.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca53"
+    },
+    "Ingredient": "Chicken Masala",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img97410c0a-a379-484f-a7c3-98b1558897ba.jpeg?v=1640231338944"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca54"
+    },
+    "Ingredient": "Black Pepper Whole",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img362f540e-ed7f-436e-9891-f3ba6a474bf1.jpeg?v=1613814934896"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca55"
+    },
+    "Ingredient": "Mutton Keema Mince",
+    "Type": "Meat Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/mutton_keema_mince.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca56"
+    },
+    "Ingredient": "Fish Fillet Boneless",
+    "Type": "Meat Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/fish_boneless.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca57"
+    },
+    "Ingredient": "Chicken with Bone",
+    "Type": "Meat Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgfc5e3a66-df78-429a-bb78-505fe5a38500.jpeg?v=1603520283516"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca58"
+    },
+    "Ingredient": "Schezuan Sauce",
+    "Type": "Spreads & Sauces",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/schezuan_sauce.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca59"
+    },
+    "Ingredient": "Orange",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgf7b8a4cb-3ebf-4170-bbf7-2628fd346660.jpeg?v=1606219037403"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca5a"
+    },
+    "Ingredient": "Soda",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imge8834e4f-337d-4be3-a229-dd81fd9ac9f6.jpeg?v=1608736170637"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca5b"
+    },
+    "Ingredient": "Lime Juice",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgf041cf95-944a-44e9-9b71-b7cfd015b28b.jpeg?v=1635322158045"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca5c"
+    },
+    "Ingredient": "Orange Juice",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img6c61729c-fd49-4306-a1fe-835c7bc26c04.jpeg?v=1651736052516"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca5d"
+    },
+    "Ingredient": "Ice Cubes",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img8454fa06-156b-4291-bba3-316fdf98d51b.jpeg?v=1626440897570"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca5e"
+    },
+    "Ingredient": "Cranberry Juice",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img2d382602-69b5-4f86-903e-60d6f485b3cc.jpeg?v=1651672589632"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca5f"
+    },
+    "Ingredient": "Mango Juice",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgc6e00a00-ea11-4fa4-83be-7afafbdee9bc.jpeg?v=1651738099444"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca60"
+    },
+    "Ingredient": "Sprite",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img44c19a30-d875-4838-a730-e04747a78705.jpeg?v=1652997993968"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca61"
+    },
+    "Ingredient": "Coke",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img0c533081-5ae9-4436-bdee-f4946c752f54.jpeg?v=1652998343200"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca62"
+    },
+    "Ingredient": "Whiskey",
+    "Type": "Wines & Spirits",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img98a07184-ee4d-4b10-b49a-6272dbcb4fb0.jpeg?v=1651740812210"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca63"
+    },
+    "Ingredient": "Vodka",
+    "Type": "Wines & Spirits",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img6ee56188-9bcb-472f-b08f-e9c5152fa51e.jpeg?v=1651674118790"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca64"
+    },
+    "Ingredient": "Gin",
+    "Type": "Wines & Spirits",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgc61fc568-167c-4f6e-b101-cc8d7584e4ab.jpeg?v=1651740926626"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca65"
+    },
+    "Ingredient": "Tequila",
+    "Type": "Wines & Spirits",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img95bb94ec-a28d-4589-b611-dc5572990ca3.jpeg?v=1652999652075"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca66"
+    },
+    "Ingredient": "Burger Bun",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/burger_bun.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca67"
+    },
+    "Ingredient": "Cheese Slice",
+    "Type": "Dairy Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/cheese_slice.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca68"
+    },
+    "Ingredient": "Mayonnaise",
+    "Type": "Spreads & Sauces",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img3a0ac1d5-29ee-43cf-9c61-f9c286d1c038.jpeg?v=1602191141896"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca69"
+    },
+    "Ingredient": "Strawberry",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgf077879e-caa9-4e2e-b925-68a7c6651a1d.jpeg?v=1606219195899"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca6a"
+    },
+    "Ingredient": "Black Rum",
+    "Type": "Wines & Spirits",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img8427e3c0-9205-4137-adf9-dadb536b8036.jpeg?v=1653644635330"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca6b"
+    },
+    "Ingredient": "Chole Masala",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imga353aafc-3b62-4d28-99d6-dc550120347d.jpeg?v=1647331838458"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca6c"
+    },
+    "Ingredient": "Kitchen King",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgef0cbadd-4061-42ce-a65f-60b96135b575.jpeg?v=1640231895496"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca6d"
+    },
+    "Ingredient": "Dry Corriander Seeds",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/dry_corriander.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca6e"
+    },
+    "Ingredient": "Chole",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/kabuli_chana.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca6f"
+    },
+    "Ingredient": "Tamarind",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/tarmarind.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca70"
+    },
+    "Ingredient": "Feta Cheese",
+    "Type": "Dairy Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgf6b8af1f-776e-4fbf-a4d5-e1ad93fde254.jpeg?v=1634199827910"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca71"
+    },
+    "Ingredient": "Mustard Oil",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/mustard_oil.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca72"
+    },
+    "Ingredient": "Papdi",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgefa28132-520e-4b25-8178-a6d6806dc474.jpeg?v=1639094739256"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca73"
+    },
+    "Ingredient": "Sev",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/sev.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca74"
+    },
+    "Ingredient": "Pita Bread",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgabca4f63-fea2-4f74-9aad-aae4351ac4c9.jpeg?v=1598552937442"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca75"
+    },
+    "Ingredient": "Lasagne Sheet",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/lasagne_sheet.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca76"
+    },
+    "Ingredient": "Tahini Paste",
+    "Type": "Spreads & Sauces",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img8ac2d0ef-d1a2-4088-90c4-32f2d78de0e0.jpeg?v=1610034700865"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca77"
+    },
+    "Ingredient": "Lemon Grass",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img37536bc0-a8f7-42d5-bf66-7fc7c1992899.jpeg?v=1609231363806"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca78"
+    },
+    "Ingredient": "Galangal",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img333be211-8624-416c-ba0c-74d175c5b787.jpeg?v=1609167650412"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca79"
+    },
+    "Ingredient": "Shallot",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgb3db35bd-4e53-44ff-bca4-9c480e2daa58.jpeg?v=1608823155022"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca7a"
+    },
+    "Ingredient": "Chicken Broth Powder",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/557aa0f5-bd49-4dbb-b86c-3095912c1d63-ingredient-img.jpeg?v=1595627295765"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca7b"
+    },
+    "Ingredient": "Brown Sugar",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img54640af7-d8ea-40e5-b9dd-617c32859b1b.jpeg?v=1607237950340"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca7c"
+    },
+    "Ingredient": "Peanuts",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgb0cfdf97-0e43-4ce7-9c62-34ac0c748bbb.jpeg?v=1598176884626"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca7d"
+    },
+    "Ingredient": "Jaggery",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img720bd9c8-54b7-4424-8c5d-01450149b495.jpeg?v=1612353408496"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca7e"
+    },
+    "Ingredient": "Red Wine",
+    "Type": "Wines & Spirits",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/4ff9dba3-4cdc-4d11-a2be-716bc196f176-ingredient-img.jpeg?v=1595435439706"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca7f"
+    },
+    "Ingredient": "White Rum",
+    "Type": "Wines & Spirits",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img8e67a0c8-52a6-4cfa-80f7-45365d901469.jpeg?v=1651740377416"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca80"
+    },
+    "Ingredient": "Methi",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgda82d195-924e-45ee-822b-120549eca2af.jpeg?v=1651672155189"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca81"
+    },
+    "Ingredient": "Ginger Powder",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgfb27d497-b093-4ada-9436-9187443921a8.jpeg?v=1647332325325"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca82"
+    },
+    "Ingredient": "Pav Bhaji Masala",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgea204df5-24c9-4b55-a88a-357d749aa7ed.jpeg?v=1640232049193"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca83"
+    },
+    "Ingredient": "Pav Buns",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgc7d1e20c-c9ce-43a5-af12-d1983809b83b.jpeg?v=1608139179392"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca84"
+    },
+    "Ingredient": "Mutton Fat",
+    "Type": "Meat Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img1385b790-fa95-4703-b1a7-b3fce1ffad82.jpeg?v=1608204108084"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca85"
+    },
+    "Ingredient": "Baking Powder",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/baking_powder.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca86"
+    },
+    "Ingredient": "Suji",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/suji.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca87"
+    },
+    "Ingredient": "Arhar Dal",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/arhar_dal.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca88"
+    },
+    "Ingredient": "Guava",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgd78e4306-bb93-4416-8671-9f8e8fe4da61.jpeg?v=1606218942299"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca89"
+    },
+    "Ingredient": "Celery Leaves",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgf3617627-07f9-4c89-b95e-0376eeb9380c.jpeg?v=1608816725225"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca8a"
+    },
+    "Ingredient": "Dhuli Moong Dal",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgba36fcf4-c592-4960-a800-86a066710dba.jpeg?v=1612806858960"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca8b"
+    },
+    "Ingredient": "Masoor Dal",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img220566c5-f765-488e-b7a7-afaafbcd98c2.jpeg?v=1624604688341"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca8c"
+    },
+    "Ingredient": "Poha",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img3f721af8-a292-4262-b81f-bf4ba1ab363f.jpeg?v=1618885684724"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca8d"
+    },
+    "Ingredient": "Coffee Powder",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img66535b4e-3419-4886-97fa-bb0bcb1400f7.jpeg?v=1610780202325"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca8e"
+    },
+    "Ingredient": "Yellow Zucchini",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/yellow_zuccini.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca8f"
+    },
+    "Ingredient": "Green Zucchini",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/green_zucchini.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca90"
+    },
+    "Ingredient": "Green Olives",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/green_olives.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca91"
+    },
+    "Ingredient": "Spaghetti Pasta",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img0d39eaf2-0d1c-46dc-8a0e-976addad4c26.jpeg?v=1608822311267"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca92"
+    },
+    "Ingredient": "Parmesan Cheese",
+    "Type": "Dairy Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img3a442f9e-33ea-4ec0-96be-e2557bf7247c.jpeg?v=1598552643152"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca93"
+    },
+    "Ingredient": "Anardana Powder",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/anardana_powder.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca94"
+    },
+    "Ingredient": "Tomato Juice",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgefdfe95a-b756-4a6d-99c9-e4a485282240.jpeg?v=1651740217065"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca95"
+    },
+    "Ingredient": "Raw Mango",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img32ef8317-15e8-448b-a042-6b28fa245878.jpeg?v=1628244505582"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca96"
+    },
+    "Ingredient": "Pineapple Juice",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img65f8f6a5-09db-4728-9210-e35616a4e6bf.jpeg?v=1651736491891"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca97"
+    },
+    "Ingredient": "Angostura bitters",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgd4bfa4cd-5013-446e-9d40-3a68885ae819.jpeg?v=1651741807287"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca98"
+    },
+    "Ingredient": "Rice Flour",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/rice_flour.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca99"
+    },
+    "Ingredient": "Bottle Gourd",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/bottle_gaurd.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca9a"
+    },
+    "Ingredient": "Sendha Namak",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgd97ec6eb-69e4-4b93-a2a9-226b0967a5a0.jpeg?v=1602763874287"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca9b"
+    },
+    "Ingredient": "Fennel Seeds",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img7af9c2d9-67db-4fed-a7d5-09fb51afd3e9.jpeg?v=1608195507078"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca9c"
+    },
+    "Ingredient": "Thandai Powder",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgf9e23b03-529d-4dae-a020-50b4a1e01c4e.jpeg?v=1616665203932"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca9d"
+    },
+    "Ingredient": "Cococa Powder",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgf7749081-e594-48dd-bf11-573f0beec38c.jpeg?v=1627271680341"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca9e"
+    },
+    "Ingredient": "Soya Chaap",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgf4c5b30c-1df7-4471-b8b4-b4a606172200.jpeg?v=1607240233260"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9ca9f"
+    },
+    "Ingredient": "Chocolate Syrup",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img83f5bf95-6ae3-4054-a9f1-d879b109b0e8.jpeg?v=1634567736448"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caa0"
+    },
+    "Ingredient": "Lotus Root",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgd79e20c9-7926-439d-a6b9-e2e2d387a2d0.jpeg?v=1608823916297"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caa1"
+    },
+    "Ingredient": "Sesame Oil",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img026970dc-d241-47bf-8cba-b3e850c84b4e.jpeg?v=1598385479343"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caa2"
+    },
+    "Ingredient": "Black Bean Sauce",
+    "Type": "Spreads & Sauces",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img7737d181-019d-4f47-b095-659d56bc970f.jpeg?v=1610027308261"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caa3"
+    },
+    "Ingredient": "Tofu",
+    "Type": "Dairy Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img2b87b7fa-af94-4631-9342-a53c61654a7c.jpeg?v=1609231123272"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caa4"
+    },
+    "Ingredient": "Vanilla Ice Cream",
+    "Type": "Dairy Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img0a47cab2-291f-4684-b185-7f206a2fe3fb.jpeg?v=1604698507900"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caa5"
+    },
+    "Ingredient": "Apple Green",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img2990f9fa-6def-4d63-aa1b-0da0c795542a.jpeg?v=1651739805267"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caa6"
+    },
+    "Ingredient": "Tonic water",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgbfc5b4f6-6cc3-420f-8712-2c00059e2263.jpeg?v=1651738872774"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caa7"
+    },
+    "Ingredient": "Pumpkin",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/pumpkin.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caa8"
+    },
+    "Ingredient": "Aromat Seasoning",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img68211adf-d6af-47c0-9fb0-6a855924febf.jpeg?v=1602290327017"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caa9"
+    },
+    "Ingredient": "Chicken Wings",
+    "Type": "Meat Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/chicken_wings.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caaa"
+    },
+    "Ingredient": "Blue Curacao Syrup",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img64ede6d1-723b-4bab-9c59-6015d14bba77.jpeg?v=1651741709498"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caab"
+    },
+    "Ingredient": "Lillet Blanc Aperitif",
+    "Type": "Wines & Spirits",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img00ebac70-2876-4759-80b9-49e560627ed6.jpeg?v=1651741212482"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caac"
+    },
+    "Ingredient": "Beetroot",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img5a425bd5-1224-429e-a83f-e018be8eca91.jpeg?v=1603786998192"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caad"
+    },
+    "Ingredient": "Cherry Tomato",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img4586baf4-4881-41d7-b39d-18c9095da742.jpeg?v=1610035438641"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caae"
+    },
+    "Ingredient": "Pear",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgaf5d9fda-90a0-4044-8bb7-d36d94bdd8d8.jpeg?v=1606219381896"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caaf"
+    },
+    "Ingredient": "Coconut",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img7fc850e6-909f-488b-88cc-8afd4f0b894a.jpeg?v=1598553524189"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cab0"
+    },
+    "Ingredient": "MTR Dosa Batter",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgc55d307d-d449-48e5-ba06-424dbadb04f9.jpeg?v=1597830480903"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cab1"
+    },
+    "Ingredient": "Chicken Whole",
+    "Type": "Meat Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img7b06e4a6-1803-4a7c-a1a4-8700196c0b1c.jpeg?v=1609228673796"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cab2"
+    },
+    "Ingredient": "Baby Potato",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/baby_potato.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cab3"
+    },
+    "Ingredient": "Peri Peri Seasoning",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/peri_peri.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cab4"
+    },
+    "Ingredient": "Nachos Chips",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img7a1eb971-a6f9-4583-8edb-58b2ba5280aa.jpeg?v=1609004146460"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cab5"
+    },
+    "Ingredient": "Rajma Masala",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img126237f3-b0e4-4291-9fa5-9e4a7072075b.jpeg?v=1641294243374"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cab6"
+    },
+    "Ingredient": "Baking Soda",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgb5915254-79b5-4d8d-9586-561119c555a6.jpeg?v=1609230219674"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cab7"
+    },
+    "Ingredient": "Bitter Gourd",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img6db22af5-aeea-415b-bfc4-7914421f86a2.jpeg?v=1620148055761"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cab8"
+    },
+    "Ingredient": "Lobia",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img200c6297-96b9-482f-a641-3b37dc3142e1.jpeg?v=1624547469620"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cab9"
+    },
+    "Ingredient": "Soya Chunks",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imga39d9648-1209-491e-a00a-14c98d4a55b8.jpeg?v=1624605629477"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caba"
+    },
+    "Ingredient": "Tandoori Masala",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/tandoori_masala.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cabb"
+    },
+    "Ingredient": "Maize Flour",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgc3542f48-e3c8-4738-bf6b-f3436af715a6.jpeg?v=1610982608339"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cabc"
+    },
+    "Ingredient": "Kathal",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img9f4f0dee-2a74-4650-8a40-fb1c8215cce6.jpeg?v=1651644884632"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cabd"
+    },
+    "Ingredient": "Cardamom Powder",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img9eb86dd3-4303-4b51-b2be-403a35958362.jpeg?v=1606220225541"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cabe"
+    },
+    "Ingredient": "Mixed Herbs",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgaba007f1-c350-4c17-b63f-72f677adab03.jpeg?v=1608823781142"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cabf"
+    },
+    "Ingredient": "Drumstick",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/drumstick.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cac0"
+    },
+    "Ingredient": "Brinjal",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgb7e7a68e-f63b-4360-a811-f6ee0b6d67d6.jpeg?v=1604987708500"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cac1"
+    },
+    "Ingredient": "Sambhar Masala",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img2a94c41c-d6ac-4c8b-8256-74c8a7dc2f32.jpeg?v=1640232438979"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cac2"
+    },
+    "Ingredient": "Vanilla Essence",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/vanilla_essence.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cac3"
+    },
+    "Ingredient": "Kokum",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img7f397806-1c26-493d-87b1-c5b43b4c9268.jpeg?v=1658575995997"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cac4"
+    },
+    "Ingredient": "Bombay Duck",
+    "Type": "Meat Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgf8071845-c3c0-4463-9ca7-21b8cb77aefd.jpeg?v=1658571857701"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cac5"
+    },
+    "Ingredient": "Parsley",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/celery_leaves.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cac6"
+    },
+    "Ingredient": "Rosemary Herbs",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img41e717b4-29b8-4fa5-bf01-74cc69a31a8c.jpeg?v=1603954063890"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cac7"
+    },
+    "Ingredient": "Tortilla Wraps",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgf07c4ca2-53a8-48eb-8113-357b06cfb4e8.jpeg?v=1598176697281"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cac8"
+    },
+    "Ingredient": "Sour Cream",
+    "Type": "Dairy Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img17cdd76f-28b4-4e4f-bbb7-03eac2f6db90.jpeg?v=1598190364782"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cac9"
+    },
+    "Ingredient": "Salsa Sauce",
+    "Type": "Spreads & Sauces",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgbd14fe96-e24a-4bc2-85da-c4faa22b15ae.jpeg?v=1598177065099"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caca"
+    },
+    "Ingredient": "MTR Uttapam Batter",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgb10f740c-2904-46c6-9a25-25f130a4f7ff.jpeg?v=1597831887929"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cacb"
+    },
+    "Ingredient": "MTR Plain Idli Batter",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img86ac8fda-3669-4fd9-949d-57043eb51307.jpeg?v=1597831614829"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cacc"
+    },
+    "Ingredient": "MTR Vada Batter",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgca7f1e35-ba0d-41a5-b38f-91b0b5fedc7e.jpeg?v=1597830776012"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cacd"
+    },
+    "Ingredient": "Samvat Rice",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgaf35c8f7-75c9-4efb-8638-b5bc4f3481af.jpeg?v=1615478409610"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cace"
+    },
+    "Ingredient": "Puffed Rice",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img96ee6e2d-1a51-4f6f-aedf-0b9ee702ee34.jpeg?v=1624352028908"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cacf"
+    },
+    "Ingredient": "Taco Shells",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgbae4a9ad-163e-4307-9c4a-231cebb88af4.jpeg?v=1604704225596"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cad0"
+    },
+    "Ingredient": "Meat Masala",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imga51fba03-d565-417e-8740-26e138608bac.jpeg?v=1641293195538"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cad1"
+    },
+    "Ingredient": "Mozzarella Cheese",
+    "Type": "Dairy Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgdbdeb7e9-4fc3-4398-8388-71794c5e7da1.jpeg?v=1597764780276"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cad2"
+    },
+    "Ingredient": "Yellow Chilly Powder",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgbbeae6b6-3fe0-42ec-9020-6bcb4e3a17a4.jpeg?v=1607702672196"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cad3"
+    },
+    "Ingredient": "Shredded Cheddar Cheese",
+    "Type": "Dairy Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img1d027367-9897-494a-aaa7-948445ddc265.jpeg?v=1630050561349"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cad4"
+    },
+    "Ingredient": "Pita Bread Pockets",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgcd21100c-5606-4bab-86f6-4c4e691443dd.jpeg?v=1598553023615"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cad5"
+    },
+    "Ingredient": "Macaroni",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imge8d0e918-6d88-4807-a864-e909181f8081.jpeg?v=1609018996430"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cad6"
+    },
+    "Ingredient": "Pointed Gourd",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img9cddf98d-06b0-4d84-bf50-c5411897ed46.jpeg?v=1618386356340"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cad7"
+    },
+    "Ingredient": "Red Thai Curry Paste",
+    "Type": "Spreads & Sauces",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img7be9a412-5a62-4f76-964c-a6903d3f9510.jpeg?v=1604963571861"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cad8"
+    },
+    "Ingredient": "Vermicelli",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img73f9e28f-e5b8-4744-8f21-7a8bafefe09f.jpeg?v=1624545911172"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cad9"
+    },
+    "Ingredient": "Thai Red Curry Paste",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img15784e2c-ad36-4e70-b650-d076ab345529.jpeg?v=1610031921142"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cada"
+    },
+    "Ingredient": "Milk Maid",
+    "Type": "Dairy Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img88bdc870-fb66-4d7c-aafc-0a07b58b33a9.jpeg?v=1643857902307"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cadb"
+    },
+    "Ingredient": "Barbeque Sauce",
+    "Type": "Spreads & Sauces",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img0f1aef75-f401-4680-bab2-9fadcc35ebf2.jpeg?v=1601897216791"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cadc"
+    },
+    "Ingredient": "Watermelon",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img75c76543-6f55-4c53-b244-c7b02c70b5e3.jpeg?v=1630391532310"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cadd"
+    },
+    "Ingredient": "Shakarkandi",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img0a25ccc5-1b0c-48e4-a866-3fffa6cfd405.jpeg?v=1648879033426"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cade"
+    },
+    "Ingredient": "Snow Peas",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgc056840b-2a60-4458-9cdd-da46d33bcd57.jpeg?v=1628167289047"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cadf"
+    },
+    "Ingredient": "Chipotle Sauce",
+    "Type": "Spreads & Sauces",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img1de9488d-952f-4082-a135-39140dbed35c.jpeg?v=1602289891907"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cae0"
+    },
+    "Ingredient": "Kashmiri Lal Mirch",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/kashmiri_mirch.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cae1"
+    },
+    "Ingredient": "Sweet Corn Cream",
+    "Type": "Dairy Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgfc3214ce-f269-47c6-8adb-90e21e91a242.jpeg?v=1605043304281"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cae2"
+    },
+    "Ingredient": "Mustard Sauce",
+    "Type": "Spreads & Sauces",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/mustard_sauce.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cae3"
+    },
+    "Ingredient": "Poppy Seeds",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img03b891a4-53b5-41ca-9447-e5afbdb5438e.jpeg?v=1613815354222"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cae4"
+    },
+    "Ingredient": "Arbi",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgda7842dd-6174-4c0d-a4db-c8d8bab0cdf4.jpeg?v=1602764719501"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cae5"
+    },
+    "Ingredient": "Jalapenos",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img11ad9ece-248c-4745-81fa-8213e27ffed3.jpeg?v=1604439357275"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cae6"
+    },
+    "Ingredient": "Citric Acid",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img5dc3f7fe-81eb-47f3-86f8-4106112ad481.jpeg?v=1608059549289"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cae7"
+    },
+    "Ingredient": "Avocado",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgff0e0e5b-b2bf-44c0-9a07-c0fefe10c0cc.jpeg?v=1628918492991"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cae8"
+    },
+    "Ingredient": "Lemon Leaves",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgd94d3dc0-c786-4080-a407-9225c1dbbdd5.jpeg?v=1610034887555"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cae9"
+    },
+    "Ingredient": "Kabuli Chana",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img54859430-f7ea-4a91-b77e-2181ff8cd35d.jpeg?v=1634202228392"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caea"
+    },
+    "Ingredient": "Corn",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/corn.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caeb"
+    },
+    "Ingredient": "Grapes Black",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img88617b2f-3020-4914-8052-f1ae14b0c619.jpeg?v=1651735450996"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caec"
+    },
+    "Ingredient": "Sabudana",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img707b8d19-ffff-41c8-86ed-4e571b60d604.jpeg?v=1602764490742"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caed"
+    },
+    "Ingredient": "Dal Makhani Masala",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img0d9145d1-d61b-4503-9e53-11a8d7aa332b.jpeg?v=1651739273113"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caee"
+    },
+    "Ingredient": "Sprouted Moong",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgd9e239f7-3cf6-4eb7-a388-056ef1113f51.jpeg?v=1610983912573"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caef"
+    },
+    "Ingredient": "Porridge",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgec7238d9-5ff1-4f34-8583-38f8396d9742.jpeg?v=1624544847653"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caf0"
+    },
+    "Ingredient": "Dry Ginger",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imga2d86b59-353a-48db-8307-6a316b6c8f18.jpeg?v=1609230931198"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caf1"
+    },
+    "Ingredient": "Panko Breadcrumbs",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img2c69ac87-ae72-49b9-a767-f9c7a08869c7.jpeg?v=1602290876583"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caf2"
+    },
+    "Ingredient": "Goat Chops",
+    "Type": "Meat Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img0dd92ac3-2113-4235-afe7-b3b4229bfbb0.jpeg?v=1602235956051"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caf3"
+    },
+    "Ingredient": "Nutmeg",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgdeed24f4-1cce-43e4-9507-8e4e4c4374eb.jpeg?v=1603786318449"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caf4"
+    },
+    "Ingredient": "Pad Thai Noodles",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imge8452df1-ae48-44f6-8308-226fb8640c10.jpeg?v=1649836621852"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caf5"
+    },
+    "Ingredient": "Pinenuts",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img7a7b4140-d422-407d-bba5-63dab928c5cd.jpeg?v=1623312970511"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caf6"
+    },
+    "Ingredient": "Cherry Red",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img8d0d5a41-4689-4842-89c9-e1a57e60cd8a.jpeg?v=1651743028237"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caf7"
+    },
+    "Ingredient": "Rose Petals",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img4a55bdeb-aef5-4a8c-83cc-b6bc98b003e8.jpeg?v=1671018747293"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caf8"
+    },
+    "Ingredient": "Rooh Afza",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imge71bdfbc-d394-40d5-966b-7407cf2e0833.jpeg?v=1616667813689"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caf9"
+    },
+    "Ingredient": "Grenadine Syrup",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img1417bf31-9ccb-49e8-94ce-7cf56294a4cd.jpeg?v=1659084213046"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cafa"
+    },
+    "Ingredient": "Watermelon Seeds",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img0172ece7-750b-4f61-873f-53f4c64d827f.jpeg?v=1671019292296"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cafb"
+    },
+    "Ingredient": "Jalapeno Poppers",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img355e229c-1cb3-48fd-a8fc-2a4cf53cef3e.jpeg?v=1630050141822"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cafc"
+    },
+    "Ingredient": "Quinoa",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img69c03911-b69c-41af-8bb5-607728397a0b.jpeg?v=1611658816019"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cafd"
+    },
+    "Ingredient": "Triple Sec",
+    "Type": "Wines & Spirits",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img72999521-f97e-4efb-96fe-a9700f7d2f74.jpeg?v=1651739949877"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cafe"
+    },
+    "Ingredient": "Kalonji",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/kalonji.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9caff"
+    },
+    "Ingredient": "Mc Cain Potato Wedges",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgcdd444aa-7b9d-4576-9f3b-76870dd7cd55.jpeg?v=1603970932037"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb00"
+    },
+    "Ingredient": "Red Cabbage",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgbfac9250-0bd0-4317-a490-0196524b4daf.jpeg?v=1610035151193"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb01"
+    },
+    "Ingredient": "Peanut Butter",
+    "Type": "Spreads & Sauces",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgf0225351-694e-40a8-b690-3c7da3e82edb.jpeg?v=1661663714272"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb02"
+    },
+    "Ingredient": "Chinese Cabbage",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img7d9cb1be-31a8-4bd3-9061-aa7a0030a955.jpeg?v=1610026732291"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb03"
+    },
+    "Ingredient": "Mutton Masala",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgf6509909-debb-4d68-8cd0-77020fcd2c1e.jpeg?v=1604070924131"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb04"
+    },
+    "Ingredient": "Black Bean Seed",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img616ca618-c47b-4559-86a5-74dbd2c1122c.jpeg?v=1628911873144"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb05"
+    },
+    "Ingredient": "Kaffir Lime Leaves",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img3ce433ad-6138-453f-849c-6190d455c5b1.jpeg?v=1645019737579"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb06"
+    },
+    "Ingredient": "Pork Bacon",
+    "Type": "Meat Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img2ae69cf4-5a3e-4164-bd62-f3fdcf753a30.jpeg?v=1608194812748"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb07"
+    },
+    "Ingredient": "Kulcha",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img9c9c4c1e-3651-49e1-a8a1-08c32f74f847.jpeg?v=1608135268910"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb08"
+    },
+    "Ingredient": "Pomegranate Juice",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgd9bb7aaf-cbec-4dfc-a1e6-5b9b498e1109.jpeg?v=1651738348467"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb09"
+    },
+    "Ingredient": "Peach Schnapps",
+    "Type": "Wines & Spirits",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img4904c544-e334-4471-91ae-bdd632e2c892.jpeg?v=1651740095108"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb0a"
+    },
+    "Ingredient": "Cream Cheese",
+    "Type": "Dairy Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img8d75c262-3031-4973-886c-67dd8936b1c4.jpeg?v=1630049622664"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb0b"
+    },
+    "Ingredient": "Balsamic Vinegar",
+    "Type": "Spreads & Sauces",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgaa2ef521-e268-4c66-ae91-da78dcc8fad4.jpeg?v=1639540926980"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb0c"
+    },
+    "Ingredient": "Kuttu Atta",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img021a3f37-b72a-452e-81e4-65506f8944f4.jpeg?v=1602764087552"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb0d"
+    },
+    "Ingredient": "Tabasco Sauce",
+    "Type": "Spreads & Sauces",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img66ffe871-3b61-4556-b920-2be35b9b68d6.jpeg?v=1602290047135"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb0e"
+    },
+    "Ingredient": "Samak Flour",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img52eae103-9643-4243-98bd-d0af4ee101db.jpeg?v=1602764297436"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb0f"
+    },
+    "Ingredient": "Phool Makhana",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img67750901-c221-4b36-827b-98cdb7be6e92.jpeg?v=1618259245506"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb10"
+    },
+    "Ingredient": "Worcestershire Sauce",
+    "Type": "Spreads & Sauces",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/worcestershire_sauce.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb11"
+    },
+    "Ingredient": "Brandy",
+    "Type": "Wines & Spirits",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img8c9601fc-6e8c-4718-b88f-e8423eb25fa7.jpeg?v=1651739695691"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb12"
+    },
+    "Ingredient": "Big Green Chilies",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imge5a7ced3-f941-4e72-af99-9733edcfd4f4.jpeg?v=1614782479784"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb13"
+    },
+    "Ingredient": "Thousand Island Dip",
+    "Type": "Spreads & Sauces",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img3c9aa06f-5c69-48ae-84dd-d30de928df6b.jpeg?v=1665057291296"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb14"
+    },
+    "Ingredient": "Black Chickpeas",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img184b9de8-0c98-424b-a43c-01d875aba509.jpeg?v=1664611013763"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb15"
+    },
+    "Ingredient": "Chicken Drumstick",
+    "Type": "Meat Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgd3ba2760-826d-4611-b8fe-d85469051961.jpeg?v=1632887544289"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb16"
+    },
+    "Ingredient": "Apple Juice",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img328e6264-1532-4805-8798-54750d30699e.jpeg?v=1651736795046"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb17"
+    },
+    "Ingredient": "Walnut",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img62c556df-cae8-42c4-bba1-603eb0057594.jpeg?v=1671019657616"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb18"
+    },
+    "Ingredient": "White Peas",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img0e1f60ed-53c0-406b-b36f-d4ffce100489.jpeg?v=1616768718906"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb19"
+    },
+    "Ingredient": "Chettinad Chicken Masala",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img07e9ff1a-7d0e-4755-8cde-f7cdf008c4c8.jpeg?v=1609229358947"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb1a"
+    },
+    "Ingredient": "Pan Leaves",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img7caf5ef4-0889-4fec-8730-c057330b79ac.jpeg?v=1665152756772"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb1b"
+    },
+    "Ingredient": "Caramel",
+    "Type": "Spreads & Sauces",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgab5e8b6d-9003-4192-ba96-35bf656e89fe.jpeg?v=1665153290799"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb1c"
+    },
+    "Ingredient": "Fruit Cocktail",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgbc30f8b9-5b64-49bc-ba30-2c4876c580db.jpeg?v=1601639154161"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb1d"
+    },
+    "Ingredient": "Shahi Paneer Masala",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img431766b2-609c-4057-bf4b-bccaa1683bd6.jpeg?v=1652968500100"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb1e"
+    },
+    "Ingredient": "Bathua Leaves",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgde511185-e166-4162-add3-349ed9e2b311.jpeg?v=1610280351456"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb1f"
+    },
+    "Ingredient": "Mustard Leaves",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img81d2a31c-5814-476c-9229-8a7437ac4b2f.jpeg?v=1610280580147"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb20"
+    },
+    "Ingredient": "Mixed Fruit Juice",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img6b9b7dd9-4b7b-4a8b-9eb7-68751e0ce0a2.jpeg?v=1651737548898"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb21"
+    },
+    "Ingredient": "Galouti Kebab Masala",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img709a8cac-ac6c-4432-91aa-bea0393fd405.jpeg?v=1612806990857"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb22"
+    },
+    "Ingredient": "Veg Broth Powder",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imga2699715-aaf9-4de1-a11e-7904a073bed4.jpeg?v=1605042976653"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb23"
+    },
+    "Ingredient": "Golden Sella Rice",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img2a470ed1-9a8b-4ef8-b7e1-03fe1ec5d5c7.jpeg?v=1602191391616"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb24"
+    },
+    "Ingredient": "Ginger Ale",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img400e93c6-87f0-4b16-80c7-0f969d2fcccc.jpeg?v=1670700453102"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb25"
+    },
+    "Ingredient": "Yoghurt",
+    "Type": "Dairy Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img8d03cf54-219a-4c85-99f9-d2f924addf4f.jpeg?v=1633512918023"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb26"
+    },
+    "Ingredient": "Maple Syrup",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgf7dd9fb7-b939-45dc-a29f-c2b5b8d8b6da.jpeg?v=1651739510685"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb27"
+    },
+    "Ingredient": "Pepperoni",
+    "Type": "Meat Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgd7c45f89-e3a9-4b3d-88e7-b7f1812fc1a0.jpeg?v=1609167361875"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb28"
+    },
+    "Ingredient": "Maggi",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img5010dfcb-8125-4f52-8b2a-a216d5b7b904.jpeg?v=1624549792670"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb29"
+    },
+    "Ingredient": "Fanta",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img4c3a1913-7c1e-415a-962c-820ed6341f28.jpeg?v=1652998585163"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb2a"
+    },
+    "Ingredient": "Squid Rings",
+    "Type": "Meat Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgba8d93cf-59d7-4842-8f15-aab5fb20b60d.jpeg?v=1642055607903"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb2b"
+    },
+    "Ingredient": "Pinacolada Syrup",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img4c28504b-79b6-4fed-b2e3-498fb1533151.jpeg?v=1669890359707"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb2c"
+    },
+    "Ingredient": "Charoli Nuts",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img85bf4aae-7829-4b19-b2d5-7f502253520c.jpeg?v=1607238736890"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb2d"
+    },
+    "Ingredient": "MTR Rava Idli Batter",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgdcc24269-d23d-45f5-87af-87b683189d46.jpeg?v=1597831352577"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb2e"
+    },
+    "Ingredient": "Sumac Powder",
+    "Type": "Masalas & Spices",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img4e645595-b964-4019-b712-059b5bd2206b.jpeg?v=1598553396269"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb2f"
+    },
+    "Ingredient": "Elder Flower Syrup",
+    "Type": "Wines & Spirits",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img0187b7e3-1a20-4490-b3ce-83e3e5d69e2b.jpeg?v=1670757692124"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb30"
+    },
+    "Ingredient": "White Butter",
+    "Type": "Dairy Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgdab8ce23-a5ee-4f9e-baa4-575c7f150753.jpeg?v=1615473331830"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb31"
+    },
+    "Ingredient": "Ginger beer",
+    "Type": "Wines & Spirits",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imga1fdb22a-04f0-4eea-a0be-ead3fe07005b.jpeg?v=1671534649154"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb32"
+    },
+    "Ingredient": "RosÃ© Wine",
+    "Type": "Wines & Spirits",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgf72e5b95-cddb-4b8b-9a8e-7089dde94fac.jpeg?v=1671872690926"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb33"
+    },
+    "Ingredient": "Kewra Essence",
+    "Type": "General Items",
+    "Image": "https://coox-beta.s3.ap-south-1.amazonaws.com/images/ingredients/kewra_essence.jpg"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb34"
+    },
+    "Ingredient": "Appam Batter",
+    "Type": "General Items",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imga521bd9a-d3be-4af7-a4a0-f216f229f37e.jpeg?v=1671815326803"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb35"
+    },
+    "Ingredient": "Thai Basil",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgdf2c6bf5-4680-4ce1-98a3-dadbbbef86aa.jpeg?v=1609232469004"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb36"
+    },
+    "Ingredient": "Orange Liqueur",
+    "Type": "Wines & Spirits",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-imgc0d617d9-5578-4b21-a6a2-1a6c162240ec.jpeg?v=1652999787940"
+  },{
+    "_id": {
+      "$oid": "63e804bd0e21669acba9cb37"
+    },
+    "Ingredient": "Baby Carrot",
+    "Type": "Fruits & Vegetables",
+    "Image": "https://coox-new.s3.ap-south-1.amazonaws.com/images/d/ingredients/ingredient-img2e1d652e-a304-403b-b8be-d5d5c2d049ec.jpeg?v=1604476538960"
+  }]

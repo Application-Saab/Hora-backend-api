@@ -1,0 +1,91 @@
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>LED Banner</title>
+  <style>
+    body {
+      background: #111;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .banner {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 2vw;
+      letter-spacing: 0.2em;
+      display: flex;
+      padding: 0.5em 1em;
+      border-radius: 1em;
+      background: #222;
+      box-shadow: 0 0 40px #000a;
+      border: 4px solid #444;
+    }
+    .led {
+      transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+      border-radius: 0.2em;
+      padding: 0.1em 0.2em;
+      margin: 0 0.05em;
+      display: inline-block;
+    }
+    .main-led {
+      color: #111;
+      font-weight: bold;
+      box-shadow: 0 0 20px 4px #fff8;
+    }
+    .trail-led {
+      color: #fff;
+      opacity: 0.7;
+    }
+    .normal {
+      opacity: 0.3;
+    }
+    /* LED color backgrounds */
+    .led-red    { background: #ff4444; }
+    .led-green  { background: #44ff44; }
+    .led-yellow { background: #ffff44; }
+    .led-blue   { background: #4488ff; }
+    .led-magenta{ background: #ff44ff; }
+    .led-cyan   { background: #44ffff; }
+    .led-white  { background: #fff;    }
+  </style>
+</head>
+<body>
+  <div class="banner" id="banner"></div>
+  <script>
+    const text = " WELCOME TO SSEC - ITEG ";
+    const chars = text.split("");
+    let pos = 0;
+    const ledColors = [
+      'led-red',
+      'led-green',
+      'led-yellow',
+      'led-blue',
+      'led-magenta',
+      'led-cyan',
+      'led-white',
+    ];
+    function renderBanner() {
+      const banner = document.getElementById('banner');
+      banner.innerHTML = '';
+      for (let i = 0; i < chars.length; i++) {
+        let cls = 'led normal';
+        let style = '';
+        if (i === pos) {
+          cls = `led main-led ${ledColors[pos % ledColors.length]}`;
+        } else if (i === (pos - 1 + chars.length) % chars.length || i === (pos + 1) % chars.length) {
+          cls = 'led trail-led';
+          style = 'background: #888;';
+        }
+        banner.innerHTML += `<span class="${cls}" style="${style}">${chars[i] === ' ' ? '&nbsp;' : chars[i]}</span>`;
+      }
+      pos = (pos + 1) % chars.length;
+    }
+    setInterval(renderBanner, 200);
+    renderBanner();
+  </script>
+</body>
+</html> 

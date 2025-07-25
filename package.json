@@ -1,0 +1,36 @@
+{
+  "name": "hora_node_server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "nodemon node ./bin/www",
+  "scripts": {
+    "start": "nodemon node ./bin/www"
+  },
+  "author": "",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.758.0",
+    "@aws-sdk/client-s3": "^3.758.0",
+    "async": "^3.2.4",
+    "aws-sdk": "^2.1692.0",
+    "bcryptjs": "^2.4.3",
+    "body-parser": "^1.20.1",
+    "config": "^3.3.9",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.0",
+    "express": "^4.17.3",
+    "fcm-node": "^1.6.1",
+    "firebase-admin": "^9.12.0",
+    "http": "^0.0.1-security",
+    "jsonwebtoken": "^9.0.0",
+    "lodash": "^4.17.21",
+    "mongoose": "^6.2.2",
+    "multer": "^1.4.5-lts.1",
+    "multer-s3": "^2.9.0",
+    "node-cache": "^5.1.2",
+    "node-cron": "^3.0.3",
+    "nodemon": "^3.1.4",
+    "request": "^2.88.2",
+    "sharp": "^0.23.2"
+  }
+}

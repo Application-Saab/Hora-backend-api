@@ -114,11 +114,12 @@ database.on("error", (error) => {
 });
 
 database.once("connected", () => {
-  console.log("Database Connected");
+  console.log("Database Connected index.js");
 });
 
 const AdminRoutes = require("./routes/admin");
 const UserRoutes = require("./routes/user");
+const EventInviteRoutes = require("./routes/createEventInvites");
 const ConfigurationRoutes = require("./routes/configuration");
 const IngredientRoutes = require("./routes/ingredient");
 const ingredientTypeRoutes = require("./routes/ingredientType");
@@ -139,6 +140,7 @@ let passportAuth = require("./store/passportAuth").passportAuth;
 
 app.use("/api/admin", AdminRoutes);
 app.use("/api/user", UserRoutes);
+app.use("/api/customer/event", passportAuth, EventInviteRoutes);
 app.use("/api/users", passportAuth, UserRoutes);
 app.use("/api/configuration", ConfigurationRoutes);
 app.use("/api/ingredient", IngredientRoutes);

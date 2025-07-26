@@ -452,7 +452,7 @@ router.post('/add', async(req, res) => {
                // order.order_locality == user.city
                // order.type == user.order_type
                // order.status == 1
-               if (orderStatus == 1 || orderStatus == 0) {
+               if (orderStatus == 1) {
                    let filteredSuppliers = userIds.filter(user => {
                        // user.city and user.order_type must exist
                        return (
@@ -561,6 +561,59 @@ router.post('/update_order_status', async(req, res) => {
                 status: req.body.status
             };
             const result = await orderModel.findByIdAndUpdate(order[0]._id, { $set: update })
+        try {
+            
+           if (req.body.status == 1) {
+                var userSupplierIdsArray = [];
+                // Find all suppliers with device_token not null/empty
+                var userFinder = { role: 'supplier', device_token: { "$nin": [null, ""] } };
+                console.log("Finding suppliers with finder:", userFinder);
+                const userIds = await userModel.find(userFinder);
+                console.log("Total suppliers found with device_token:", userIds.length);
+ 
+                // Get the order's locality, type, and status from the order document
+                const orderLocality = order[0].order_locality || '';
+                const orderType = order[0].type || '';
+                const orderStatus = req.body.status;
+ 
+                console.log("Order locality:", orderLocality, "Order type:", orderType, "Order status:", orderStatus);
+ 
+                if (orderStatus == 1) {
+                    let filteredSuppliers = userIds.filter(user => {
+                        // user.city and user.order_type must exist
+                        return (
+                            user.city &&
+                            user.order_type &&
+                            user.city == orderLocality &&
+                            user.order_type == orderType
+                        );
+                    });
+ 
+                    console.log("Filtered suppliers matching locality and type:", filteredSuppliers.length);
+ 
+                    if (filteredSuppliers.length > 0) {
+                        filteredSuppliers.forEach(element => {
+                            userSupplierIdsArray.push(element._id);
+                            console.log(`Sending notification to supplier: ${element._id}, device_token: ${element.device_token}`);
+                            notificationFunction.sendNotifications(
+                                element.device_token,
+                                order[0].fromId, // Use fromId from the order document
+                                'New order',
+                                'You have a new order!!!',
+                                '',
+                                0
+                            );
+                        });
+                    } else {
+                        console.log("No suppliers matched the locality and type for notification.");
+                    }
+                } else {
+                    console.log("Order status is not 1, no notifications sent to suppliers.");
+                }
+            }
+        } catch (error) {
+            
+        } 
             return res.json({ error: false, status: 200, message: 'Status Update Successfully' })
         } else {
             return res.json({ error: true, status: 503, message: 'Details Not Found' })

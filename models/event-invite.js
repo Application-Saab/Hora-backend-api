@@ -12,6 +12,7 @@ const eventInviteSchema = new mongoose.Schema({
         time: { type: String, required: true }, // e.g., "04:30 PM"
         activityName: { type: String, required: true } // e.g., "Guest Arrival + Welcome Music"
     }],
+    imageUrl: { type: String },
 }, {
     strict: false,
     timestamps: true

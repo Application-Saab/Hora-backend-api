@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 
 const eventInviteSchema = new mongoose.Schema({
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "user", required: true },
+    userType: { type: String, default: 'host' }, 
     eventType: { type: String, default: '' },
     hostName: { type: String, default: '' },
     eventDate: { type: Date, default: Date.now },

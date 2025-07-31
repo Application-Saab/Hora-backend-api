@@ -33,14 +33,14 @@ const upload = multer({ storage });
 
 // Upload to S3 Function
 
-const uploadFileToS3 = async (filePath, fileName, folderPath,phoneNo) => {
+const uploadFileToS3 = async (filePath, fileName, folderPath , phoneNo, contentType) => {
     const fileContent = fss.readFileSync(filePath);
 
     const params = {
         Bucket: process.env.S3_BUCKET_NAME,
         Key: `${folderPath}/${fileName}`,
         Body: fileContent,
-        ContentType: 'image/jpeg', // Modify based on file type
+        ContentType: contentType || 'image/jpeg', // Modify based on file type
         Metadata: {
             phoneNo: phoneNo
         }

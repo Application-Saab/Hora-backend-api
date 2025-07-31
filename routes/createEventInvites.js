@@ -1,510 +1,236 @@
-// const express = require("express");
-// const router = express.Router();
-// const mongoose = require("mongoose");
-// const Joi = require("joi");
-// const EventInvite = require("../models/event-invite");
-// const { uploadFileToS3 } = require("../store/multerS3Config");
-
-// // Upload function to upload a single image to aws
-// async function processAndUploadImage(file, folderName, customerId, eventId = null, phoneNo = null) {
-//   try {
-//     if (!file) throw new Error("No file provided.");
-//     if (!folderName || !customerId) throw new Error("folderName and customerId are required.");
-
-//     const filePath = file.path;
-//     const fileName = file.filename;
-//     const originalName = file.originalname;
-
-//     // Create folder path like `folderName_customerId_vendorId`
-//     const folderPath = eventId 
-//       ? `${folderName}_${customerId}_${eventId}` 
-//       : `${folderName}_${customerId}`;
-
-//     // Thumbnail path (same dir, .webp format)
-//     const thumbnailPath = `${filePath.replace(/\.(png|jpeg|jpg|webp)$/i, "")}_thumbnail.webp`;
-
-//     console.log(`Processing image: ${fileName} at ${new Date().toLocaleTimeString()}`);
-
-//     // ✅ 1. Generate Thumbnail
-//     await generateThumbnail(filePath, thumbnailPath);
-
-//     // ✅ 2. Upload original image
-//     const s3UploadPromise = uploadFileToS3(filePath, fileName, folderPath, phoneNo);
-
-//     // ✅ 3. Upload thumbnail
-//     const thumbnailFileName = `thumb_${fileName.replace(/\.(png|jpeg|jpg|webp)$/i, "")}.webp`;
-//     const s3ThumbPromise = uploadFileToS3(thumbnailPath, thumbnailFileName, folderPath, phoneNo);
-
-//     // Wait for both uploads to finish
-//     const [s3Response, s3ThumbResponse] = await Promise.all([s3UploadPromise, s3ThumbPromise]);
-
-//     // ✅ 4. Cleanup local temp files
-//     fs.unlinkSync(filePath);
-//     fs.unlinkSync(thumbnailPath);
-
-//     return {
-//       fileName: originalName,
-//       fileUrl: s3Response.Location,
-//       s3Key: s3Response.Key,
-//       thumbnailUrl: s3ThumbResponse.Location,
-//       thumbnailKey: s3ThumbResponse.Key,
-//     };
-
-//   } catch (error) {
-//     console.error("Error processing image:", error);
-//     throw error;
-//   }
-// }
-
-
-// // Joi schema for validation
-// const eventInviteSchema = Joi.object({
-//   userId: Joi.string().required(),
-//   eventType: Joi.string().trim().required(),
-//   hostName: Joi.string().trim().required(),
-//   eventDate: Joi.date().iso().required(), // ISO date validation
-//   eventTime: Joi.string().trim().required(),
-//   location: Joi.string().trim().required(),
-//   eventTimeLines: Joi.array()
-//     .items(
-//       Joi.object({
-//         time: Joi.string().required(),
-//         activityName: Joi.string().required(),
-//       })
-//     )
-//     .default([]),
-// });
-
-// // Helper function for responses
-// const sendResponse = (res, status, error, message, data = null) => {
-//   return res.status(status).json({ error, status, message, data });
-// };
-
-// // POST /api/event-invites (Create Event Invite)
-// router.post("/create-event-invite", async (req, res) => {
-//   try {
-//     // Validate input
-//     const { error, value } = eventInviteSchema.validate(req.body, {
-//       abortEarly: false,
-//     });
-//     if (error) {
-//       const errors = error.details.map((err) => ({
-//         path: err.path.join("."),
-//         message: err.message,
-//       }));
-//       return sendResponse(res, 422, true, "Validation failed", errors);
-//     }
-
-//     const {
-//       userId,
-//       eventType,
-//       hostName,
-//       eventDate,
-//       eventTime,
-//       location,
-//       eventTimeLines,
-//     } = value;
-
-//     // Validate userId as a valid MongoDB ObjectId
-//     if (!mongoose.Types.ObjectId.isValid(userId)) {
-//       return sendResponse(res, 400, true, "Invalid user ID format");
-//     }
-
-//     // Prepare event data
-//     const eventData = {
-//       userId,
-//       eventType,
-//       hostName,
-//       eventDate: new Date(eventDate),
-//       eventTime,
-//       location,
-//       eventTimeLines,
-//     };
-
-//     // Save event invite
-//     const newEventInvite = new EventInvite(eventData);
-//     const savedEventInvite = await newEventInvite.save();
-
-//     let imageConfig = {
-//         file: req.file,
-//         folderName: "event-invites",
-//         customerId: userId,
-//         eventId: savedEventInvite._id.toString(),
-//         phoneNo: req.body.phoneNo || null,
-//     }
-
-//     const imageData = processAndUploadImage()
-
-//     return sendResponse(
-//       res,
-//       201,
-//       false,
-//       "Event invite created successfully",
-//       savedEventInvite
-//     );
-//   } catch (err) {
-//     console.error("Error creating event invite:", err);
-//     return sendResponse(res, 500, true, "Internal Server Error");
-//   }
-// });
-
-// // GET /api/event-invites/:userId (Get Event Invites by User ID)
-// router.get("/event-invites/:id", async (req, res) => {
-//   const { id } = req.params;
-
-//   if (!mongoose.Types.ObjectId.isValid(id)) {
-//     return sendResponse(res, 400, true, "Invalid event ID format");
-//   }
-
-//   try {
-//     const eventInvite = await EventInvite.findById(id);
-//     if (!eventInvite) {
-//       return sendResponse(res, 404, true, "Event invite not found");
-//     }
-//     return sendResponse(
-//       res,
-//       200,
-//       false,
-//       "Event invite fetched successfully",
-//       eventInvite
-//     );
-//   } catch (err) {
-//     console.error("Error fetching event invite:", err);
-//     return sendResponse(res, 500, true, "Internal Server Error");
-//   }
-// });
-
-// module.exports = router;
-
-
-
-
-// const express = require("express");
-// const router = express.Router();
-// const mongoose = require("mongoose");
-// const Joi = require("joi");
-// const EventInvite = require("../models/event-invite");
-// const multer = require("multer");
-// const upload = multer({ dest: "uploads/" }); // temp storage
-// const fs = require("fs");
-// const path = require("path");
-
-// // ✅ S3 Upload function
-// const AWS = require("aws-sdk");
-// const s3 = new AWS.S3({
-//   accessKeyId: process.env.AWS_ACCESS_KEY,
-//   secretAccessKey: process.env.AWS_SECRET_KEY,
-//   region: process.env.AWS_REGION,
-// });
-// const S3_BUCKET = process.env.AWS_BUCKET_NAME; 
-// const S3_BASE_URL = `https://${S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com`;
-
-// /**
-//  * Upload a single file to S3
-//  * @param {string} filePath - local temp file path
-//  * @param {string} s3Key - key to save in S3 (folder/filename.ext)
-//  * @returns uploaded file URL
-//  */
-// // async function uploadFileToS3(filePath, s3Key) {
-// //   const fileContent = fs.readFileSync(filePath);
-// //   const contentType = getContentTypeByExt(s3Key);
-
-// //   const params = {
-// //     Bucket: S3_BUCKET,
-// //     Key: s3Key,
-// //     Body: fileContent,
-// //     ContentType: contentType,
-// //   };
-
-// //   await s3.upload(params).promise();
-
-// //   // Cleanup local file after upload
-// //   fs.unlinkSync(filePath);
-
-// //   return `${S3_BASE_URL}/${s3Key}`;
-// // }
-
-
-// function uploadBase64ToS3(base64String, userId, eventId) {
-//   const matches = base64String.match(/^data:(.+);base64,(.+)$/);
-//   const mimeType = matches[1]; // e.g., image/png
-//   const base64Data = Buffer.from(matches[2], "base64");
-
-//   const ext = mimeType.split("/")[1];
-//   const s3Key = `event-invites/${userId}/${eventId}.${ext}`;
-
-//   return s3.upload({
-//     Bucket: S3_BUCKET,
-//     Key: s3Key,
-//     Body: base64Data,
-//     ContentEncoding: "base64",
-//     ContentType: mimeType
-//   }).promise().then(() => `${S3_BASE_URL}/${s3Key}`);
-// }
-
-// // ✅ Helper to get MIME type by extension
-// function getContentTypeByExt(fileName) {
-//   const ext = path.extname(fileName).toLowerCase();
-//   switch (ext) {
-//     case ".jpg":
-//     case ".jpeg":
-//       return "image/jpeg";
-//     case ".png":
-//       return "image/png";
-//     case ".webp":
-//       return "image/webp";
-//     default:
-//       return "application/octet-stream";
-//   }
-// }
-
-// // ✅ Joi schema
-// const eventInviteSchema = Joi.object({
-//   userId: Joi.string().required(),
-//   eventType: Joi.string().trim().required(),
-//   hostName: Joi.string().trim().required(),
-//   eventDate: Joi.date().iso().required(),
-//   eventTime: Joi.string().trim().required(),
-//   location: Joi.string().trim().required(),
-//   eventTimeLines: Joi.array().items(
-//     Joi.object({
-//       time: Joi.string().required(),
-//       activityName: Joi.string().required(),
-//     })
-//   ).default([]),
-// });
-
-// // ✅ Response helper
-// const sendResponse = (res, status, error, message, data = null) =>
-//   res.status(status).json({ error, status, message, data });
-
-// /**
-//  * ✅ POST /api/event-invites (Create Event Invite + Upload Image)
-//  */
-// router.post("/create-event-invite", upload.single("image"), async (req, res) => {
-//   try {
-//     // ✅ Validate request body
-//     const { error, value } = eventInviteSchema.validate(req.body, { abortEarly: false });
-//     if (error) {
-//       const errors = error.details.map(err => ({
-//         path: err.path.join("."),
-//         message: err.message,
-//       }));
-//       return sendResponse(res, 422, true, "Validation failed", errors);
-//     }
-
-//     const { userId, eventType, hostName, eventDate, eventTime, location, eventTimeLines } = value;
-
-//     if (!mongoose.Types.ObjectId.isValid(userId)) {
-//       return sendResponse(res, 400, true, "Invalid user ID format");
-//     }
-
-//     // ✅ Step 1: Create Event without image first
-//     const newEventInvite = new EventInvite({
-//       userId,
-//       eventType,
-//       hostName,
-//       eventDate: new Date(eventDate),
-//       eventTime,
-//       location,
-//       eventTimeLines,
-//     });
-
-//     const savedEventInvite = await newEventInvite.save();
-
-//     // ✅ Step 2: If image provided, upload to S3
-//     let imageUrl = null;
-//     if (req.file) {
-//       const ext = path.extname(req.file.originalname).toLowerCase(); // .jpg, .png
-//       const s3Key = `event-invites/${userId}/${savedEventInvite._id}${ext}`;
-
-//       imageUrl = await uploadBase64ToS3(req.file.path, s3Key);
-
-//       // ✅ Save URL to DB
-//       savedEventInvite.imageUrl = imageUrl;
-//       await savedEventInvite.save();
-//     }
-
-//     return sendResponse(res, 201, false, "Event invite created successfully", {
-//       ...savedEventInvite.toObject(),
-//       imageUrl,
-//     });
-
-//   } catch (err) {
-//     console.error("Error creating event invite:", err);
-//     return sendResponse(res, 500, true, "Internal Server Error");
-//   }
-// });
-
-// /**
-//  * ✅ GET /api/event-invites/:id (Fetch Single Event Invite)
-//  */
-// router.get("/event-invites/:id", async (req, res) => {
-//   const { id } = req.params;
-
-//   if (!mongoose.Types.ObjectId.isValid(id)) {
-//     return sendResponse(res, 400, true, "Invalid event ID format");
-//   }
-
-//   try {
-//     const eventInvite = await EventInvite.findById(id);
-//     if (!eventInvite) {
-//       return sendResponse(res, 404, true, "Event invite not found");
-//     }
-
-//     return sendResponse(res, 200, false, "Event invite fetched successfully", eventInvite);
-
-//   } catch (err) {
-//     console.error("Error fetching event invite:", err);
-//     return sendResponse(res, 500, true, "Internal Server Error");
-//   }
-// });
-
-// module.exports = router;
-
-
-
-
-
-
-
 const express = require("express");
 const router = express.Router();
 const mongoose = require("mongoose");
 const Joi = require("joi");
-const EventInvite = require("../models/event-invite");
 const AWS = require("aws-sdk");
+const EventInvite = require("../models/event-invite");
 
-// ✅ AWS S3 Config
+// AWS S3 Configuration
 const s3 = new AWS.S3({
-  accessKeyId:process.env.AWS_ACCESS_KEY_ID,
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   region: process.env.AWS_REGION,
 });
+
 const S3_BUCKET = process.env.S3_BUCKET_NAME;
 const S3_BASE_URL = `https://${S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com`;
 
-// ✅ Function to upload base64 image to S3
+// Helper: Determine if string is base64 image
+function isBase64Image(str) {
+  return typeof str === "string" && str.length > 0 && /^data:image\/[a-zA-Z]+;base64,/.test(str);
+}
+
+// Helper: Check if the string is a valid S3 URL
+function isS3Url(str) {
+  if (typeof str !== "string" || str.length === 0) return false;
+  const regex = new RegExp(`^${S3_BASE_URL}/event-invites/[^/]+/[^/]+\.[a-zA-Z]+$`);
+  return regex.test(str);
+}
+
+// Helper: Upload base64 image to S3
 async function uploadBase64ToS3(base64String, userId, eventId) {
-  if (!base64String) return null;
-
   const matches = base64String.match(/^data:(.+);base64,(.+)$/);
-  if (!matches) throw new Error("Invalid base64 string");
+  if (!matches) throw new Error("Invalid base64 image format");
 
-  const mimeType = matches[1]; // e.g., image/png
-  const base64Data = Buffer.from(matches[2], "base64");
-  const ext = mimeType.split("/")[1]; // png/jpg/jpeg
-  const s3Key = `event-invites/${userId}/${eventId}.${ext}`;
+  const mimeType = matches[1];
+  const buffer = Buffer.from(matches[2], "base64");
+
+  const mimeToExt = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/svg+xml": "svg",
+    "image/webp": "webp",
+  };
+
+  const ext = mimeToExt[mimeType] || mimeType.split("/")[1];
+  const key = `event-invites/${userId}/${eventId}.${ext}`;
 
   const params = {
     Bucket: S3_BUCKET,
-    Key: s3Key,
-    Body: base64Data,
+    Key: key,
+    Body: buffer,
     ContentEncoding: "base64",
     ContentType: mimeType,
   };
 
   await s3.upload(params).promise();
-  return `${S3_BASE_URL}/${s3Key}`;
+  return { url: `${S3_BASE_URL}/${key}`, key };
 }
 
-// ✅ Joi Schema for validation
+// Helper: Delete image from S3
+async function deleteFromS3(key) {
+  if (!key) return;
+  const params = {
+    Bucket: S3_BUCKET,
+    Key: key,
+  };
+  await s3.deleteObject(params).promise();
+}
+
+// Joi Schema for Validation (used for both POST and PUT)
 const eventInviteSchema = Joi.object({
-  userId: Joi.string().required(),
-  eventType: Joi.string().trim().required(),
+  userId: Joi.string().required().custom((value, helpers) => {
+    if (!mongoose.Types.ObjectId.isValid(value)) {
+      return helpers.error("any.invalid");
+    }
+    return value;
+  }, "ObjectId validation"),
+  eventType: Joi.string().trim().allow("").optional(),
   hostName: Joi.string().trim().required(),
   eventDate: Joi.date().iso().required(),
   eventTime: Joi.string().trim().required(),
   location: Joi.string().trim().required(),
-  eventTimeLines: Joi.array().items(
-    Joi.object({
-      time: Joi.string().required(),
-      activityName: Joi.string().required(),
-    })
-  ).default([]),
-  hostImage: Joi.string().optional(),
+  hostImage: Joi.string().allow(null).optional(),
 });
 
-// ✅ Response helper
+// Reusable Response Helper
 const sendResponse = (res, status, error, message, data = null) =>
   res.status(status).json({ error, status, message, data });
 
 /**
- * ✅ POST /api/event-invites (Base64 support)
+ * POST /api/event-invites
+ * Create event invite with optional base64 image
  */
 router.post("/create-event-invite", async (req, res) => {
   try {
-    // ✅ Validate input body
     const { error, value } = eventInviteSchema.validate(req.body, { abortEarly: false });
     if (error) {
-      const errors = error.details.map(err => ({
+      const details = error.details.map((err) => ({
         path: err.path.join("."),
         message: err.message,
       }));
-      return sendResponse(res, 422, true, "Validation failed", errors);
+      return sendResponse(res, 422, true, "Validation failed", details);
     }
 
-    const { userId, eventType, hostName, eventDate, eventTime, location, eventTimeLines, hostImage } = value;
+    const { userId, eventType, hostName, eventDate, eventTime, location, hostImage } = value;
 
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return sendResponse(res, 400, true, "Invalid user ID format");
-    }
-
-    // ✅ Step 1: Save event without image first
-    const newEventInvite = new EventInvite({
+    const eventInvite = new EventInvite({
       userId,
       eventType,
       hostName,
       eventDate: new Date(eventDate),
       eventTime,
       location,
-      eventTimeLines,
     });
 
-    const savedEventInvite = await newEventInvite.save();
-
-    // ✅ Step 2: If base64 hostImage is provided, upload to S3
-    let imageUrl = null;
-    if (hostImage) {
-      imageUrl = await uploadBase64ToS3(hostImage, userId, savedEventInvite._id.toString());
-
-      // Save URL in DB
-      savedEventInvite.imageUrl = imageUrl;
-      await savedEventInvite.save();
+    // Handle base64 image
+    if (hostImage && isBase64Image(hostImage)) {
+      const { url, key } = await uploadBase64ToS3(hostImage, userId, eventInvite._id.toString());
+      eventInvite.imageUrl = url;
+      eventInvite.imageKey = key;
+    } else if (hostImage !== null && hostImage !== undefined) {
+      return sendResponse(res, 400, true, "Invalid hostImage format. Must be base64 or null");
     }
 
-    return sendResponse(res, 201, false, "Event invite created successfully", {
-      ...savedEventInvite.toObject(),
-      imageUrl,
-    });
-
+    const savedInvite = await eventInvite.save();
+    return sendResponse(res, 201, false, "Event invite created", savedInvite);
   } catch (err) {
-    console.error("Error creating event invite:", err);
-    return sendResponse(res, 500, true, "Internal Server Error");
+    console.error("Create Invite Error:", {
+      message: err.message,
+      stack: err.stack,
+      requestBody: req.body,
+    });
+    return sendResponse(res, 500, true, "Server error");
   }
 });
 
 /**
- * ✅ GET /api/event-invites/:id (Fetch Single Event Invite)
+ * GET /api/event-invites/:id
+ * Fetch event invite by ID
  */
 router.get("/event-invites/:id", async (req, res) => {
   const { id } = req.params;
-
   if (!mongoose.Types.ObjectId.isValid(id)) {
-    return sendResponse(res, 400, true, "Invalid event ID format");
+    return sendResponse(res, 400, true, "Invalid event ID");
   }
 
   try {
-    const eventInvite = await EventInvite.findById(id);
-    if (!eventInvite) {
-      return sendResponse(res, 404, true, "Event invite not found");
+    // Use lean() to get plain JSON and avoid Mongoose caching issues
+    const invite = await EventInvite.findById(id).lean();
+    if (!invite) return sendResponse(res, 404, true, "Event invite not found");
+    return sendResponse(res, 200, false, "Event invite fetched", invite);
+  } catch (err) {
+    console.error("Fetch Invite Error:", {
+      message: err.message,
+      stack: err.stack,
+      eventId: id,
+    });
+    return sendResponse(res, 500, true, "Server error");
+  }
+});
+
+/**
+ * PUT /api/event-invites/:id
+ * Update event invite with optional base64 image (replaces old and deletes it)
+ */
+router.put("/event-invites/:id", async (req, res) => {
+  const { id } = req.params;
+
+  // Validate ObjectId
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return sendResponse(res, 400, true, "Invalid event ID");
+  }
+
+  try {
+    // Validate request body
+    const { error, value } = eventInviteSchema.validate(req.body, { abortEarly: false });
+    if (error) {
+      const details = error.details.map((err) => ({
+        path: err.path.join("."),
+        message: err.message,
+      }));
+      return sendResponse(res, 422, true, "Validation failed", details);
     }
 
-    return sendResponse(res, 200, false, "Event invite fetched successfully", eventInvite);
+    // Find the existing invite
+    const existing = await EventInvite.findById(id);
+    if (!existing) return sendResponse(res, 404, true, "Invite not found");
 
+    const { userId, eventType, hostName, eventDate, eventTime, location, hostImage } = value;
+
+    // Handle hostImage
+    if (hostImage !== undefined) {
+      if (isBase64Image(hostImage)) {
+        // Case 1: hostImage is a base64 string
+        if (existing.imageKey) {
+          await deleteFromS3(existing.imageKey);
+        }
+        const { url, key } = await uploadBase64ToS3(hostImage, userId, id);
+        existing.imageUrl = url;
+        existing.imageKey = key;
+      } else if (hostImage === null) {
+        // Case 2: hostImage is null, clear the image
+        if (existing.imageKey) {
+          await deleteFromS3(existing.imageKey);
+          existing.imageUrl = null;
+          existing.imageKey = null;
+        }
+      } else if (isS3Url(hostImage)) {
+        console.log("hostImage is an S3 URL, no update required:", hostImage);
+      } else {
+        return sendResponse(res, 400, true, "Invalid hostImage format. Must be base64, null, or a valid S3 URL");
+      }
+    }
+
+    // Update other fields
+    if (eventType !== undefined) existing.eventType = eventType;
+    if (hostName !== undefined) existing.hostName = hostName;
+    if (eventDate !== undefined) existing.eventDate = new Date(eventDate);
+    if (eventTime !== undefined) existing.eventTime = eventTime;
+    if (location !== undefined) existing.location = location;
+
+    // Save updated document
+    const updated = await existing.save();
+    return sendResponse(res, 200, false, "Invite updated successfully", updated);
   } catch (err) {
-    console.error("Error fetching event invite:", err);
-    return sendResponse(res, 500, true, "Internal Server Error");
+    console.error("Update Invite Error:", {
+      message: err.message,
+      stack: err.stack,
+      requestBody: req.body,
+      eventId: id,
+    });
+    return sendResponse(res, 500, true, "Server error");
   }
 });
 

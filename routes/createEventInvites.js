@@ -5,6 +5,8 @@ const Joi = require("joi");
 const AWS = require("aws-sdk");
 const EventInvite = require("../models/event-invite");
 const EventGuest = require("../models/event-guest");
+const multer = require('multer');
+const fs = require('fs');
 
 // AWS S3 Configuration
 const s3 = new AWS.S3({
@@ -18,13 +20,19 @@ const S3_BASE_URL = `https://${S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws
 
 // Helper: Determine if string is base64 image
 function isBase64Image(str) {
-  return typeof str === "string" && str.length > 0 && /^data:image\/[a-zA-Z]+;base64,/.test(str);
+  return (
+    typeof str === "string" &&
+    str.length > 0 &&
+    /^data:image\/[a-zA-Z]+;base64,/.test(str)
+  );
 }
 
 // Helper: Check if the string is a valid S3 URL
 function isS3Url(str) {
   if (typeof str !== "string" || str.length === 0) return false;
-  const regex = new RegExp(`^${S3_BASE_URL}/event-invites/[^/]+/[^/]+\.[a-zA-Z]+$`);
+  const regex = new RegExp(
+    `^${S3_BASE_URL}/event-invites/[^/]+/[^/]+\.[a-zA-Z]+$`
+  );
   return regex.test(str);
 }
 
@@ -71,12 +79,14 @@ async function deleteFromS3(key) {
 
 // Joi Schema for Validation (used for both POST and PUT)
 const eventInviteSchema = Joi.object({
-  userId: Joi.string().required().custom((value, helpers) => {
-    if (!mongoose.Types.ObjectId.isValid(value)) {
-      return helpers.error("any.invalid");
-    }
-    return value;
-  }, "ObjectId validation"),
+  userId: Joi.string()
+    .required()
+    .custom((value, helpers) => {
+      if (!mongoose.Types.ObjectId.isValid(value)) {
+        return helpers.error("any.invalid");
+      }
+      return value;
+    }, "ObjectId validation"),
   eventType: Joi.string().trim().allow("").optional(),
   hostName: Joi.string().trim().required(),
   eventDate: Joi.date().iso().required(),
@@ -86,21 +96,28 @@ const eventInviteSchema = Joi.object({
 });
 
 const eventGuestSchema = Joi.object({
-  userId: Joi.string().required().custom((value, helpers) => {
-    if (!mongoose.Types.ObjectId.isValid(value)) {
-      return helpers.error("any.invalid");
-    }
-    return value;
-  }, "ObjectId validation"),
-  eventId: Joi.string().required().custom((value, helpers) => {
-    if (!mongoose.Types.ObjectId.isValid(value)) {
-      return helpers.error("any.invalid");
-    }
-    return value;
-  }, "ObjectId validation"),
+  userId: Joi.string()
+    .required()
+    .custom((value, helpers) => {
+      if (!mongoose.Types.ObjectId.isValid(value)) {
+        return helpers.error("any.invalid");
+      }
+      return value;
+    }, "ObjectId validation"),
+  eventId: Joi.string()
+    .required()
+    .custom((value, helpers) => {
+      if (!mongoose.Types.ObjectId.isValid(value)) {
+        return helpers.error("any.invalid");
+      }
+      return value;
+    }, "ObjectId validation"),
   name: Joi.string().trim().allow("").optional(),
   phone: Joi.string().trim().allow("").optional(),
-  rsvpStatus: Joi.string().valid('will Come', 'Sure, will try').allow('').optional(),
+  rsvpStatus: Joi.string()
+    .valid("will Come", "Sure, will try")
+    .allow("")
+    .optional(),
 });
 
 // Reusable Response Helper
@@ -110,7 +127,9 @@ const sendResponse = (res, status, error, message, data = null) =>
 // Create event invite with optional base64 image
 router.post("/create-event-invite", async (req, res) => {
   try {
-    const { error, value } = eventInviteSchema.validate(req.body, { abortEarly: false });
+    const { error, value } = eventInviteSchema.validate(req.body, {
+      abortEarly: false,
+    });
     if (error) {
       const details = error.details.map((err) => ({
         path: err.path.join("."),
@@ -119,7 +138,15 @@ router.post("/create-event-invite", async (req, res) => {
       return sendResponse(res, 422, true, "Validation failed", details);
     }
 
-    const { userId, eventType, hostName, eventDate, eventTime, location, hostImage } = value;
+    const {
+      userId,
+      eventType,
+      hostName,
+      eventDate,
+      eventTime,
+      location,
+      hostImage,
+    } = value;
 
     const eventInvite = new EventInvite({
       userId,
@@ -132,11 +159,20 @@ router.post("/create-event-invite", async (req, res) => {
 
     // Handle base64 image
     if (hostImage && isBase64Image(hostImage)) {
-      const { url, key } = await uploadBase64ToS3(hostImage, userId, eventInvite._id.toString());
+      const { url, key } = await uploadBase64ToS3(
+        hostImage,
+        userId,
+        eventInvite._id.toString()
+      );
       eventInvite.imageUrl = url;
       eventInvite.imageKey = key;
     } else if (hostImage !== null && hostImage !== undefined) {
-      return sendResponse(res, 400, true, "Invalid hostImage format. Must be base64 or null");
+      return sendResponse(
+        res,
+        400,
+        true,
+        "Invalid hostImage format. Must be base64 or null"
+      );
     }
 
     const savedInvite = await eventInvite.save();
@@ -150,7 +186,6 @@ router.post("/create-event-invite", async (req, res) => {
     return sendResponse(res, 500, true, "Server error");
   }
 });
-
 
 // Fetch event invite by ID
 router.get("/event-invites/:id", async (req, res) => {
@@ -184,7 +219,9 @@ router.put("/event-invites/:id", async (req, res) => {
 
   try {
     // Validate request body
-    const { error, value } = eventInviteSchema.validate(req.body, { abortEarly: false });
+    const { error, value } = eventInviteSchema.validate(req.body, {
+      abortEarly: false,
+    });
     if (error) {
       const details = error.details.map((err) => ({
         path: err.path.join("."),
@@ -197,7 +234,15 @@ router.put("/event-invites/:id", async (req, res) => {
     const existing = await EventInvite.findById(id);
     if (!existing) return sendResponse(res, 404, true, "Invite not found");
 
-    const { userId, eventType, hostName, eventDate, eventTime, location, hostImage } = value;
+    const {
+      userId,
+      eventType,
+      hostName,
+      eventDate,
+      eventTime,
+      location,
+      hostImage,
+    } = value;
 
     // Handle hostImage
     if (hostImage !== undefined) {
@@ -219,7 +264,12 @@ router.put("/event-invites/:id", async (req, res) => {
       } else if (isS3Url(hostImage)) {
         console.log("hostImage is an S3 URL, no update required:", hostImage);
       } else {
-        return sendResponse(res, 400, true, "Invalid hostImage format. Must be base64, null, or a valid S3 URL");
+        return sendResponse(
+          res,
+          400,
+          true,
+          "Invalid hostImage format. Must be base64, null, or a valid S3 URL"
+        );
       }
     }
 
@@ -232,7 +282,13 @@ router.put("/event-invites/:id", async (req, res) => {
 
     // Save updated document
     const updated = await existing.save();
-    return sendResponse(res, 200, false, "Invite updated successfully", updated);
+    return sendResponse(
+      res,
+      200,
+      false,
+      "Invite updated successfully",
+      updated
+    );
   } catch (err) {
     console.error("Update Invite Error:", {
       message: err.message,
@@ -246,7 +302,9 @@ router.put("/event-invites/:id", async (req, res) => {
 
 router.post("/event-guest", async (req, res) => {
   try {
-    const { error, value } = eventGuestSchema.validate(req.body, { abortEarly: false });
+    const { error, value } = eventGuestSchema.validate(req.body, {
+      abortEarly: false,
+    });
     if (error) {
       const details = error.details.map((err) => ({
         path: err.path.join("."),
@@ -300,6 +358,7 @@ router.get("/event-guests/:eventId", async (req, res) => {
   }
 });
 
+// Update RSVP status or name of a guest
 router.put("/event-guests/:guestId", async (req, res) => {
   try {
     const { guestId } = req.params;
@@ -311,11 +370,17 @@ router.put("/event-guests/:guestId", async (req, res) => {
 
     // Validate the input
     const schema = Joi.object({
-      name: Joi.string().trim().allow('').optional(),
-      rsvpStatus: Joi.string().valid('will Come', 'Sure, will try', '').optional(),
+      name: Joi.string().trim().allow("").optional(),
+      rsvpStatus: Joi.string()
+        .valid("will Come", "Sure, will try", "")
+        .optional(),
     });
 
-    const { error } = schema.validate({ name, rsvpStatus }, { abortEarly: false });
+    const { error } = schema.validate(
+      { name, rsvpStatus },
+      { abortEarly: false }
+    );
+
     if (error) {
       const details = error.details.map((err) => ({
         path: err.path.join("."),
@@ -324,17 +389,37 @@ router.put("/event-guests/:guestId", async (req, res) => {
       return sendResponse(res, 422, true, "Validation failed", details);
     }
 
-    const updatedGuest = await EventGuest.findByIdAndUpdate(
-      guestId,
-      { name, rsvpStatus },
-      { new: true, runValidators: true }
-    );
-
+    const updatedGuest = await EventGuest.findById(guestId);
     if (!updatedGuest) {
       return sendResponse(res, 404, true, "Guest not found");
     }
 
-    return sendResponse(res, 200, false, "Guest updated successfully", updatedGuest);
+    // Update guest fields
+    let updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (rsvpStatus !== undefined) updateData.rsvpStatus = rsvpStatus;
+
+    // If name is provided, update the corresponding user
+    if (name !== undefined) {
+      const User = require('../models/user');
+      const user = await User.findById(updatedGuest.userId);
+      if (user) {
+        user.name = name; // Update user's name
+        await user.save();
+      }
+    }
+
+    // Update guest document
+    Object.assign(updatedGuest, updateData);
+    const savedGuest = await updatedGuest.save();
+
+    return sendResponse(
+      res,
+      200,
+      false,
+      "Guest updated successfully",
+      savedGuest
+    );
   } catch (err) {
     console.error("Update Guest Error:", {
       message: err.message,
@@ -345,5 +430,132 @@ router.put("/event-guests/:guestId", async (req, res) => {
     return sendResponse(res, 500, true, "Server error");
   }
 });
+
+// Create Lucky Draw for a guest
+const upload = multer({ dest: 'uploads/' });
+
+async function uploadLuckyDrawImageToS3(filePath, fileName, userId, eventId, contentType) {
+  const params = {
+    Bucket: S3_BUCKET,
+    Key: `lucky-draws/${userId}/${eventId}/${fileName}`,
+    Body: fs.readFileSync(filePath),
+    ContentType: contentType,
+  };
+  const data = await s3.upload(params).promise();
+  return data;
+}
+
+function generateTicketNumber() {
+  const timestamp = Date.now().toString().slice(-5); // Last 5 digits of current timestamp
+  const random = Math.floor(Math.random() * 90 + 10).toString(); // 2-digit random number (10-99)
+  return `${timestamp}${random}`; // 6-digit number
+}
+
+async function getUniqueTicketNumber(eventId) {
+  let ticketNumber;
+  let isUnique = false;
+  const guests = mongoose.model('EventGuest');
+
+  while (!isUnique) {
+    ticketNumber = generateTicketNumber();
+    const existing = await guests.findOne({
+      eventId: new mongoose.Types.ObjectId(eventId),
+      'luckyDrawTickets.ticketNumber': ticketNumber,
+    });
+    if (!existing) isUnique = true;
+  }
+  return ticketNumber;
+}
+
+// Create Lucky Draw for a guest
+router.put(
+  "/event-guests/:guestId/lucky-draw",
+  upload.single("luckyDrawImage"),
+  async (req, res) => {
+    try {
+      const { guestId } = req.params;
+      if (!mongoose.Types.ObjectId.isValid(guestId)) {
+        return sendResponse(res, 400, true, "Invalid guest ID");
+      }
+
+      const file = req.file;
+      if (!file) {
+        return sendResponse(res, 400, true, "luckyDrawImage is required");
+      }
+
+      const guest = await EventGuest.findById(guestId);
+      if (!guest) {
+        return sendResponse(res, 404, true, "Guest not found");
+      }
+
+      const userId = guest.userId.toString();
+      const eventId = guest.eventId.toString();
+
+      const fileName = `lucky-draw-${Date.now()}.${file.originalname.split('.').pop()}`;
+      const uploadResult = await uploadLuckyDrawImageToS3(file.path, fileName, userId, eventId, file.mimetype);
+
+      const ticketId = new mongoose.Types.ObjectId();
+      const ticketNumber = await getUniqueTicketNumber();
+      console.log('%c [ ticketNumber ]-496', 'font-size:13px; background:pink; color:#bf2c9f;', ticketNumber)
+
+      guest.luckyDrawTickets = guest.luckyDrawTickets || [];
+      guest.luckyDrawTickets.push({
+        ticketId,
+        ticketNumber,
+        luckyDrawImageUrl: uploadResult.Location,
+        luckyDrawImageKey: uploadResult.Key,
+      });
+
+      const updatedGuest = await guest.save();
+
+      fs.unlinkSync(file.path);
+
+      return sendResponse(
+        res,
+        200,
+        false,
+        "Lucky draw ticket added successfully",
+        { ticketId: ticketId.toString(), ticketNumber, ...updatedGuest.toObject() }
+      );
+    } catch (err) {
+      console.error("Submit Lucky Draw Error:", {
+        message: err.message,
+        stack: err.stack,
+        guestId: req.params.guestId,
+      });
+      return sendResponse(res, 500, true, "Server error");
+    }
+  }
+);
+
+// Get all lucky draws by guestId
+router.get("/event-guests/:guestId/lucky-draws", async (req, res) => {
+  try {
+    const { guestId } = req.params;
+
+    // Validate guestId
+    if (!mongoose.Types.ObjectId.isValid(guestId)) {
+      return sendResponse(res, 400, true, "Invalid guest ID");
+    }
+
+    const guest = await EventGuest.findById(guestId).lean();
+
+    if (!guest) {
+      return sendResponse(res, 404, true, "Guest not found");
+    }
+
+    const luckyDraws = guest.luckyDrawTickets || [];
+
+    return sendResponse(res, 200, false, "Lucky draws fetched successfully", luckyDraws);
+  } catch (err) {
+    console.error("Fetch Lucky Draws Error:", {
+      message: err.message,
+      stack: err.stack,
+      guestId: req.params.guestId,
+    });
+    return sendResponse(res, 500, true, "Server error");
+  }
+});
+
 
 module.exports = router;

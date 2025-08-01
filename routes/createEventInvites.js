@@ -4,6 +4,7 @@ const mongoose = require("mongoose");
 const Joi = require("joi");
 const AWS = require("aws-sdk");
 const EventInvite = require("../models/event-invite");
+const EventGuest = require("../models/event-guest");
 
 // AWS S3 Configuration
 const s3 = new AWS.S3({
@@ -84,14 +85,29 @@ const eventInviteSchema = Joi.object({
   hostImage: Joi.string().allow(null).optional(),
 });
 
+const eventGuestSchema = Joi.object({
+  userId: Joi.string().required().custom((value, helpers) => {
+    if (!mongoose.Types.ObjectId.isValid(value)) {
+      return helpers.error("any.invalid");
+    }
+    return value;
+  }, "ObjectId validation"),
+  eventId: Joi.string().required().custom((value, helpers) => {
+    if (!mongoose.Types.ObjectId.isValid(value)) {
+      return helpers.error("any.invalid");
+    }
+    return value;
+  }, "ObjectId validation"),
+  name: Joi.string().trim().allow("").optional(),
+  phone: Joi.string().trim().allow("").optional(),
+  rsvpStatus: Joi.string().valid('will Come', 'Sure, will try').allow('').optional(),
+});
+
 // Reusable Response Helper
 const sendResponse = (res, status, error, message, data = null) =>
   res.status(status).json({ error, status, message, data });
 
-/**
- * POST /api/event-invites
- * Create event invite with optional base64 image
- */
+// Create event invite with optional base64 image
 router.post("/create-event-invite", async (req, res) => {
   try {
     const { error, value } = eventInviteSchema.validate(req.body, { abortEarly: false });
@@ -135,10 +151,8 @@ router.post("/create-event-invite", async (req, res) => {
   }
 });
 
-/**
- * GET /api/event-invites/:id
- * Fetch event invite by ID
- */
+
+// Fetch event invite by ID
 router.get("/event-invites/:id", async (req, res) => {
   const { id } = req.params;
   if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -160,14 +174,10 @@ router.get("/event-invites/:id", async (req, res) => {
   }
 });
 
-/**
- * PUT /api/event-invites/:id
- * Update event invite with optional base64 image (replaces old and deletes it)
- */
+// Update event invite
 router.put("/event-invites/:id", async (req, res) => {
   const { id } = req.params;
-
-  // Validate ObjectId
+  // Validate ID format
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return sendResponse(res, 400, true, "Invalid event ID");
   }
@@ -229,6 +239,108 @@ router.put("/event-invites/:id", async (req, res) => {
       stack: err.stack,
       requestBody: req.body,
       eventId: id,
+    });
+    return sendResponse(res, 500, true, "Server error");
+  }
+});
+
+router.post("/event-guest", async (req, res) => {
+  try {
+    const { error, value } = eventGuestSchema.validate(req.body, { abortEarly: false });
+    if (error) {
+      const details = error.details.map((err) => ({
+        path: err.path.join("."),
+        message: err.message,
+      }));
+      return sendResponse(res, 422, true, "Validation failed", details);
+    }
+
+    const { userId, eventId, name, rsvpStatus } = value;
+
+    const eventGuest = new EventGuest({
+      userId,
+      eventId,
+      name,
+      rsvpStatus,
+    });
+
+    const savedGuest = await eventGuest.save();
+    return sendResponse(res, 201, false, "Event guest created", savedGuest);
+  } catch (err) {
+    console.error("Create Guest Error:", {
+      message: err.message,
+      stack: err.stack,
+      requestBody: req.body,
+    });
+    return sendResponse(res, 500, true, "Server error");
+  }
+});
+
+// Get all guests by event id
+router.get("/event-guests/:eventId", async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(eventId)) {
+      return sendResponse(res, 400, true, "Invalid event ID");
+    }
+
+    const guests = await EventGuest.find({ eventId }).lean();
+    if (!guests || guests.length === 0) {
+      return sendResponse(res, 404, true, "No guests found for this event");
+    }
+
+    return sendResponse(res, 200, false, "Guests fetched successfully", guests);
+  } catch (err) {
+    console.error("Fetch Guests Error:", {
+      message: err.message,
+      stack: err.stack,
+      eventId: req.params.eventId,
+    });
+    return sendResponse(res, 500, true, "Server error");
+  }
+});
+
+router.put("/event-guests/:guestId", async (req, res) => {
+  try {
+    const { guestId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(guestId)) {
+      return sendResponse(res, 400, true, "Invalid guest ID");
+    }
+
+    const { name, rsvpStatus } = req.body;
+
+    // Validate the input
+    const schema = Joi.object({
+      name: Joi.string().trim().allow('').optional(),
+      rsvpStatus: Joi.string().valid('will Come', 'Sure, will try', '').optional(),
+    });
+
+    const { error } = schema.validate({ name, rsvpStatus }, { abortEarly: false });
+    if (error) {
+      const details = error.details.map((err) => ({
+        path: err.path.join("."),
+        message: err.message,
+      }));
+      return sendResponse(res, 422, true, "Validation failed", details);
+    }
+
+    const updatedGuest = await EventGuest.findByIdAndUpdate(
+      guestId,
+      { name, rsvpStatus },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedGuest) {
+      return sendResponse(res, 404, true, "Guest not found");
+    }
+
+    return sendResponse(res, 200, false, "Guest updated successfully", updatedGuest);
+  } catch (err) {
+    console.error("Update Guest Error:", {
+      message: err.message,
+      stack: err.stack,
+      guestId: req.params.guestId,
+      requestBody: req.body,
     });
     return sendResponse(res, 500, true, "Server error");
   }

@@ -219,7 +219,6 @@ router.get("/GetFoldersByCustomerId/:customerId", async (req, res) => {
 
 router.post("/upload", upload.array("files", 300), async (req, res) => {
   try {
-    console.log("Received request:", req.body);
 
     const { folderName, customerId, vendorId, phoneNo } = req.body;
     if (!folderName || !customerId) {
@@ -446,8 +445,6 @@ router.post("/deleteImage", async (req, res) => {
   }
 });
 
-// const upload = multer({ dest: 'uploads/' });
-
 const uploadToS3 = (filePath, fileName, folder, contentType) => {
   const fileContent = fs.readFileSync(filePath);
   const params = {
@@ -455,72 +452,132 @@ const uploadToS3 = (filePath, fileName, folder, contentType) => {
     Key: `${folder}/${fileName}`,
     Body: fileContent,
     ContentType: contentType,
-    // ACL: 'public-read'
   };
 
   return s3.upload(params).promise();
 };
 
-router.post("/upload-template", upload.single("file"), async (req, res) => {
-  try {
-    const { category } = req.body;
-    const file = req.file;
-    console.log(
-      "%c [ file ]-467",
-      "font-size:13px; background:pink; color:#bf2c9f;",
-      file
-    );
+// router.post("/upload-template", upload.single("file"), async (req, res) => {
+//   try {
+//     const { category, configs } = req.body;
+//     const file = req.file;
 
-    if (!file || !category) {
+//     if (!file || !category) {
+//       return res
+//         .status(400)
+//         .json({ message: "File and category are required" });
+//     }
+
+//     const filePath = file.path;
+//     const originalName = path.parse(file.originalname).name;
+//     const folder = `templates/${category}`;
+//     const svgFileName = `${originalName}.svg`;
+//     const webpFileName = `${originalName}.webp`;
+
+//     // 1. Upload SVG to S3
+//     const svgUpload = await uploadToS3(
+//       filePath,
+//       svgFileName,
+//       folder,
+//       "image/svg+xml"
+//     );
+
+//     // 2. Generate and upload WebP
+//     const webpPath = `${filePath}.webp`;
+//     await sharp(filePath).webp().toFile(webpPath);
+//     const webpUpload = await uploadToS3(
+//       webpPath,
+//       webpFileName,
+//       folder,
+//       "image/webp"
+//     );
+//     webpUpload.ContentType = "image/webp";
+
+//     // 3. Save in DB
+//     const savedTemplate = await TemplateMaster.create({
+//       fileName: file.originalname,
+//       svgUrl: svgUpload.Location,
+//       s3SvgKey: svgUpload.Key,
+//       webpUrl: webpUpload.Location,
+//       s3WebpKey: webpUpload.Key,
+//       category,
+//       configs: configs || {}, // Save configs, default to empty object if not provided
+//     });
+
+//     // Cleanup
+//     fs.unlinkSync(filePath);
+//     fs.unlinkSync(webpPath);
+
+//     res
+//       .status(201)
+//       .json({ message: "Template uploaded", template: savedTemplate });
+//   } catch (error) {
+//     console.error("Upload error:", error);
+//     res.status(500).json({ message: "Server error", error: error.message });
+//   }
+// });
+
+// Get All templates
+
+
+router.post("/upload-template", upload.fields([
+  { name: 'sampleTemplateImage', maxCount: 1 },
+  { name: 'editableImage', maxCount: 1 }
+]), async (req, res) => {
+  try {
+    const { category, configs } = req.body;
+    const sampleTemplateImage = req.files['sampleTemplateImage']?.[0];
+    const editableImage = req.files['editableImage']?.[0];
+
+    if (!sampleTemplateImage || !editableImage || !category) {
       return res
         .status(400)
-        .json({ message: "File and category are required" });
+        .json({ message: "sampleTemplateImage, editableImage, and category are required" });
     }
 
-    const filePath = file.path;
-    const originalName = path.parse(file.originalname).name;
+    const filePathSample = sampleTemplateImage.path;
+    const originalNameSample = path.parse(sampleTemplateImage.originalname).name;
     const folder = `templates/${category}`;
 
-    const svgFileName = `${originalName}.svg`;
-    const webpFileName = `${originalName}.webp`;
-
-    // 1. Upload SVG to S3
-    // const svgUpload = await uploadToS3(filePath, svgFileName, folder);
-    const svgUpload = await uploadToS3(
-      filePath,
-      svgFileName,
-      folder,
-      "image/svg+xml"
-    );
-
-    // 2. Generate and upload WebP
-    const webpPath = `${filePath}.webp`;
-    // await sharp(filePath).webp().toFile(webpPath);
-    await sharp(filePath).webp().toFile(webpPath);
-
-    // const webpUpload = await uploadToS3(webpPath, webpFileName, folder);
+    // 1. Process sampleTemplateImage (convert to WebP and upload to S3)
+    const webpPathSample = `${filePathSample}.webp`;
+    await sharp(filePathSample).webp().toFile(webpPathSample);
+    const webpFileNameSample = `${originalNameSample}.webp`;
     const webpUpload = await uploadToS3(
-      webpPath,
-      webpFileName,
+      webpPathSample,
+      webpFileNameSample,
       folder,
       "image/webp"
     );
-
     webpUpload.ContentType = "image/webp";
+
+    // 2. Process editableImage (upload in original format)
+    const filePathEditable = editableImage.path;
+    const originalNameEditable = path.parse(editableImage.originalname).name;
+    const extEditable = path.parse(editableImage.originalname).ext.replace('.', '');
+    const editableFileName = `${originalNameEditable}.${extEditable}`;
+    const editableUpload = await uploadToS3(
+      filePathEditable,
+      editableFileName,
+      folder,
+      editableImage.mimetype
+    );
 
     // 3. Save in DB
     const savedTemplate = await TemplateMaster.create({
-      fileName: file.originalname,
-      svgUrl: svgUpload.Location,
-      s3SvgKey: svgUpload.Key,
+      fileName: sampleTemplateImage.originalname,
       webpUrl: webpUpload.Location,
       s3WebpKey: webpUpload.Key,
+      editableImageUrl: editableUpload.Location,
+      s3EditableImageKey: editableUpload.Key,
       category,
+      configs: configs || {},
     });
 
     // Cleanup
-    fs.unlinkSync(filePath);
-    fs.unlinkSync(webpPath);
+    fs.unlinkSync(filePathSample);
+    fs.unlinkSync(webpPathSample);
+    fs.unlinkSync(filePathEditable);
 
     res
       .status(201)
@@ -531,7 +588,6 @@ router.post("/upload-template", upload.single("file"), async (req, res) => {
   }
 });
 
-// Get All templates
 router.get("/templates", async (req, res) => {
   try {
     const templates = await TemplateMaster.find().sort({ createdAt: -1 });

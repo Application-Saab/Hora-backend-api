@@ -526,8 +526,8 @@ router.post("/upload-template", upload.fields([
 ]), async (req, res) => {
   try {
     const { category, configs } = req.body;
-    const sampleTemplateImage = req.files['sampleTemplateImage']?.[0];
-    const editableImage = req.files['editableImage']?.[0];
+    const sampleTemplateImage = req.files && req.files['sampleTemplateImage'] ? req.files['sampleTemplateImage'][0] : null;
+    const editableImage = req.files && req.files['editableImage'] ? req.files['editableImage'][0] : null;
 
     if (!sampleTemplateImage || !editableImage || !category) {
       return res

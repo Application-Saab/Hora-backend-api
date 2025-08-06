@@ -10,6 +10,7 @@ const eventInviteSchema = new mongoose.Schema({
     location: { type: String, default: '' },
     imageUrl: { type: String },
     imageKey: { type: String },
+    wonderland_id: { type: Number },
 }, {
     strict: false,
     timestamps: true

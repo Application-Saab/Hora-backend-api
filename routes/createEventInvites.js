@@ -5,6 +5,7 @@ const Joi = require("joi");
 const AWS = require("aws-sdk");
 const EventInvite = require("../models/event-invite");
 const EventGuest = require("../models/event-guest");
+const TicketCounter = require("../models/ticket-counter-luckydraw");
 const multer = require('multer');
 const fs = require('fs');
 
@@ -148,6 +149,9 @@ router.post("/create-event-invite", async (req, res) => {
       hostImage,
     } = value;
 
+    const lastWonderlandId = await EventInvite.findOne().sort({ wonderland_id: -1 }).select('wonderland_id');
+    const nextWonderlandId = (lastWonderlandId && lastWonderlandId.wonderland_id)  ? Number(lastWonderlandId.wonderland_id) + 1 : 2206;
+
     const eventInvite = new EventInvite({
       userId,
       eventType,
@@ -155,6 +159,7 @@ router.post("/create-event-invite", async (req, res) => {
       eventDate: new Date(eventDate),
       eventTime,
       location,
+      wonderland_id: Number(nextWonderlandId),
     });
 
     // Handle base64 image
@@ -204,6 +209,34 @@ router.get("/event-invites/:id", async (req, res) => {
       message: err.message,
       stack: err.stack,
       eventId: id,
+    });
+    return sendResponse(res, 500, true, "Server error");
+  }
+});
+
+// Get all events By User ID
+router.get("/event-invites/all/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // Validate userId
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return sendResponse(res, 400, true, "Invalid user ID");
+    }
+
+    // Find all events for the given userId
+    const events = await EventInvite.find({ userId }).lean();
+
+    if (!events || events.length === 0) {
+      return sendResponse(res, 404, false, "No events found for this user", []);
+    }
+
+    return sendResponse(res, 200, false, "Events fetched successfully", events);
+  } catch (err) {
+    console.error("Fetch Events Error:", {
+      message: err.message,
+      stack: err.stack,
+      userId: req.params.userId,
     });
     return sendResponse(res, 500, true, "Server error");
   }
@@ -300,6 +333,7 @@ router.put("/event-invites/:id", async (req, res) => {
   }
 });
 
+// Create A guest for an event
 router.post("/event-guest", async (req, res) => {
   try {
     const { error, value } = eventGuestSchema.validate(req.body, {
@@ -315,6 +349,12 @@ router.post("/event-guest", async (req, res) => {
 
     const { userId, eventId, name, rsvpStatus } = value;
 
+    // Check for existing guest with same userId and eventId
+    const existingGuest = await EventGuest.findOne({ userId, eventId }).lean();
+    if (existingGuest) {
+      return sendResponse(res, 409, true, "User is already registered for this event");
+    }
+
     const eventGuest = new EventGuest({
       userId,
       eventId,
@@ -329,6 +369,34 @@ router.post("/event-guest", async (req, res) => {
       message: err.message,
       stack: err.stack,
       requestBody: req.body,
+    });
+    return sendResponse(res, 500, true, "Server error");
+  }
+});
+
+//  Get all Guest details by guest id for a particular event
+router.get("/event-guests/:guestId", async (req, res) => {
+  try {
+    const { guestId } = req.params;
+
+    // Validate guestId
+    if (!mongoose.Types.ObjectId.isValid(guestId)) {
+      return sendResponse(res, 400, true, "Invalid guest ID");
+    }
+
+    // Find the guest by guestId
+    const guest = await EventGuest.findById(guestId).lean();
+
+    if (!guest) {
+      return sendResponse(res, 404, false, "Guest not found", null);
+    }
+
+    return sendResponse(res, 200, false, "Guest fetched successfully", guest);
+  } catch (err) {
+    console.error("Fetch Guest Error:", {
+      message: err.message,
+      stack: err.stack,
+      guestId: req.params.guestId,
     });
     return sendResponse(res, 500, true, "Server error");
   }
@@ -467,7 +535,6 @@ async function getUniqueTicketNumber(eventId) {
   return ticketNumber;
 }
 
-// Create Lucky Draw for a guest
 router.put(
   "/event-guests/:guestId/lucky-draw",
   upload.single("luckyDrawImage"),
@@ -495,9 +562,13 @@ router.put(
       const uploadResult = await uploadLuckyDrawImageToS3(file.path, fileName, userId, eventId, file.mimetype);
 
       const ticketId = new mongoose.Types.ObjectId();
-      const ticketNumber = await getUniqueTicketNumber();
-      console.log('%c [ ticketNumber ]-496', 'font-size:13px; background:pink; color:#bf2c9f;', ticketNumber)
-
+      // Use TicketCounter for unique ticket number starting from 1622
+      const counter = await TicketCounter.findOneAndUpdate(
+        { _id: "luckyDrawCounter" },
+        { $inc: { sequenceValue: 1 } },
+        { new: true, upsert: true }
+      ).lean();
+      const ticketNumber = counter.sequenceValue;
       guest.luckyDrawTickets = guest.luckyDrawTickets || [];
       guest.luckyDrawTickets.push({
         ticketId,
@@ -527,7 +598,6 @@ router.put(
     }
   }
 );
-
 // Get all lucky draws by guestId
 router.get("/event-guests/:guestId/lucky-draws", async (req, res) => {
   try {

@@ -6,8 +6,9 @@ const AWS = require("aws-sdk");
 const EventInvite = require("../models/event-invite");
 const EventGuest = require("../models/event-guest");
 const TicketCounter = require("../models/ticket-counter-luckydraw");
-const multer = require('multer');
-const fs = require('fs');
+const EventImages = require("../models/eventImages");
+const multer = require("multer");
+const fs = require("fs");
 
 // AWS S3 Configuration
 const s3 = new AWS.S3({
@@ -149,8 +150,13 @@ router.post("/create-event-invite", async (req, res) => {
       hostImage,
     } = value;
 
-    const lastWonderlandId = await EventInvite.findOne().sort({ wonderland_id: -1 }).select('wonderland_id');
-    const nextWonderlandId = (lastWonderlandId && lastWonderlandId.wonderland_id)  ? Number(lastWonderlandId.wonderland_id) + 1 : 2206;
+    const lastWonderlandId = await EventInvite.findOne()
+      .sort({ wonderland_id: -1 })
+      .select("wonderland_id");
+    const nextWonderlandId =
+      lastWonderlandId && lastWonderlandId.wonderland_id
+        ? Number(lastWonderlandId.wonderland_id) + 1
+        : 2206;
 
     const eventInvite = new EventInvite({
       userId,
@@ -352,14 +358,19 @@ router.post("/event-guest", async (req, res) => {
     // Check for existing guest with same userId and eventId
     const existingGuest = await EventGuest.findOne({ userId, eventId }).lean();
     if (existingGuest) {
-      return sendResponse(res, 409, true, "User is already registered for this event");
+      return sendResponse(
+        res,
+        409,
+        true,
+        "User is already registered for this event"
+      );
     }
 
     const eventGuest = new EventGuest({
       userId,
       eventId,
-      name,
-      rsvpStatus,
+      name: name || "",
+      rsvpStatus: rsvpStatus || "",
     });
 
     const savedGuest = await eventGuest.save();
@@ -370,40 +381,53 @@ router.post("/event-guest", async (req, res) => {
       stack: err.stack,
       requestBody: req.body,
     });
+
+    // Handle duplicate key error
+    // if (err.code === 11000) {
+    //   return sendResponse(res, 409, true, "Duplicate entry found for userId and eventId combination");
+    // }
+
     return sendResponse(res, 500, true, "Server error");
   }
 });
 
-//  Get all Guest details by guest id for a particular event
-router.get("/event-guests/:guestId", async (req, res) => {
+//  Get all Guest details by event and user id for a particular event
+router.get("/event-guest/:eventId/user/:userId", async (req, res) => {
   try {
-    const { guestId } = req.params;
+    const { eventId, userId } = req.params;
 
-    // Validate guestId
-    if (!mongoose.Types.ObjectId.isValid(guestId)) {
-      return sendResponse(res, 400, true, "Invalid guest ID");
+    // Validate eventId and userId
+    if (!mongoose.Types.ObjectId.isValid(eventId)) {
+      return sendResponse(res, 400, true, "Invalid event ID");
+    }
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return sendResponse(res, 400, true, "Invalid user ID");
     }
 
-    // Find the guest by guestId
-    const guest = await EventGuest.findById(guestId).lean();
-
+    // Find the guest details by userId (assuming userId is the same as guestId in EventGuest)
+    const guest = await EventGuest.findOne({ userId, eventId }).lean();
     if (!guest) {
-      return sendResponse(res, 404, false, "Guest not found", null);
+      return sendResponse(res, 404, false, "User not found", null);
     }
 
-    return sendResponse(res, 200, false, "Guest fetched successfully", guest);
+    // Find lucky draw images for the user and event
+    const eventImage = await EventImages.findOne({ eventId, userId }).lean();
+    const luckyDrawImages = eventImage ? eventImage.luckyDrawImages.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)) : [];
+
+    return sendResponse(res, 200, false, "User details and lucky draw images fetched successfully", {...guest, luckyDraws : luckyDrawImages});
   } catch (err) {
-    console.error("Fetch Guest Error:", {
+    console.error("Fetch User and Lucky Draw Images Error:", {
       message: err.message,
       stack: err.stack,
-      guestId: req.params.guestId,
+      eventId: req.params.eventId,
+      userId: req.params.userId,
     });
     return sendResponse(res, 500, true, "Server error");
   }
 });
 
 // Get all guests by event id
-router.get("/event-guests/:eventId", async (req, res) => {
+router.get("/event-guests/all/:eventId", async (req, res) => {
   try {
     const { eventId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(eventId)) {
@@ -427,17 +451,14 @@ router.get("/event-guests/:eventId", async (req, res) => {
 });
 
 // Update RSVP status or name of a guest
-router.put("/event-guests/:guestId", async (req, res) => {
+router.put("/event-guest", async (req, res) => {
   try {
-    const { guestId } = req.params;
-    if (!mongoose.Types.ObjectId.isValid(guestId)) {
-      return sendResponse(res, 400, true, "Invalid guest ID");
-    }
-
-    const { name, rsvpStatus } = req.body;
+    const { eventId, userId, name, rsvpStatus } = req.body;
 
     // Validate the input
     const schema = Joi.object({
+      eventId: Joi.string().required(),
+      userId: Joi.string().required(),
       name: Joi.string().trim().allow("").optional(),
       rsvpStatus: Joi.string()
         .valid("will Come", "Sure, will try", "")
@@ -445,7 +466,7 @@ router.put("/event-guests/:guestId", async (req, res) => {
     });
 
     const { error } = schema.validate(
-      { name, rsvpStatus },
+      { eventId, userId, name, rsvpStatus },
       { abortEarly: false }
     );
 
@@ -457,7 +478,15 @@ router.put("/event-guests/:guestId", async (req, res) => {
       return sendResponse(res, 422, true, "Validation failed", details);
     }
 
-    const updatedGuest = await EventGuest.findById(guestId);
+    if (
+      !mongoose.Types.ObjectId.isValid(eventId) ||
+      !mongoose.Types.ObjectId.isValid(userId)
+    ) {
+      return sendResponse(res, 400, true, "Invalid event ID or user ID");
+    }
+
+    // Find guest by eventId and userId combination
+    const updatedGuest = await EventGuest.findOne({ eventId, userId });
     if (!updatedGuest) {
       return sendResponse(res, 404, true, "Guest not found");
     }
@@ -469,7 +498,7 @@ router.put("/event-guests/:guestId", async (req, res) => {
 
     // If name is provided, update the corresponding user
     if (name !== undefined) {
-      const User = require('../models/user');
+      const User = require("../models/user");
       const user = await User.findById(updatedGuest.userId);
       if (user) {
         user.name = name; // Update user's name
@@ -492,57 +521,61 @@ router.put("/event-guests/:guestId", async (req, res) => {
     console.error("Update Guest Error:", {
       message: err.message,
       stack: err.stack,
-      guestId: req.params.guestId,
       requestBody: req.body,
     });
     return sendResponse(res, 500, true, "Server error");
   }
 });
 
-// Create Lucky Draw for a guest
-const upload = multer({ dest: 'uploads/' });
+// Temporary storage for uploaded files
+const storage = multer.diskStorage({
+  destination: "./uploads/",
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`);
+  },
+});
 
-async function uploadLuckyDrawImageToS3(filePath, fileName, userId, eventId, contentType) {
+const uploadSingle = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+}).single("image"); // Single file upload for luckyDraw and thankYouNote
+
+const uploadMultiple = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+}).array("selfUploadedImages", 10); // Multiple files, max 10
+
+const uploadImageToS3 = async (
+  filePath,
+  fileName,
+  userId,
+  eventId,
+  mimeType,
+  folderName
+) => {
   const params = {
-    Bucket: S3_BUCKET,
-    Key: `lucky-draws/${userId}/${eventId}/${fileName}`,
-    Body: fs.readFileSync(filePath),
-    ContentType: contentType,
+    Bucket: process.env.S3_BUCKET_NAME,
+    Key: `${folderName}/${userId}/${eventId}/${fileName}`, // Folder name at the start
+    Body: fs.createReadStream(filePath),
+    ContentType: mimeType,
   };
   const data = await s3.upload(params).promise();
   return data;
-}
-
-function generateTicketNumber() {
-  const timestamp = Date.now().toString().slice(-5); // Last 5 digits of current timestamp
-  const random = Math.floor(Math.random() * 90 + 10).toString(); // 2-digit random number (10-99)
-  return `${timestamp}${random}`; // 6-digit number
-}
-
-async function getUniqueTicketNumber(eventId) {
-  let ticketNumber;
-  let isUnique = false;
-  const guests = mongoose.model('EventGuest');
-
-  while (!isUnique) {
-    ticketNumber = generateTicketNumber();
-    const existing = await guests.findOne({
-      eventId: new mongoose.Types.ObjectId(eventId),
-      'luckyDrawTickets.ticketNumber': ticketNumber,
-    });
-    if (!existing) isUnique = true;
-  }
-  return ticketNumber;
-}
+};
 
 router.put(
-  "/event-guests/:guestId/lucky-draw",
-  upload.single("luckyDrawImage"),
+  "/event-images/:eventId/lucky-draw",
+  (req, res, next) => {
+    uploadSingle(req, res, (err) => {
+      if (err) return sendResponse(res, 400, true, err.message);
+      next();
+    });
+  },
   async (req, res) => {
     try {
-      const { guestId } = req.params;
-      if (!mongoose.Types.ObjectId.isValid(guestId)) {
-        return sendResponse(res, 400, true, "Invalid guest ID");
+      const { eventId } = req.params;
+      if (!mongoose.Types.ObjectId.isValid(eventId)) {
+        return sendResponse(res, 400, true, "Invalid event ID");
       }
 
       const file = req.file;
@@ -550,49 +583,273 @@ router.put(
         return sendResponse(res, 400, true, "luckyDrawImage is required");
       }
 
-      const guest = await EventGuest.findById(guestId);
-      if (!guest) {
-        return sendResponse(res, 404, true, "Guest not found");
+      const userId = req.body.userId;
+      if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+        return sendResponse(res, 400, true, "Invalid user ID");
       }
 
-      const userId = guest.userId.toString();
-      const eventId = guest.eventId.toString();
+      let eventImage = await EventImages.findOne({ eventId, userId });
+      if (!eventImage) {
+        eventImage = new EventImages({
+          eventId,
+          userId,
+          userType: "guest",
+          luckyDrawImages: [],
+          thankYouNoteImages: [],
+          selfUploadedImages: [],
+        });
+        console.log(
+          "Created new eventImage for eventId:",
+          eventId,
+          "userId:",
+          userId
+        );
+      } else {
+        console.log(
+          "Found existing eventImage for eventId:",
+          eventId,
+          "userId:",
+          userId
+        );
+      }
 
-      const fileName = `lucky-draw-${Date.now()}.${file.originalname.split('.').pop()}`;
-      const uploadResult = await uploadLuckyDrawImageToS3(file.path, fileName, userId, eventId, file.mimetype);
-
-      const ticketId = new mongoose.Types.ObjectId();
-      // Use TicketCounter for unique ticket number starting from 1622
       const counter = await TicketCounter.findOneAndUpdate(
         { _id: "luckyDrawCounter" },
         { $inc: { sequenceValue: 1 } },
         { new: true, upsert: true }
       ).lean();
+
       const ticketNumber = counter.sequenceValue;
-      guest.luckyDrawTickets = guest.luckyDrawTickets || [];
-      guest.luckyDrawTickets.push({
-        ticketId,
+      console.log("Generated ticketNumber:", ticketNumber);
+
+      const fileName = `lucky-draw-${Date.now()}-${file.originalname
+        .split(".")
+        .pop()}`;
+      const uploadResult = await uploadImageToS3(
+        file.path,
+        fileName,
+        userId,
+        eventId,
+        file.mimetype,
+        "lucky-draw"
+      );
+      fs.unlinkSync(file.path);
+      console.log("S3 upload result:", uploadResult);
+
+      const newImage = {
+        _id: new mongoose.Types.ObjectId(),
+        // ticketId: new mongoose.Types.ObjectId(),
         ticketNumber,
         luckyDrawImageUrl: uploadResult.Location,
         luckyDrawImageKey: uploadResult.Key,
-      });
+        imageType: "luckyDraw",
+        createdAt: new Date(),
+      };
 
-      const updatedGuest = await guest.save();
-
-      fs.unlinkSync(file.path);
+      eventImage.luckyDrawImages.push(newImage);
+      const updatedEventImage = await eventImage.save();
+      console.log("Saved eventImage:", updatedEventImage);
 
       return sendResponse(
         res,
         200,
         false,
-        "Lucky draw ticket added successfully",
-        { ticketId: ticketId.toString(), ticketNumber, ...updatedGuest.toObject() }
+        "Lucky draw image uploaded successfully",
+        updatedEventImage
       );
     } catch (err) {
-      console.error("Submit Lucky Draw Error:", {
+      console.error("Upload Lucky Draw Image Error:", {
         message: err.message,
         stack: err.stack,
-        guestId: req.params.guestId,
+        eventId: req.params.eventId,
+      });
+      return sendResponse(res, 500, true, "Server error");
+    }
+  }
+);
+
+router.put(
+  "/event-images/:eventId/thankyou-note",
+  (req, res, next) => {
+    uploadSingle(req, res, (err) => {
+      if (err) return sendResponse(res, 400, true, err.message);
+      next();
+    });
+  },
+  async (req, res) => {
+    try {
+      const { eventId } = req.params;
+      if (!mongoose.Types.ObjectId.isValid(eventId)) {
+        return sendResponse(res, 400, true, "Invalid event ID");
+      }
+
+      const file = req.file;
+      if (!file) {
+        return sendResponse(res, 400, true, "thankYouNoteImage is required");
+      }
+
+      const userId = req.body.userId;
+      if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+        return sendResponse(res, 400, true, "Invalid user ID");
+      }
+
+      let eventImage = await EventImages.findOne({ eventId, userId });
+      if (!eventImage) {
+        eventImage = new EventImages({
+          eventId,
+          userId,
+          userType: "guest",
+          luckyDrawImages: [],
+          thankYouNoteImages: [],
+          selfUploadedImages: [],
+        });
+        console.log(
+          "Created new eventImage for eventId:",
+          eventId,
+          "userId:",
+          userId
+        );
+      } else {
+        console.log(
+          "Found existing eventImage for eventId:",
+          eventId,
+          "userId:",
+          userId
+        );
+      }
+
+      const fileName = `thankyou-note-${Date.now()}-${file.originalname
+        .split(".")
+        .pop()}`;
+      const uploadResult = await uploadImageToS3(
+        file.path,
+        fileName,
+        userId,
+        eventId,
+        file.mimetype,
+        "thankyou-note"
+      );
+      fs.unlinkSync(file.path);
+      console.log("S3 upload result:", uploadResult);
+
+      const newImage = {
+        _id: new mongoose.Types.ObjectId(),
+        thankYouNoteImageUrl: uploadResult.Location,
+        thankYouNoteImageKey: uploadResult.Key,
+        imageType: "thankYouNote",
+      };
+
+      eventImage.thankYouNoteImages.push(newImage);
+      const updatedEventImage = await eventImage.save();
+      console.log("Saved eventImage:", updatedEventImage);
+
+      return sendResponse(
+        res,
+        200,
+        false,
+        "Thank you note image uploaded successfully",
+        updatedEventImage
+      );
+    } catch (err) {
+      console.error("Upload Thank You Note Image Error:", {
+        message: err.message,
+        stack: err.stack,
+        eventId: req.params.eventId,
+      });
+      return sendResponse(res, 500, true, "Server error");
+    }
+  }
+);
+
+router.put(
+  "/event-images/:eventId/self-uploaded",
+  (req, res, next) => {
+    uploadMultiple(req, res, (err) => {
+      if (err) return sendResponse(res, 400, true, err.message);
+      next();
+    });
+  },
+  async (req, res) => {
+    try {
+      const { eventId } = req.params;
+      if (!mongoose.Types.ObjectId.isValid(eventId)) {
+        return sendResponse(res, 400, true, "Invalid event ID");
+      }
+
+      const files = req.files;
+      if (!files || files.length === 0) {
+        return sendResponse(res, 400, true, "selfUploadedImages are required");
+      }
+
+      const userId = req.body.userId;
+      if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+        return sendResponse(res, 400, true, "Invalid user ID");
+      }
+
+      let eventImage = await EventImages.findOne({ eventId, userId });
+      if (!eventImage) {
+        eventImage = new EventImages({
+          eventId,
+          userId,
+          userType: "guest",
+          luckyDrawImages: [],
+          thankYouNoteImages: [],
+          selfUploadedImages: [],
+        });
+        console.log(
+          "Created new eventImage for eventId:",
+          eventId,
+          "userId:",
+          userId
+        );
+      } else {
+        console.log(
+          "Found existing eventImage for eventId:",
+          eventId,
+          "userId:",
+          userId
+        );
+      }
+
+      const newImages = await Promise.all(
+        files.map(async (file) => {
+          const fileName = `self-uploaded-${Date.now()}-${file.originalname
+            .split(".")
+            .pop()}`;
+          const uploadResult = await uploadImageToS3(
+            file.path,
+            fileName,
+            userId,
+            eventId,
+            file.mimetype,
+            "self-uploaded"
+          );
+          fs.unlinkSync(file.path);
+          return {
+            _id: new mongoose.Types.ObjectId(),
+            selfUploadedImageUrl: uploadResult.Location,
+            selfUploadedImageKey: uploadResult.Key,
+            imageType: "selfUploaded",
+          };
+        })
+      );
+
+      eventImage.selfUploadedImages.push(...newImages);
+      const updatedEventImage = await eventImage.save();
+      console.log("Saved eventImage:", updatedEventImage);
+
+      return sendResponse(
+        res,
+        200,
+        false,
+        "Self-uploaded images uploaded successfully",
+        updatedEventImage
+      );
+    } catch (err) {
+      console.error("Upload Self-Uploaded Images Error:", {
+        message: err.message,
+        stack: err.stack,
+        eventId: req.params.eventId,
       });
       return sendResponse(res, 500, true, "Server error");
     }
@@ -616,7 +873,13 @@ router.get("/event-guests/:guestId/lucky-draws", async (req, res) => {
 
     const luckyDraws = guest.luckyDrawTickets || [];
 
-    return sendResponse(res, 200, false, "Lucky draws fetched successfully", luckyDraws);
+    return sendResponse(
+      res,
+      200,
+      false,
+      "Lucky draws fetched successfully",
+      luckyDraws
+    );
   } catch (err) {
     console.error("Fetch Lucky Draws Error:", {
       message: err.message,
@@ -627,5 +890,93 @@ router.get("/event-guests/:guestId/lucky-draws", async (req, res) => {
   }
 });
 
+// Get all event images by eventId
+router.get("/event-images/:eventId", async (req, res) => {
+  try {
+    const { eventId } = req.params;
+
+    // Validate eventId
+    if (!mongoose.Types.ObjectId.isValid(eventId)) {
+      return sendResponse(res, 400, true, "Invalid event ID");
+    }
+
+    // Fetch all documents for the given eventId with optimized query
+    const eventImagesList = await EventImages.find({ eventId }).lean();
+
+    if (!eventImagesList || eventImagesList.length === 0) {
+      return sendResponse(res, 404, true, "No images found for this event");
+    }
+
+    // Combine all images into a single array with userId efficiently
+    const allImages = [];
+    for (const doc of eventImagesList) {
+      // Add luckyDrawImages
+      if (doc.luckyDrawImages && Array.isArray(doc.luckyDrawImages)) {
+        for (const image of doc.luckyDrawImages) {
+          allImages.push({
+            // ...image,
+            _id: image._id,
+            userId: doc.userId,
+            imageUrl: image.luckyDrawImageUrl,
+            imageKey: image.luckyDrawImageKey,
+            imageType: image.imageType || "luckyDraw",
+            createdAt: image.createdAt,
+          });
+        }
+      }
+
+      // Add thankYouNoteImages
+      if (doc.thankYouNoteImages && Array.isArray(doc.thankYouNoteImages)) {
+        for (const image of doc.thankYouNoteImages) {
+          allImages.push({
+            // ...image,
+            _id: image._id,
+            userId: doc.userId,
+            imageUrl: image.thankYouNoteImageUrl,
+            imageKey: image.thankYouNoteImageKey,
+            imageType: image.imageType || "thankYouNote",
+            createdAt: image.createdAt,
+          });
+        }
+      }
+
+      // Add selfUploadedImages
+      if (doc.selfUploadedImages && Array.isArray(doc.selfUploadedImages)) {
+        for (const image of doc.selfUploadedImages) {
+          allImages.push({
+            // ...image,
+            _id: image._id,
+            userId: doc.userId,
+            imageUrl: image.selfUploadedImageUrl,
+            imageKey: image.selfUploadedImageKey,
+            imageType: image.imageType || "selfUploaded",
+            createdAt: image.createdAt,
+          });
+        }
+      }
+    }
+
+    allImages.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    if (allImages.length === 0) {
+      return sendResponse(res, 404, true, "No images found for this event");
+    }
+
+    return sendResponse(
+      res,
+      200,
+      false,
+      "Event images fetched successfully",
+      allImages
+    );
+  } catch (err) {
+    console.error("Fetch Event Images Error:", {
+      message: err.message,
+      stack: err.stack,
+      eventId: req.params.eventId,
+    });
+    return sendResponse(res, 500, true, "Server error");
+  }
+});
 
 module.exports = router;

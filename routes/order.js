@@ -390,7 +390,8 @@ router.post('/add', async(req, res) => {
         vendor_amount:req.body.vendor_amount,
 	phone_no:req.body.phone_no,
 	online_phone_no:req.body.online_phone_no,
-	order_taken_by:req.body.order_taken_by
+	order_taken_by:req.body.order_taken_by,
+    eventName:req.body.eventName,
     })
     if(req.body.items.length>0){
         let hasKey = req.body.items[0].hasOwnProperty('item_id');

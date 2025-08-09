@@ -44,7 +44,8 @@ const orderSchema = new mongoose.Schema({
     advance_amount: { type: String, default: '' },
     balance_amount: { type: String, default: '' },
     vendor_amount: { type: String, default: '' },
-    order_taken_by: { type: String, default: '' }
+    order_taken_by: { type: String, default: '' },
+    eventName : { type: String, default: '' },
 
 }, {
     strict: false,

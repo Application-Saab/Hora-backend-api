@@ -219,7 +219,6 @@ router.get("/GetFoldersByCustomerId/:customerId", async (req, res) => {
 
 router.post("/upload", upload.array("files", 300), async (req, res) => {
   try {
-
     const { folderName, customerId, vendorId, phoneNo } = req.body;
     if (!folderName || !customerId) {
       return res
@@ -457,136 +456,60 @@ const uploadToS3 = (filePath, fileName, folder, contentType) => {
   return s3.upload(params).promise();
 };
 
-// router.post("/upload-template", upload.single("file"), async (req, res) => {
-//   try {
-//     const { category, configs } = req.body;
-//     const file = req.file;
-
-//     if (!file || !category) {
-//       return res
-//         .status(400)
-//         .json({ message: "File and category are required" });
-//     }
-
-//     const filePath = file.path;
-//     const originalName = path.parse(file.originalname).name;
-//     const folder = `templates/${category}`;
-//     const svgFileName = `${originalName}.svg`;
-//     const webpFileName = `${originalName}.webp`;
-
-//     // 1. Upload SVG to S3
-//     const svgUpload = await uploadToS3(
-//       filePath,
-//       svgFileName,
-//       folder,
-//       "image/svg+xml"
-//     );
-
-//     // 2. Generate and upload WebP
-//     const webpPath = `${filePath}.webp`;
-//     await sharp(filePath).webp().toFile(webpPath);
-//     const webpUpload = await uploadToS3(
-//       webpPath,
-//       webpFileName,
-//       folder,
-//       "image/webp"
-//     );
-//     webpUpload.ContentType = "image/webp";
-
-//     // 3. Save in DB
-//     const savedTemplate = await TemplateMaster.create({
-//       fileName: file.originalname,
-//       svgUrl: svgUpload.Location,
-//       s3SvgKey: svgUpload.Key,
-//       webpUrl: webpUpload.Location,
-//       s3WebpKey: webpUpload.Key,
-//       category,
-//       configs: configs || {}, // Save configs, default to empty object if not provided
-//     });
-
-//     // Cleanup
-//     fs.unlinkSync(filePath);
-//     fs.unlinkSync(webpPath);
-
-//     res
-//       .status(201)
-//       .json({ message: "Template uploaded", template: savedTemplate });
-//   } catch (error) {
-//     console.error("Upload error:", error);
-//     res.status(500).json({ message: "Server error", error: error.message });
-//   }
-// });
-
 // Get All templates
 
+router.post(
+  "/upload-template",
+  upload.single("previewImage"), // Single image upload for preview
+  async (req, res) => {
+    try {
+      const { category, ...configs } = req.body; // Destructure category and rest into configs
+      const previewImage = req.file; // Single preview image
 
-router.post("/upload-template", upload.fields([
-  { name: 'sampleTemplateImage', maxCount: 1 },
-  { name: 'editableImage', maxCount: 1 }
-]), async (req, res) => {
-  try {
-    const { category, configs } = req.body;
-    const sampleTemplateImage = req.files && req.files['sampleTemplateImage'] ? req.files['sampleTemplateImage'][0] : null;
-    const editableImage = req.files && req.files['editableImage'] ? req.files['editableImage'][0] : null;
+      if (!previewImage || !category) {
+        return res
+          .status(400)
+          .json({ message: "previewImage and category are required" });
+      }
 
-    if (!sampleTemplateImage || !editableImage || !category) {
-      return res
-        .status(400)
-        .json({ message: "sampleTemplateImage, editableImage, and category are required" });
+      const filePath = previewImage.path;
+      const originalName = path.parse(previewImage.originalname).name;
+      const folder = `templates/${category}`;
+
+      // Process previewImage (convert to WebP and upload to S3)
+      const webpPath = `${filePath}.webp`;
+      await sharp(filePath).webp().toFile(webpPath);
+      const webpFileName = `${originalName}.webp`;
+      const webpUpload = await uploadToS3(
+        webpPath,
+        webpFileName,
+        folder,
+        "image/webp"
+      );
+      webpUpload.ContentType = "image/webp";
+
+      // Save in DB
+      const savedTemplate = await TemplateMaster.create({
+        fileName: previewImage.originalname,
+        webpUrl: webpUpload.Location,
+        s3WebpKey: webpUpload.Key,
+        category,
+        configs, // Dynamic configs (templateId, fontUrls, cssCode, jsCode, etc.)
+      });
+
+      // Cleanup
+      fs.unlinkSync(filePath);
+      fs.unlinkSync(webpPath);
+
+      res
+        .status(201)
+        .json({ message: "Template uploaded", template: savedTemplate });
+    } catch (error) {
+      console.error("Upload error:", error);
+      res.status(500).json({ message: "Server error", error: error.message });
     }
-
-    const filePathSample = sampleTemplateImage.path;
-    const originalNameSample = path.parse(sampleTemplateImage.originalname).name;
-    const folder = `templates/${category}`;
-
-    // 1. Process sampleTemplateImage (convert to WebP and upload to S3)
-    const webpPathSample = `${filePathSample}.webp`;
-    await sharp(filePathSample).webp().toFile(webpPathSample);
-    const webpFileNameSample = `${originalNameSample}.webp`;
-    const webpUpload = await uploadToS3(
-      webpPathSample,
-      webpFileNameSample,
-      folder,
-      "image/webp"
-    );
-    webpUpload.ContentType = "image/webp";
-
-    // 2. Process editableImage (upload in original format)
-    const filePathEditable = editableImage.path;
-    const originalNameEditable = path.parse(editableImage.originalname).name;
-    const extEditable = path.parse(editableImage.originalname).ext.replace('.', '');
-    const editableFileName = `${originalNameEditable}.${extEditable}`;
-    const editableUpload = await uploadToS3(
-      filePathEditable,
-      editableFileName,
-      folder,
-      editableImage.mimetype
-    );
-
-    // 3. Save in DB
-    const savedTemplate = await TemplateMaster.create({
-      fileName: sampleTemplateImage.originalname,
-      webpUrl: webpUpload.Location,
-      s3WebpKey: webpUpload.Key,
-      editableImageUrl: editableUpload.Location,
-      s3EditableImageKey: editableUpload.Key,
-      category,
-      configs: configs || {},
-    });
-
-    // Cleanup
-    fs.unlinkSync(filePathSample);
-    fs.unlinkSync(webpPathSample);
-    fs.unlinkSync(filePathEditable);
-
-    res
-      .status(201)
-      .json({ message: "Template uploaded", template: savedTemplate });
-  } catch (error) {
-    console.error("Upload error:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
   }
-});
+);
 
 router.get("/templates", async (req, res) => {
   try {

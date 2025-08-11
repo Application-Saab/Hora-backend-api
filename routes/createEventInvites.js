@@ -9,6 +9,8 @@ const TicketCounter = require("../models/ticket-counter-luckydraw");
 const EventImages = require("../models/eventImages");
 const multer = require("multer");
 const fs = require("fs");
+const sharp = require("sharp");
+const { generateThumbnail } = require("../store/multerS3Config");
 
 // AWS S3 Configuration
 const s3 = new AWS.S3({
@@ -200,26 +202,50 @@ router.post("/create-event-invite", async (req, res) => {
 
 // Fetch event invite by ID
 router.get("/event-invites/:id", async (req, res) => {
-  const { id } = req.params;
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return sendResponse(res, 400, true, "Invalid event ID");
-  }
-
   try {
-    // Use lean() to get plain JSON and avoid Mongoose caching issues
+    const { id } = req.params;
+
+    // Validate eventId
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return sendResponse(res, 400, true, "Invalid event ID");
+    }
+
+    // Fetch the event invite
     const invite = await EventInvite.findById(id).lean();
-    if (!invite) return sendResponse(res, 404, true, "Event invite not found");
-    return sendResponse(res, 200, false, "Event invite fetched", invite);
+    if (!invite) {
+      return sendResponse(res, 404, true, "Event invite not found");
+    }
+
+    // Extract userId from the invite
+    const userId = invite.userId;
+    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+      return sendResponse(res, 400, true, "Invalid or missing user ID in event invite");
+    }
+
+    // Fetch lucky draw images for the user and event
+    const eventImage = await EventImages.findOne({ eventId: id, userId }).lean();
+    const luckyDrawImages = eventImage
+      ? eventImage.luckyDrawImages.sort(
+          (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+        )
+      : [];
+
+    return sendResponse(
+      res,
+      200,
+      false,
+      "Event invite and lucky draw images fetched successfully",
+      { ...invite, luckyDraws: luckyDrawImages }
+    );
   } catch (err) {
-    console.error("Fetch Invite Error:", {
+    console.error("Fetch Invite and Lucky Draw Images Error:", {
       message: err.message,
       stack: err.stack,
-      eventId: id,
+      eventId: req.params.id,
     });
     return sendResponse(res, 500, true, "Server error");
   }
 });
-
 // Get all events By User ID
 router.get("/event-invites/all/:userId", async (req, res) => {
   try {
@@ -568,6 +594,7 @@ const uploadImageToS3 = async (
   return data;
 };
 
+// PUT /event-images/:eventId/lucky-draw
 router.put(
   "/event-images/:eventId/lucky-draw",
   (req, res, next) => {
@@ -603,12 +630,6 @@ router.put(
           thankYouNoteImages: [],
           selfUploadedImages: [],
         });
-        console.log(
-          "Created new eventImage for eventId:",
-          eventId,
-          "userId:",
-          userId
-        );
       } else {
         console.log(
           "Found existing eventImage for eventId:",
@@ -630,23 +651,50 @@ router.put(
       const fileName = `lucky-draw-${Date.now()}-${file.originalname
         .split(".")
         .pop()}`;
-      const uploadResult = await uploadImageToS3(
-        file.path,
-        fileName,
-        userId,
-        eventId,
-        file.mimetype,
-        "lucky-draw"
-      );
-      fs.unlinkSync(file.path);
-      console.log("S3 upload result:", uploadResult);
+      const thumbnailFileName = `thumb_${fileName.replace(
+        /\.(png|jpeg|jpg)$/i,
+        ""
+      )}.webp`;
+      const thumbnailPath =
+        file.path.replace(/\.(png|jpeg|jpg)$/i, "") + "_thumbnail.webp";
+
+      // Generate thumbnail
+      await generateThumbnail(file.path, thumbnailPath);
+
+      // Upload original image and thumbnail concurrently
+      const [uploadResult, thumbnailUploadResult] = await Promise.all([
+        uploadImageToS3(
+          file.path,
+          fileName,
+          userId,
+          eventId,
+          file.mimetype,
+          "lucky-draw"
+        ),
+        uploadImageToS3(
+          thumbnailPath,
+          thumbnailFileName,
+          userId,
+          eventId,
+          "image/webp",
+          "lucky-draw"
+        ),
+      ]);
+
+      // Cleanup local files
+      try {
+        await Promise.all([fs.unlink(file.path), fs.unlink(thumbnailPath)]);
+      } catch (cleanupErr) {
+        console.error("Error cleaning up local files:", cleanupErr.message);
+      }
 
       const newImage = {
         _id: new mongoose.Types.ObjectId(),
-        // ticketId: new mongoose.Types.ObjectId(),
         ticketNumber,
         luckyDrawImageUrl: uploadResult.Location,
         luckyDrawImageKey: uploadResult.Key,
+        luckyDrawThumbnailUrl: thumbnailUploadResult.Location,
+        luckyDrawThumbnailKey: thumbnailUploadResult.Key,
         imageType: "luckyDraw",
         createdAt: new Date(),
       };
@@ -673,6 +721,7 @@ router.put(
   }
 );
 
+// PUT /event-images/:eventId/thankyou-note
 router.put(
   "/event-images/:eventId/thankyou-note",
   (req, res, next) => {
@@ -726,21 +775,49 @@ router.put(
       const fileName = `thankyou-note-${Date.now()}-${file.originalname
         .split(".")
         .pop()}`;
-      const uploadResult = await uploadImageToS3(
-        file.path,
-        fileName,
-        userId,
-        eventId,
-        file.mimetype,
-        "thankyou-note"
-      );
-      fs.unlinkSync(file.path);
-      console.log("S3 upload result:", uploadResult);
+      const thumbnailFileName = `thumb_${fileName.replace(
+        /\.(png|jpeg|jpg)$/i,
+        ""
+      )}.webp`;
+      const thumbnailPath =
+        file.path.replace(/\.(png|jpeg|jpg)$/i, "") + "_thumbnail.webp";
+
+      // Generate thumbnail
+      await generateThumbnail(file.path, thumbnailPath);
+
+      // Upload original image and thumbnail concurrently
+      const [uploadResult, thumbnailUploadResult] = await Promise.all([
+        uploadImageToS3(
+          file.path,
+          fileName,
+          userId,
+          eventId,
+          file.mimetype,
+          "thankyou-note"
+        ),
+        uploadImageToS3(
+          thumbnailPath,
+          thumbnailFileName,
+          userId,
+          eventId,
+          "image/webp",
+          "thankyou-note"
+        ),
+      ]);
+
+      // Cleanup local files
+      try {
+        await Promise.all([fs.unlink(file.path), fs.unlink(thumbnailPath)]);
+      } catch (cleanupErr) {
+        console.error("Error cleaning up local files:", cleanupErr.message);
+      }
 
       const newImage = {
         _id: new mongoose.Types.ObjectId(),
         thankYouNoteImageUrl: uploadResult.Location,
         thankYouNoteImageKey: uploadResult.Key,
+        thankYouNoteThumbnailUrl: thumbnailUploadResult.Location,
+        thankYouNoteThumbnailKey: thumbnailUploadResult.Key,
         imageType: "thankYouNote",
       };
 
@@ -766,6 +843,7 @@ router.put(
   }
 );
 
+// PUT /event-images/:eventId/self-uploaded
 router.put(
   "/event-images/:eventId/self-uploaded",
   (req, res, next) => {
@@ -801,12 +879,6 @@ router.put(
           thankYouNoteImages: [],
           selfUploadedImages: [],
         });
-        console.log(
-          "Created new eventImage for eventId:",
-          eventId,
-          "userId:",
-          userId
-        );
       } else {
         console.log(
           "Found existing eventImage for eventId:",
@@ -821,19 +893,49 @@ router.put(
           const fileName = `self-uploaded-${Date.now()}-${file.originalname
             .split(".")
             .pop()}`;
-          const uploadResult = await uploadImageToS3(
-            file.path,
-            fileName,
-            userId,
-            eventId,
-            file.mimetype,
-            "self-uploaded"
-          );
-          fs.unlinkSync(file.path);
+          const thumbnailFileName = `thumb_${fileName.replace(
+            /\.(png|jpeg|jpg)$/i,
+            ""
+          )}.webp`;
+          const thumbnailPath =
+            file.path.replace(/\.(png|jpeg|jpg)$/i, "") + "_thumbnail.webp";
+
+          // Generate thumbnail
+          await generateThumbnail(file.path, thumbnailPath);
+
+          // Upload original image and thumbnail concurrently
+          const [uploadResult, thumbnailUploadResult] = await Promise.all([
+            uploadImageToS3(
+              file.path,
+              fileName,
+              userId,
+              eventId,
+              file.mimetype,
+              "self-uploaded"
+            ),
+            uploadImageToS3(
+              thumbnailPath,
+              thumbnailFileName,
+              userId,
+              eventId,
+              "image/webp",
+              "self-uploaded"
+            ),
+          ]);
+
+          // Cleanup local files
+          try {
+            await Promise.all([fs.unlink(file.path), fs.unlink(thumbnailPath)]);
+          } catch (cleanupErr) {
+            console.error("Error cleaning up local files:", cleanupErr.message);
+          }
+
           return {
             _id: new mongoose.Types.ObjectId(),
             selfUploadedImageUrl: uploadResult.Location,
             selfUploadedImageKey: uploadResult.Key,
+            selfUploadedThumbnailUrl: thumbnailUploadResult.Location,
+            selfUploadedThumbnailKey: thumbnailUploadResult.Key,
             imageType: "selfUploaded",
           };
         })
@@ -841,7 +943,6 @@ router.put(
 
       eventImage.selfUploadedImages.push(...newImages);
       const updatedEventImage = await eventImage.save();
-      console.log("Saved eventImage:", updatedEventImage);
 
       return sendResponse(
         res,
@@ -861,6 +962,8 @@ router.put(
   }
 );
 
+// POST /event-images/:eventId/delete
+
 // Function to delete image from S3
 const deleteImageFromS3 = async (key) => {
   try {
@@ -871,74 +974,70 @@ const deleteImageFromS3 = async (key) => {
     await s3.deleteObject(params).promise();
     console.log(`Successfully deleted S3 object: ${key}`);
   } catch (err) {
-    console.error('S3 Delete Error:', {
+    console.error("S3 Delete Error:", {
       message: err.message,
       stack: err.stack,
       key,
     });
-    throw err; // Propagate S3 errors
+    throw err;
   }
 };
 
-// POST route to delete an image
 router.post("/event-images/:eventId/delete", async (req, res) => {
-  console.log('Route Hit: POST /event-images/:eventId/delete');
-  console.log('%c [ req.params ]-877', 'font-size:13px; background:pink; color:#bf2c9f;', req.params);
-  console.log('Request Body:', req.body);
-
   try {
     const { eventId } = req.params;
     const { userId, imageId, imageType } = req.body;
 
-    console.log('Processing:', { eventId, userId, imageId, imageType });
-
     // Validate eventId
     if (!mongoose.Types.ObjectId.isValid(eventId)) {
-      console.log('Invalid eventId:', eventId);
       return sendResponse(res, 400, true, "Invalid event ID");
     }
 
     // Validate userId
     if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
-      console.log('Invalid userId:', userId);
       return sendResponse(res, 400, true, "Invalid user ID");
     }
 
     // Validate imageId
     if (!imageId || !mongoose.Types.ObjectId.isValid(imageId)) {
-      console.log('Invalid imageId:', imageId);
       return sendResponse(res, 400, true, "Invalid image ID");
     }
 
     // Validate imageType
     const validTypes = ["luckyDraw", "thankYouNote", "selfUploaded"];
     if (!imageType || !validTypes.includes(imageType)) {
-      console.log('Invalid imageType:', imageType);
       return sendResponse(res, 400, true, "Invalid image type");
     }
 
     // Find the eventImage document
     const eventImage = await EventImages.findOne({ eventId, userId });
-    console.log('EventImages Document:', eventImage);
     if (!eventImage) {
-      console.log('EventImages not found for:', { eventId, userId });
-      return sendResponse(res, 404, true, "Event images not found for this user");
+      return sendResponse(
+        res,
+        404,
+        true,
+        "Event images not found for this user"
+      );
     }
 
     let arrayField;
     let keyField;
+    let thumbnailKeyField;
     switch (imageType) {
       case "luckyDraw":
         arrayField = "luckyDrawImages";
         keyField = "luckyDrawImageKey";
+        thumbnailKeyField = "luckyDrawThumbnailKey";
         break;
       case "thankYouNote":
         arrayField = "thankYouNoteImages";
         keyField = "thankYouNoteImageKey";
+        thumbnailKeyField = "thankYouNoteThumbnailKey";
         break;
       case "selfUploaded":
         arrayField = "selfUploadedImages";
         keyField = "selfUploadedImageKey";
+        thumbnailKeyField = "selfUploadedThumbnailKey";
         break;
     }
 
@@ -946,7 +1045,6 @@ router.post("/event-images/:eventId/delete", async (req, res) => {
     const index = eventImage[arrayField].findIndex(
       (img) => img._id.toString() === imageId
     );
-    console.log(`Image Search Result: Index=${index}, ImageId=${imageId}, Array=${arrayField}`);
     if (index === -1) {
       return sendResponse(res, 404, true, "Image not found");
     }
@@ -954,18 +1052,19 @@ router.post("/event-images/:eventId/delete", async (req, res) => {
     // Get the image details for S3 deletion
     const imageToDelete = eventImage[arrayField][index];
     const imageKey = imageToDelete[keyField];
-    console.log('Deleting S3 image with key:', imageKey);
+    const thumbnailKey = imageToDelete[thumbnailKeyField];
 
-    // Delete from S3
-    await deleteImageFromS3(imageKey);
+    // Delete both original image and thumbnail from S3
+    await Promise.all([
+      deleteImageFromS3(imageKey),
+      deleteImageFromS3(thumbnailKey),
+    ]);
 
     // Remove the image object from the array
     eventImage[arrayField].splice(index, 1);
-    console.log(`Removed image from ${arrayField}. Updated array:`, eventImage[arrayField]);
 
     // Save the updated document
     const updatedEventImage = await eventImage.save();
-    console.log('Saved updated EventImages document:', updatedEventImage);
 
     // Delete document if all arrays are empty
     if (
@@ -974,18 +1073,22 @@ router.post("/event-images/:eventId/delete", async (req, res) => {
       eventImage.selfUploadedImages.length === 0
     ) {
       await eventImage.deleteOne();
-      console.log('Deleted empty EventImages document for:', { eventId, userId });
     }
 
     const response = {
       error: false,
       message: "Image deleted successfully",
-      data: updatedEventImage
+      data: updatedEventImage,
     };
-    console.log('Sending Response:', response);
-    return sendResponse(res, 200, false, "Image deleted successfully", updatedEventImage);
+    return sendResponse(
+      res,
+      200,
+      false,
+      "Image deleted successfully",
+      updatedEventImage
+    );
   } catch (err) {
-    console.error('Delete Image Error:', {
+    console.error("Delete Image Error:", {
       message: err.message,
       stack: err.stack,
       eventId: req.params.eventId,
@@ -996,7 +1099,99 @@ router.post("/event-images/:eventId/delete", async (req, res) => {
     return sendResponse(res, 500, true, "Server error");
   }
 });
-// Get all event images by eventId
+
+// GET /event-images/:eventId
+// router.get("/event-images/:eventId", async (req, res) => {
+//   try {
+//     const { eventId } = req.params;
+
+//     // Validate eventId
+//     if (!mongoose.Types.ObjectId.isValid(eventId)) {
+//       return sendResponse(res, 400, true, "Invalid event ID");
+//     }
+
+//     // Fetch all documents for the given eventId with optimized query
+//     const eventImagesList = await EventImages.find({ eventId }).lean();
+
+//     if (!eventImagesList || eventImagesList.length === 0) {
+//       return sendResponse(res, 404, true, "No images found for this event");
+//     }
+
+//     // Combine all images into a single array with userId
+//     const allImages = [];
+//     for (const doc of eventImagesList) {
+//       // Add luckyDrawImages
+//       if (doc.luckyDrawImages && Array.isArray(doc.luckyDrawImages)) {
+//         for (const image of doc.luckyDrawImages) {
+//           allImages.push({
+//             _id: image._id,
+//             userId: doc.userId,
+//             imageUrl: image.luckyDrawImageUrl,
+//             imageKey: image.luckyDrawImageKey,
+//             webpUrl: image.luckyDrawThumbnailUrl,
+//             webpKey: image.luckyDrawThumbnailKey,
+//             imageType: image.imageType || "luckyDraw",
+//             createdAt: image.createdAt,
+//           });
+//         }
+//       }
+
+//       // Add thankYouNoteImages
+//       if (doc.thankYouNoteImages && Array.isArray(doc.thankYouNoteImages)) {
+//         for (const image of doc.thankYouNoteImages) {
+//           allImages.push({
+//             _id: image._id,
+//             userId: doc.userId,
+//             imageUrl: image.thankYouNoteImageUrl,
+//             imageKey: image.thankYouNoteImageKey,
+//             webpUrl: image.thankYouNoteThumbnailUrl,
+//             webpKey: image.thankYouNoteThumbnailKey,
+//             imageType: image.imageType || "thankYouNote",
+//             createdAt: image.createdAt,
+//           });
+//         }
+//       }
+
+//       // Add selfUploadedImages
+//       if (doc.selfUploadedImages && Array.isArray(doc.selfUploadedImages)) {
+//         for (const image of doc.selfUploadedImages) {
+//           allImages.push({
+//             _id: image._id,
+//             userId: doc.userId,
+//             imageUrl: image.selfUploadedImageUrl,
+//             imageKey: image.selfUploadedImageKey,
+//             webpUrl: image.selfUploadedThumbnailUrl,
+//             webpKey: image.selfUploadedThumbnailKey,
+//             imageType: image.imageType || "selfUploaded",
+//             createdAt: image.createdAt,
+//           });
+//         }
+//       }
+//     }
+
+//     allImages.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+//     if (allImages.length === 0) {
+//       return sendResponse(res, 404, true, "No images found for this event");
+//     }
+
+//     return sendResponse(
+//       res,
+//       200,
+//       false,
+//       "Event images fetched successfully",
+//       allImages
+//     );
+//   } catch (err) {
+//     console.error("Fetch Event Images Error:", {
+//       message: err.message,
+//       stack: err.stack,
+//       eventId: req.params.eventId,
+//     });
+//     return sendResponse(res, 500, true, "Server error");
+//   }
+// });
+
 router.get("/event-images/:eventId", async (req, res) => {
   try {
     const { eventId } = req.params;
@@ -1006,6 +1201,22 @@ router.get("/event-images/:eventId", async (req, res) => {
       return sendResponse(res, 400, true, "Invalid event ID");
     }
 
+    // Fetch the EventInvite for the eventId to get host details
+    const eventInvite = await EventInvite.findById(eventId).lean();
+    let hostUserId = null;
+    let hostName = null;
+    if (eventInvite) {
+      hostUserId = eventInvite.userId;
+      hostName = eventInvite.hostName; // Assuming hostName field exists
+    }
+
+    // Fetch all EventGuest for the eventId and create a map of userId to name
+    const eventGuests = await EventGuest.find({ eventId }).lean();
+    const guestMap = new Map();
+    for (const guest of eventGuests) {
+      guestMap.set(guest.userId.toString(), guest.name); // Assuming name field exists
+    }
+
     // Fetch all documents for the given eventId with optimized query
     const eventImagesList = await EventImages.find({ eventId }).lean();
 
@@ -1013,18 +1224,30 @@ router.get("/event-images/:eventId", async (req, res) => {
       return sendResponse(res, 404, true, "No images found for this event");
     }
 
-    // Combine all images into a single array with userId efficiently
+    // Combine all images into a single array with userId and name
     const allImages = [];
     for (const doc of eventImagesList) {
+      const currentUserId = doc.userId.toString();
+      let userName = ""; // Default
+
+      // Determine userName
+      if (hostUserId && currentUserId === hostUserId.toString()) {
+        userName = hostName || "";
+      } else if (guestMap.has(currentUserId)) {
+        userName = guestMap.get(currentUserId);
+      }
+
       // Add luckyDrawImages
       if (doc.luckyDrawImages && Array.isArray(doc.luckyDrawImages)) {
         for (const image of doc.luckyDrawImages) {
           allImages.push({
-            // ...image,
             _id: image._id,
             userId: doc.userId,
+            name: userName,
             imageUrl: image.luckyDrawImageUrl,
             imageKey: image.luckyDrawImageKey,
+            webpUrl: image.luckyDrawThumbnailUrl,
+            webpKey: image.luckyDrawThumbnailKey,
             imageType: image.imageType || "luckyDraw",
             createdAt: image.createdAt,
           });
@@ -1035,11 +1258,13 @@ router.get("/event-images/:eventId", async (req, res) => {
       if (doc.thankYouNoteImages && Array.isArray(doc.thankYouNoteImages)) {
         for (const image of doc.thankYouNoteImages) {
           allImages.push({
-            // ...image,
             _id: image._id,
             userId: doc.userId,
+            name: userName,
             imageUrl: image.thankYouNoteImageUrl,
             imageKey: image.thankYouNoteImageKey,
+            webpUrl: image.thankYouNoteThumbnailUrl,
+            webpKey: image.thankYouNoteThumbnailKey,
             imageType: image.imageType || "thankYouNote",
             createdAt: image.createdAt,
           });
@@ -1050,11 +1275,13 @@ router.get("/event-images/:eventId", async (req, res) => {
       if (doc.selfUploadedImages && Array.isArray(doc.selfUploadedImages)) {
         for (const image of doc.selfUploadedImages) {
           allImages.push({
-            // ...image,
             _id: image._id,
             userId: doc.userId,
+            name: userName,
             imageUrl: image.selfUploadedImageUrl,
             imageKey: image.selfUploadedImageKey,
+            webpUrl: image.selfUploadedThumbnailUrl,
+            webpKey: image.selfUploadedThumbnailKey,
             imageType: image.imageType || "selfUploaded",
             createdAt: image.createdAt,
           });

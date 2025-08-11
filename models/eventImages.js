@@ -15,14 +15,11 @@ const eventImagesSchema = new mongoose.Schema({
         required: true,
         default: () => new mongoose.Types.ObjectId(),
       },
-      // ticketId: {
-      //   type: mongoose.Schema.Types.ObjectId,
-      //   required: true,
-      //   default: () => new mongoose.Types.ObjectId(),
-      // },
       ticketNumber: { type: String, required: true },
       luckyDrawImageUrl: { type: String, required: true },
       luckyDrawImageKey: { type: String, required: true },
+      luckyDrawThumbnailUrl: { type: String, required: true },
+      luckyDrawThumbnailKey: { type: String, required: true },
       imageType: { type: String, required: true, default: "luckyDraw" },
       createdAt: { type: Date, default: Date.now },
     },
@@ -36,6 +33,8 @@ const eventImagesSchema = new mongoose.Schema({
       },
       thankYouNoteImageUrl: { type: String, required: true },
       thankYouNoteImageKey: { type: String, required: true },
+      thankYouNoteThumbnailUrl: { type: String, required: true },
+      thankYouNoteThumbnailKey: { type: String, required: true },
       imageType: { type: String, required: true, default: "thankYouNote" },
       createdAt: { type: Date, default: Date.now },
     },
@@ -49,13 +48,12 @@ const eventImagesSchema = new mongoose.Schema({
       },
       selfUploadedImageUrl: { type: String, required: true },
       selfUploadedImageKey: { type: String, required: true },
+      selfUploadedThumbnailUrl: { type: String, required: true },
+      selfUploadedThumbnailKey: { type: String, required: true },
       imageType: { type: String, required: true, default: "selfUploaded" },
       createdAt: { type: Date, default: Date.now },
     },
   ],
 });
 
-// Optional: Add unique index on eventId and userId combination if needed
-// eventImagesSchema.index({ eventId: 1, userId: 1 }, { unique: true });
-
-module.exports = mongoose.model('eventImages', eventImagesSchema);
+module.exports = mongoose.model("eventImages", eventImagesSchema);

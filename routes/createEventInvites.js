@@ -382,11 +382,6 @@ router.post("/event-guest", async (req, res) => {
       requestBody: req.body,
     });
 
-    // Handle duplicate key error
-    // if (err.code === 11000) {
-    //   return sendResponse(res, 409, true, "Duplicate entry found for userId and eventId combination");
-    // }
-
     return sendResponse(res, 500, true, "Server error");
   }
 });
@@ -412,9 +407,19 @@ router.get("/event-guest/:eventId/user/:userId", async (req, res) => {
 
     // Find lucky draw images for the user and event
     const eventImage = await EventImages.findOne({ eventId, userId }).lean();
-    const luckyDrawImages = eventImage ? eventImage.luckyDrawImages.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)) : [];
+    const luckyDrawImages = eventImage
+      ? eventImage.luckyDrawImages.sort(
+          (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+        )
+      : [];
 
-    return sendResponse(res, 200, false, "User details and lucky draw images fetched successfully", {...guest, luckyDraws : luckyDrawImages});
+    return sendResponse(
+      res,
+      200,
+      false,
+      "User details and lucky draw images fetched successfully",
+      { ...guest, luckyDraws: luckyDrawImages }
+    );
   } catch (err) {
     console.error("Fetch User and Lucky Draw Images Error:", {
       message: err.message,
@@ -855,41 +860,142 @@ router.put(
     }
   }
 );
-// Get all lucky draws by guestId
-router.get("/event-guests/:guestId/lucky-draws", async (req, res) => {
+
+// Function to delete image from S3
+const deleteImageFromS3 = async (key) => {
   try {
-    const { guestId } = req.params;
-
-    // Validate guestId
-    if (!mongoose.Types.ObjectId.isValid(guestId)) {
-      return sendResponse(res, 400, true, "Invalid guest ID");
-    }
-
-    const guest = await EventGuest.findById(guestId).lean();
-
-    if (!guest) {
-      return sendResponse(res, 404, true, "Guest not found");
-    }
-
-    const luckyDraws = guest.luckyDrawTickets || [];
-
-    return sendResponse(
-      res,
-      200,
-      false,
-      "Lucky draws fetched successfully",
-      luckyDraws
-    );
+    const params = {
+      Bucket: process.env.S3_BUCKET_NAME,
+      Key: key,
+    };
+    await s3.deleteObject(params).promise();
+    console.log(`Successfully deleted S3 object: ${key}`);
   } catch (err) {
-    console.error("Fetch Lucky Draws Error:", {
+    console.error('S3 Delete Error:', {
       message: err.message,
       stack: err.stack,
-      guestId: req.params.guestId,
+      key,
+    });
+    throw err; // Propagate S3 errors
+  }
+};
+
+// POST route to delete an image
+router.post("/event-images/:eventId/delete", async (req, res) => {
+  console.log('Route Hit: POST /event-images/:eventId/delete');
+  console.log('%c [ req.params ]-877', 'font-size:13px; background:pink; color:#bf2c9f;', req.params);
+  console.log('Request Body:', req.body);
+
+  try {
+    const { eventId } = req.params;
+    const { userId, imageId, imageType } = req.body;
+
+    console.log('Processing:', { eventId, userId, imageId, imageType });
+
+    // Validate eventId
+    if (!mongoose.Types.ObjectId.isValid(eventId)) {
+      console.log('Invalid eventId:', eventId);
+      return sendResponse(res, 400, true, "Invalid event ID");
+    }
+
+    // Validate userId
+    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+      console.log('Invalid userId:', userId);
+      return sendResponse(res, 400, true, "Invalid user ID");
+    }
+
+    // Validate imageId
+    if (!imageId || !mongoose.Types.ObjectId.isValid(imageId)) {
+      console.log('Invalid imageId:', imageId);
+      return sendResponse(res, 400, true, "Invalid image ID");
+    }
+
+    // Validate imageType
+    const validTypes = ["luckyDraw", "thankYouNote", "selfUploaded"];
+    if (!imageType || !validTypes.includes(imageType)) {
+      console.log('Invalid imageType:', imageType);
+      return sendResponse(res, 400, true, "Invalid image type");
+    }
+
+    // Find the eventImage document
+    const eventImage = await EventImages.findOne({ eventId, userId });
+    console.log('EventImages Document:', eventImage);
+    if (!eventImage) {
+      console.log('EventImages not found for:', { eventId, userId });
+      return sendResponse(res, 404, true, "Event images not found for this user");
+    }
+
+    let arrayField;
+    let keyField;
+    switch (imageType) {
+      case "luckyDraw":
+        arrayField = "luckyDrawImages";
+        keyField = "luckyDrawImageKey";
+        break;
+      case "thankYouNote":
+        arrayField = "thankYouNoteImages";
+        keyField = "thankYouNoteImageKey";
+        break;
+      case "selfUploaded":
+        arrayField = "selfUploadedImages";
+        keyField = "selfUploadedImageKey";
+        break;
+    }
+
+    // Find the index of the image in the array
+    const index = eventImage[arrayField].findIndex(
+      (img) => img._id.toString() === imageId
+    );
+    console.log(`Image Search Result: Index=${index}, ImageId=${imageId}, Array=${arrayField}`);
+    if (index === -1) {
+      return sendResponse(res, 404, true, "Image not found");
+    }
+
+    // Get the image details for S3 deletion
+    const imageToDelete = eventImage[arrayField][index];
+    const imageKey = imageToDelete[keyField];
+    console.log('Deleting S3 image with key:', imageKey);
+
+    // Delete from S3
+    await deleteImageFromS3(imageKey);
+
+    // Remove the image object from the array
+    eventImage[arrayField].splice(index, 1);
+    console.log(`Removed image from ${arrayField}. Updated array:`, eventImage[arrayField]);
+
+    // Save the updated document
+    const updatedEventImage = await eventImage.save();
+    console.log('Saved updated EventImages document:', updatedEventImage);
+
+    // Delete document if all arrays are empty
+    if (
+      eventImage.luckyDrawImages.length === 0 &&
+      eventImage.thankYouNoteImages.length === 0 &&
+      eventImage.selfUploadedImages.length === 0
+    ) {
+      await eventImage.deleteOne();
+      console.log('Deleted empty EventImages document for:', { eventId, userId });
+    }
+
+    const response = {
+      error: false,
+      message: "Image deleted successfully",
+      data: updatedEventImage
+    };
+    console.log('Sending Response:', response);
+    return sendResponse(res, 200, false, "Image deleted successfully", updatedEventImage);
+  } catch (err) {
+    console.error('Delete Image Error:', {
+      message: err.message,
+      stack: err.stack,
+      eventId: req.params.eventId,
+      userId: req.body.userId,
+      imageId: req.body.imageId,
+      imageType: req.body.imageType,
     });
     return sendResponse(res, 500, true, "Server error");
   }
 });
-
 // Get all event images by eventId
 router.get("/event-images/:eventId", async (req, res) => {
   try {

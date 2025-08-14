@@ -92,10 +92,10 @@ const eventInviteSchema = Joi.object({
       return value;
     }, "ObjectId validation"),
   eventType: Joi.string().trim().allow("").optional(),
-  hostName: Joi.string().trim().required(),
-  eventDate: Joi.date().iso().required(),
-  eventTime: Joi.string().trim().required(),
-  location: Joi.string().trim().required(),
+  hostName: Joi.string().trim().optional(),
+  eventDate: Joi.date().iso().optional(),
+  eventTime: Joi.string().trim().optional(),
+  location: Joi.string().trim().optional(),
   hostImage: Joi.string().allow(null).optional(),
 });
 
@@ -131,16 +131,16 @@ const sendResponse = (res, status, error, message, data = null) =>
 // Create event invite with optional base64 image
 router.post("/create-event-invite", async (req, res) => {
   try {
-    const { error, value } = eventInviteSchema.validate(req.body, {
-      abortEarly: false,
-    });
-    if (error) {
-      const details = error.details.map((err) => ({
-        path: err.path.join("."),
-        message: err.message,
-      }));
-      return sendResponse(res, 422, true, "Validation failed", details);
-    }
+    // const { error, value } = eventInviteSchema.validate(req.body, {
+    //   abortEarly: false,
+    // });
+    // if (error) {
+    //   const details = error.details.map((err) => ({
+    //     path: err.path.join("."),
+    //     message: err.message,
+    //   }));
+    //   return sendResponse(res, 422, true, "Validation failed", details);
+    // }
 
     const {
       userId,
@@ -150,7 +150,7 @@ router.post("/create-event-invite", async (req, res) => {
       eventTime,
       location,
       hostImage,
-    } = value;
+    } = req.body;
 
     const lastWonderlandId = await EventInvite.findOne()
       .sort({ wonderland_id: -1 })
@@ -164,7 +164,7 @@ router.post("/create-event-invite", async (req, res) => {
       userId,
       eventType,
       hostName,
-      eventDate: new Date(eventDate),
+      eventDate: eventDate ? new Date(eventDate) : '',
       eventTime,
       location,
       wonderland_id: Number(nextWonderlandId),
@@ -574,7 +574,7 @@ const uploadSingle = multer({
 const uploadMultiple = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
-}).array("selfUploadedImages", 10); // Multiple files, max 10
+}).array("selfUploadedImages", 10000); // Multiple files, max 10000
 
 const uploadImageToS3 = async (
   filePath,

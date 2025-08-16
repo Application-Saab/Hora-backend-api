@@ -131,17 +131,6 @@ const sendResponse = (res, status, error, message, data = null) =>
 // Create event invite with optional base64 image
 router.post("/create-event-invite", async (req, res) => {
   try {
-    // const { error, value } = eventInviteSchema.validate(req.body, {
-    //   abortEarly: false,
-    // });
-    // if (error) {
-    //   const details = error.details.map((err) => ({
-    //     path: err.path.join("."),
-    //     message: err.message,
-    //   }));
-    //   return sendResponse(res, 422, true, "Validation failed", details);
-    // }
-
     const {
       userId,
       eventType,
@@ -164,7 +153,7 @@ router.post("/create-event-invite", async (req, res) => {
       userId,
       eventType,
       hostName,
-      eventDate: eventDate ? new Date(eventDate) : '',
+      eventDate: eventDate ? new Date(eventDate) : "",
       eventTime,
       location,
       wonderland_id: Number(nextWonderlandId),
@@ -219,11 +208,19 @@ router.get("/event-invites/:id", async (req, res) => {
     // Extract userId from the invite
     const userId = invite.userId;
     if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
-      return sendResponse(res, 400, true, "Invalid or missing user ID in event invite");
+      return sendResponse(
+        res,
+        400,
+        true,
+        "Invalid or missing user ID in event invite"
+      );
     }
 
     // Fetch lucky draw images for the user and event
-    const eventImage = await EventImages.findOne({ eventId: id, userId }).lean();
+    const eventImage = await EventImages.findOne({
+      eventId: id,
+      userId,
+    }).lean();
     const luckyDrawImages = eventImage
       ? eventImage.luckyDrawImages.sort(
           (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
@@ -246,24 +243,56 @@ router.get("/event-invites/:id", async (req, res) => {
     return sendResponse(res, 500, true, "Server error");
   }
 });
+
 // Get all events By User ID
+// router.get("/event-invites/all/:userId", async (req, res) => {
+//   try {
+//     const { userId } = req.params;
+
+//     // Validate userId
+//     if (!mongoose.Types.ObjectId.isValid(userId)) {
+//       return sendResponse(res, 400, true, "Invalid user ID");
+//     }
+
+//     // Find all events for the given userId
+//     const events = await EventInvite.find({ userId }).lean();
+
+//     if (!events || events.length === 0) {
+//       return sendResponse(res, 404, false, "No events found for this user", []);
+//     }
+
+//     return sendResponse(res, 200, false, "Events fetched successfully", events);
+//   } catch (err) {
+//     console.error("Fetch Events Error:", {
+//       message: err.message,
+//       stack: err.stack,
+//       userId: req.params.userId,
+//     });
+//     return sendResponse(res, 500, true, "Server error");
+//   }
+// });
+
 router.get("/event-invites/all/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
-
     // Validate userId
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       return sendResponse(res, 400, true, "Invalid user ID");
     }
-
-    // Find all events for the given userId
-    const events = await EventInvite.find({ userId }).lean();
-
-    if (!events || events.length === 0) {
-      return sendResponse(res, 404, false, "No events found for this user", []);
-    }
-
-    return sendResponse(res, 200, false, "Events fetched successfully", events);
+    // Fetch hosted events (from EventInvite where userId matches)
+    const hostedEvents = await EventInvite.find({ userId }).lean();
+    // Fetch guest entries (from EventGuest where userId matches)
+    const guestEntries = await EventGuest.find({ userId }).lean();
+    // Extract eventIds from guest entries
+    const guestEventIds = guestEntries.map((guest) => guest.eventId);
+    // Fetch guest events (from EventInvite where _id is in guestEventIds)
+    const asAGuestEvents = await EventInvite.find({
+      _id: { $in: guestEventIds },
+    }).lean();
+    return sendResponse(res, 200, false, "Events fetched successfully", {
+      hostedEvents: hostedEvents || [],
+      asAGuestEvents: asAGuestEvents || [],
+    });
   } catch (err) {
     console.error("Fetch Events Error:", {
       message: err.message,

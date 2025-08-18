@@ -9,7 +9,6 @@ const TicketCounter = require("../models/ticket-counter-luckydraw");
 const EventImages = require("../models/eventImages");
 const multer = require("multer");
 const fs = require("fs");
-const sharp = require("sharp");
 const { generateThumbnail } = require("../store/multerS3Config");
 
 // AWS S3 Configuration
@@ -81,7 +80,7 @@ async function deleteFromS3(key) {
   await s3.deleteObject(params).promise();
 }
 
-// Joi Schema for Validation (used for both POST and PUT)
+// Validation schema for create invite (used for both POST and PUT)
 const eventInviteSchema = Joi.object({
   userId: Joi.string()
     .required()
@@ -124,11 +123,10 @@ const eventGuestSchema = Joi.object({
     .optional(),
 });
 
-// Reusable Response Helper
 const sendResponse = (res, status, error, message, data = null) =>
   res.status(status).json({ error, status, message, data });
 
-// Create event invite with optional base64 image
+// Create a new event invite
 router.post("/create-event-invite", async (req, res) => {
   try {
     const {
@@ -159,7 +157,6 @@ router.post("/create-event-invite", async (req, res) => {
       wonderland_id: Number(nextWonderlandId),
     });
 
-    // Handle base64 image
     if (hostImage && isBase64Image(hostImage)) {
       const { url, key } = await uploadBase64ToS3(
         hostImage,
@@ -189,23 +186,20 @@ router.post("/create-event-invite", async (req, res) => {
   }
 });
 
-// Fetch event invite by ID
+// Fetch event details by eventId(_id)
 router.get("/event-invites/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Validate eventId
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return sendResponse(res, 400, true, "Invalid event ID");
     }
 
-    // Fetch the event invite
     const invite = await EventInvite.findById(id).lean();
     if (!invite) {
       return sendResponse(res, 404, true, "Event invite not found");
     }
 
-    // Extract userId from the invite
     const userId = invite.userId;
     if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
       return sendResponse(
@@ -216,7 +210,6 @@ router.get("/event-invites/:id", async (req, res) => {
       );
     }
 
-    // Fetch lucky draw images for the user and event
     const eventImage = await EventImages.findOne({
       eventId: id,
       userId,
@@ -244,48 +237,21 @@ router.get("/event-invites/:id", async (req, res) => {
   }
 });
 
-// Get all events By User ID
-// router.get("/event-invites/all/:userId", async (req, res) => {
-//   try {
-//     const { userId } = req.params;
-
-//     // Validate userId
-//     if (!mongoose.Types.ObjectId.isValid(userId)) {
-//       return sendResponse(res, 400, true, "Invalid user ID");
-//     }
-
-//     // Find all events for the given userId
-//     const events = await EventInvite.find({ userId }).lean();
-
-//     if (!events || events.length === 0) {
-//       return sendResponse(res, 404, false, "No events found for this user", []);
-//     }
-
-//     return sendResponse(res, 200, false, "Events fetched successfully", events);
-//   } catch (err) {
-//     console.error("Fetch Events Error:", {
-//       message: err.message,
-//       stack: err.stack,
-//       userId: req.params.userId,
-//     });
-//     return sendResponse(res, 500, true, "Server error");
-//   }
-// });
-
+// Fetch all event invites for a user as a guest or host
 router.get("/event-invites/all/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
-    // Validate userId
+
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       return sendResponse(res, 400, true, "Invalid user ID");
     }
-    // Fetch hosted events (from EventInvite where userId matches)
+
     const hostedEvents = await EventInvite.find({ userId }).lean();
-    // Fetch guest entries (from EventGuest where userId matches)
+
     const guestEntries = await EventGuest.find({ userId }).lean();
-    // Extract eventIds from guest entries
+
     const guestEventIds = guestEntries.map((guest) => guest.eventId);
-    // Fetch guest events (from EventInvite where _id is in guestEventIds)
+
     const asAGuestEvents = await EventInvite.find({
       _id: { $in: guestEventIds },
     }).lean();
@@ -306,16 +272,16 @@ router.get("/event-invites/all/:userId", async (req, res) => {
 // Update event invite
 router.put("/event-invites/:id", async (req, res) => {
   const { id } = req.params;
-  // Validate ID format
+
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return sendResponse(res, 400, true, "Invalid event ID");
   }
 
   try {
-    // Validate request body
     const { error, value } = eventInviteSchema.validate(req.body, {
       abortEarly: false,
     });
+
     if (error) {
       const details = error.details.map((err) => ({
         path: err.path.join("."),
@@ -394,7 +360,7 @@ router.put("/event-invites/:id", async (req, res) => {
   }
 });
 
-// Create A guest for an event
+// Create A guest for an event by userId and eventId
 router.post("/event-guest", async (req, res) => {
   try {
     const { error, value } = eventGuestSchema.validate(req.body, {
@@ -454,7 +420,7 @@ router.get("/event-guest/:eventId/user/:userId", async (req, res) => {
       return sendResponse(res, 400, true, "Invalid user ID");
     }
 
-    // Find the guest details by userId (assuming userId is the same as guestId in EventGuest)
+    // Find the guest details by userId and eventId
     const guest = await EventGuest.findOne({ userId, eventId }).lean();
     if (!guest) {
       return sendResponse(res, 404, false, "User not found", null);
@@ -486,7 +452,7 @@ router.get("/event-guest/:eventId/user/:userId", async (req, res) => {
   }
 });
 
-// Get all guests by event id
+// Get all guests details for an event by eventId
 router.get("/event-guests/all/:eventId", async (req, res) => {
   try {
     const { eventId } = req.params;
@@ -515,7 +481,6 @@ router.put("/event-guest", async (req, res) => {
   try {
     const { eventId, userId, name, rsvpStatus } = req.body;
 
-    // Validate the input
     const schema = Joi.object({
       eventId: Joi.string().required(),
       userId: Joi.string().required(),
@@ -556,12 +521,12 @@ router.put("/event-guest", async (req, res) => {
     if (name !== undefined) updateData.name = name;
     if (rsvpStatus !== undefined) updateData.rsvpStatus = rsvpStatus;
 
-    // If name is provided, update the corresponding user
+    // If name is provided, update the corresponding user in user collectiion
     if (name !== undefined) {
       const User = require("../models/user");
       const user = await User.findById(updatedGuest.userId);
       if (user) {
-        user.name = name; // Update user's name
+        user.name = name;
         await user.save();
       }
     }
@@ -597,12 +562,12 @@ const storage = multer.diskStorage({
 
 const uploadSingle = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
-}).single("image"); // Single file upload for luckyDraw and thankYouNote
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB limit
+}).single("image");
 
 const uploadMultiple = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB per file limit
 }).array("selfUploadedImages", 10000); // Multiple files, max 10000
 
 const uploadImageToS3 = async (
@@ -623,7 +588,7 @@ const uploadImageToS3 = async (
   return data;
 };
 
-// PUT /event-images/:eventId/lucky-draw
+// Create a lucky draw by event ID and user ID
 router.put(
   "/event-images/:eventId/lucky-draw",
   (req, res, next) => {
@@ -674,8 +639,8 @@ router.put(
         { new: true, upsert: true }
       ).lean();
 
+      // Generated ticket number
       const ticketNumber = counter.sequenceValue;
-      console.log("Generated ticketNumber:", ticketNumber);
 
       const fileName = `lucky-draw-${Date.now()}-${file.originalname
         .split(".")
@@ -750,7 +715,7 @@ router.put(
   }
 );
 
-// PUT /event-images/:eventId/thankyou-note
+// Create a thank you note image by event ID and user ID
 router.put(
   "/event-images/:eventId/thankyou-note",
   (req, res, next) => {
@@ -872,7 +837,7 @@ router.put(
   }
 );
 
-// PUT /event-images/:eventId/self-uploaded
+// Upload self-uploaded images for an event by eventId and userId
 router.put(
   "/event-images/:eventId/self-uploaded",
   (req, res, next) => {
@@ -991,8 +956,6 @@ router.put(
   }
 );
 
-// POST /event-images/:eventId/delete
-
 // Function to delete image from S3
 const deleteImageFromS3 = async (key) => {
   try {
@@ -1012,6 +975,7 @@ const deleteImageFromS3 = async (key) => {
   }
 };
 
+// Delete an image by eventId, userId, imageId, and imageType
 router.post("/event-images/:eventId/delete", async (req, res) => {
   try {
     const { eventId } = req.params;
@@ -1104,11 +1068,6 @@ router.post("/event-images/:eventId/delete", async (req, res) => {
       await eventImage.deleteOne();
     }
 
-    const response = {
-      error: false,
-      message: "Image deleted successfully",
-      data: updatedEventImage,
-    };
     return sendResponse(
       res,
       200,
@@ -1129,98 +1088,7 @@ router.post("/event-images/:eventId/delete", async (req, res) => {
   }
 });
 
-// GET /event-images/:eventId
-// router.get("/event-images/:eventId", async (req, res) => {
-//   try {
-//     const { eventId } = req.params;
-
-//     // Validate eventId
-//     if (!mongoose.Types.ObjectId.isValid(eventId)) {
-//       return sendResponse(res, 400, true, "Invalid event ID");
-//     }
-
-//     // Fetch all documents for the given eventId with optimized query
-//     const eventImagesList = await EventImages.find({ eventId }).lean();
-
-//     if (!eventImagesList || eventImagesList.length === 0) {
-//       return sendResponse(res, 404, true, "No images found for this event");
-//     }
-
-//     // Combine all images into a single array with userId
-//     const allImages = [];
-//     for (const doc of eventImagesList) {
-//       // Add luckyDrawImages
-//       if (doc.luckyDrawImages && Array.isArray(doc.luckyDrawImages)) {
-//         for (const image of doc.luckyDrawImages) {
-//           allImages.push({
-//             _id: image._id,
-//             userId: doc.userId,
-//             imageUrl: image.luckyDrawImageUrl,
-//             imageKey: image.luckyDrawImageKey,
-//             webpUrl: image.luckyDrawThumbnailUrl,
-//             webpKey: image.luckyDrawThumbnailKey,
-//             imageType: image.imageType || "luckyDraw",
-//             createdAt: image.createdAt,
-//           });
-//         }
-//       }
-
-//       // Add thankYouNoteImages
-//       if (doc.thankYouNoteImages && Array.isArray(doc.thankYouNoteImages)) {
-//         for (const image of doc.thankYouNoteImages) {
-//           allImages.push({
-//             _id: image._id,
-//             userId: doc.userId,
-//             imageUrl: image.thankYouNoteImageUrl,
-//             imageKey: image.thankYouNoteImageKey,
-//             webpUrl: image.thankYouNoteThumbnailUrl,
-//             webpKey: image.thankYouNoteThumbnailKey,
-//             imageType: image.imageType || "thankYouNote",
-//             createdAt: image.createdAt,
-//           });
-//         }
-//       }
-
-//       // Add selfUploadedImages
-//       if (doc.selfUploadedImages && Array.isArray(doc.selfUploadedImages)) {
-//         for (const image of doc.selfUploadedImages) {
-//           allImages.push({
-//             _id: image._id,
-//             userId: doc.userId,
-//             imageUrl: image.selfUploadedImageUrl,
-//             imageKey: image.selfUploadedImageKey,
-//             webpUrl: image.selfUploadedThumbnailUrl,
-//             webpKey: image.selfUploadedThumbnailKey,
-//             imageType: image.imageType || "selfUploaded",
-//             createdAt: image.createdAt,
-//           });
-//         }
-//       }
-//     }
-
-//     allImages.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-//     if (allImages.length === 0) {
-//       return sendResponse(res, 404, true, "No images found for this event");
-//     }
-
-//     return sendResponse(
-//       res,
-//       200,
-//       false,
-//       "Event images fetched successfully",
-//       allImages
-//     );
-//   } catch (err) {
-//     console.error("Fetch Event Images Error:", {
-//       message: err.message,
-//       stack: err.stack,
-//       eventId: req.params.eventId,
-//     });
-//     return sendResponse(res, 500, true, "Server error");
-//   }
-// });
-
+// Fetch all images for an event by eventId
 router.get("/event-images/:eventId", async (req, res) => {
   try {
     const { eventId } = req.params;

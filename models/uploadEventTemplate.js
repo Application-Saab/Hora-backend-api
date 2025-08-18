@@ -25,8 +25,8 @@ const templateSchema = new mongoose.Schema({
   fileName: String,
   webpUrl: String,
   s3WebpKey: String,
-  editableImageUrl: String,
-  s3EditableImageKey: String,
+  backgroundUrl: String,
+  s3BackgroundKey: String,
   category: {
     type: String,
     required: true

@@ -460,26 +460,32 @@ const uploadToS3 = (filePath, fileName, folder, contentType) => {
 
 router.post(
   "/upload-template",
-  upload.single("previewImage"), // Single image upload for preview
+  upload.fields([
+    { name: "previewImage", maxCount: 1 }, // Single preview image
+    { name: "backgroundImage", maxCount: 1 }, // Single background image
+  ]),
   async (req, res) => {
     try {
       const { category, ...configs } = req.body; // Destructure category and rest into configs
-      const previewImage = req.file; // Single preview image
+      const { previewImage, backgroundImage } = req.files; // Get both images
 
-      if (!previewImage || !category) {
+      // Validate inputs
+      if (!previewImage || !backgroundImage || !category) {
         return res
           .status(400)
-          .json({ message: "previewImage and category are required" });
+          .json({ message: "previewImage, backgroundImage, and category are required" });
       }
 
-      const filePath = previewImage.path;
-      const originalName = path.parse(previewImage.originalname).name;
+      const previewFile = previewImage[0];
+      const backgroundFile = backgroundImage[0];
       const folder = `templates/${category}`;
 
       // Process previewImage (convert to WebP and upload to S3)
-      const webpPath = `${filePath}.webp`;
-      await sharp(filePath).webp().toFile(webpPath);
-      const webpFileName = `${originalName}.webp`;
+      const previewFilePath = previewFile.path;
+      const previewOriginalName = path.parse(previewFile.originalname).name;
+      const webpPath = `${previewFilePath}.webp`;
+      await sharp(previewFilePath).webp().toFile(webpPath);
+      const webpFileName = `${previewOriginalName}.webp`;
       const webpUpload = await uploadToS3(
         webpPath,
         webpFileName,
@@ -488,24 +494,135 @@ router.post(
       );
       webpUpload.ContentType = "image/webp";
 
+      // Process backgroundImage (upload in original format to S3)
+      const backgroundFilePath = backgroundFile.path;
+      const backgroundFileName = backgroundFile.originalname;
+      const backgroundMimeType = backgroundFile.mimetype;
+      const backgroundUpload = await uploadToS3(
+        backgroundFilePath,
+        backgroundFileName,
+        folder,
+        backgroundMimeType
+      );
+      backgroundUpload.ContentType = backgroundMimeType;
+
       // Save in DB
       const savedTemplate = await TemplateMaster.create({
-        fileName: previewImage.originalname,
+        fileName: previewFile.originalname,
         webpUrl: webpUpload.Location,
         s3WebpKey: webpUpload.Key,
+        backgroundUrl: backgroundUpload.Location,
+        s3BackgroundKey: backgroundUpload.Key,
         category,
         configs, // Dynamic configs (templateId, fontUrls, cssCode, jsCode, etc.)
       });
 
       // Cleanup
-      fs.unlinkSync(filePath);
+      fs.unlinkSync(previewFilePath);
       fs.unlinkSync(webpPath);
+      fs.unlinkSync(backgroundFilePath);
 
       res
         .status(201)
         .json({ message: "Template uploaded", template: savedTemplate });
     } catch (error) {
       console.error("Upload error:", error);
+      res.status(500).json({ message: "Server error", error: error.message });
+    }
+  }
+);
+
+router.put(
+  "/update-template/:id",
+  upload.fields([
+    { name: "previewImage", maxCount: 1 }, // Single preview image
+    { name: "backgroundImage", maxCount: 1 }, // Single background image
+  ]),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { category, ...configs } = req.body; // Destructure category and rest into configs
+      const { previewImage, backgroundImage } = req.files || {}; // Get images if provided
+
+      // Find existing template
+      const template = await TemplateMaster.findById(id);
+      if (!template) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+
+      // Prepare update object
+      const updateData = {};
+
+      // Handle category if provided
+      if (category) {
+        updateData.category = category;
+      }
+
+      // Handle configs if provided
+      if (Object.keys(configs).length > 0) {
+        updateData.configs = { ...template.configs, ...configs }; // Merge existing and new configs
+      }
+
+      const folder = `templates/${category || template.category}`;
+
+      // Process previewImage if provided
+      if (previewImage && previewImage[0]) {
+        const previewFile = previewImage[0];
+        const previewFilePath = previewFile.path;
+        const previewOriginalName = path.parse(previewFile.originalname).name;
+        const webpPath = `${previewFilePath}.webp`;
+        await sharp(previewFilePath).webp().toFile(webpPath);
+        const webpFileName = `${previewOriginalName}.webp`;
+        const webpUpload = await uploadToS3(
+          webpPath,
+          webpFileName,
+          folder,
+          "image/webp"
+        );
+        webpUpload.ContentType = "image/webp";
+
+        // Update preview image fields
+        updateData.fileName = previewFile.originalname;
+        updateData.webpUrl = webpUpload.Location;
+        updateData.s3WebpKey = webpUpload.Key;
+
+        // Cleanup
+        fs.unlinkSync(previewFilePath);
+        fs.unlinkSync(webpPath);
+      }
+
+      // Process backgroundImage if provided
+      if (backgroundImage && backgroundImage[0]) {
+        const backgroundFile = backgroundImage[0];
+        const backgroundFilePath = backgroundFile.path;
+        const backgroundFileName = backgroundFile.originalname;
+        const backgroundMimeType = backgroundFile.mimetype;
+        const backgroundUpload = await uploadToS3(
+          backgroundFilePath,
+          backgroundFileName,
+          folder,
+          backgroundMimeType
+        );
+        backgroundUpload.ContentType = backgroundMimeType;
+
+        // Update background image fields
+        updateData.backgroundUrl = backgroundUpload.Location;
+        updateData.s3BackgroundKey = backgroundUpload.Key;
+
+        // Cleanup
+        fs.unlinkSync(backgroundFilePath);
+      }
+
+      // Update template in DB
+      const updatedTemplate = await TemplateMaster.findByIdAndUpdate(
+        id,
+        { $set: updateData },
+        { new: true, runValidators: true }
+      );
+
+      res.status(200).json({ message: "Template updated", template: updatedTemplate });
+    } catch (error) {
+      console.error("Update error:", error);
       res.status(500).json({ message: "Server error", error: error.message });
     }
   }

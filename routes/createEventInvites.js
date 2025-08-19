@@ -95,6 +95,7 @@ const eventInviteSchema = Joi.object({
   eventDate: Joi.date().iso().optional(),
   eventTime: Joi.string().trim().optional(),
   location: Joi.string().trim().optional(),
+  templateId: Joi.string().optional(),
   hostImage: Joi.string().allow(null).optional(),
 });
 
@@ -137,6 +138,7 @@ router.post("/create-event-invite", async (req, res) => {
       eventTime,
       location,
       hostImage,
+      templateId,
     } = req.body;
 
     const lastWonderlandId = await EventInvite.findOne()
@@ -155,6 +157,7 @@ router.post("/create-event-invite", async (req, res) => {
       eventTime,
       location,
       wonderland_id: Number(nextWonderlandId),
+      templateId,
     });
 
     if (hostImage && isBase64Image(hostImage)) {
@@ -302,6 +305,7 @@ router.put("/event-invites/:id", async (req, res) => {
       eventTime,
       location,
       hostImage,
+      templateId,
     } = value;
 
     // Handle hostImage
@@ -339,6 +343,7 @@ router.put("/event-invites/:id", async (req, res) => {
     if (eventDate !== undefined) existing.eventDate = new Date(eventDate);
     if (eventTime !== undefined) existing.eventTime = eventTime;
     if (location !== undefined) existing.location = location;
+    if (templateId !== undefined) existing.templateId = templateId;
 
     // Save updated document
     const updated = await existing.save();

@@ -535,8 +535,8 @@ router.post(
 router.put(
   "/update-template/:id",
   upload.fields([
-    { name: "previewImage", maxCount: 1 }, // Single preview image
-    { name: "backgroundImage", maxCount: 1 }, // Single background image
+    { name: "previewImage", maxCount: 1 },
+    { name: "backgroundImage", maxCount: 1 },
   ]),
   async (req, res) => {
     try {

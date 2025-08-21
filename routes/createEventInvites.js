@@ -308,6 +308,17 @@ router.put("/event-invites/:id", async (req, res) => {
       templateId,
     } = value;
 
+    // If Template ID is provided, then remove external image
+    if (templateId) {
+      // Clear existing image if templateId is provided
+      if (existing.externalTemplateImageKey) {
+        await deleteFromS3(existing.externalTemplateImageKey);
+        existing.externalTemplateImageUrl = null;
+        existing.externalTemplateImageKey = null;
+        existing.templateId = null;
+      }
+    }
+
     // Handle hostImage
     if (hostImage !== undefined) {
       if (isBase64Image(hostImage)) {
@@ -1213,5 +1224,224 @@ router.get("/event-images/:eventId", async (req, res) => {
     return sendResponse(res, 500, true, "Server error");
   }
 });
+
+// New route: Update external template image for an event invite
+// router.put(
+//   "/event-invites/external-template/:eventId",
+//   (req, res, next) => {
+//     uploadSingle(req, res, (err) => {
+//       if (err) return sendResponse(res, 400, true, err.message);
+//       next();
+//     });
+//   },
+//   async (req, res) => {
+//     try {
+//       const { eventId } = req.params;
+//       if (!mongoose.Types.ObjectId.isValid(eventId)) {
+//         return sendResponse(res, 400, true, "Invalid event ID");
+//       }
+
+//       const file = req.file;
+//       const userId = req.body.userId;
+
+//       // Validate userId
+//       if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+//         return sendResponse(res, 400, true, "Invalid or missing user ID");
+//       }
+
+//       // Find the existing invite
+//       const existing = await EventInvite.findById(eventId);
+//       if (!existing) return sendResponse(res, 404, true, "Invite not found");
+
+//       // If no file is provided and not clearing, allow clearing with explicit null
+//       if (!file && req.body.clearImage !== "true") {
+//         return sendResponse(
+//           res,
+//           400,
+//           true,
+//           "External template image is required or set clearImage to true"
+//         );
+//       }
+
+//       // Handle image upload
+//       if (file) {
+//         // Delete existing external template image from S3 if it exists
+//         if (existing.externalTemplateImageKey) {
+//           await deleteFromS3(existing.externalTemplateImageKey);
+//         }
+
+//         // Generate unique filename
+//         const fileName = `external-template-${Date.now()}-${file.originalname}`;
+
+//         // Upload original image to S3
+//         const uploadResult = await uploadImageToS3(
+//           file.path,
+//           fileName,
+//           userId,
+//           eventId,
+//           file.mimetype,
+//           "event-invites"
+//         );
+
+//         // Update document with new image details
+//         existing.externalTemplateImageUrl = uploadResult.Location;
+//         existing.externalTemplateImageKey = uploadResult.Key;
+//         existing.templateId = null; // Set templateId to null
+
+//         // Cleanup local file
+//         try {
+//           await fs.unlink(file.path);
+//         } catch (cleanupErr) {
+//           console.error("Error cleaning up local file:", cleanupErr.message);
+//         }
+//       } else if (req.body.clearImage === "true") {
+//         // Clear existing image if clearImage is true
+//         if (existing.externalTemplateImageKey) {
+//           await deleteFromS3(existing.externalTemplateImageKey);
+//           existing.externalTemplateImageUrl = null;
+//           existing.externalTemplateImageKey = null;
+//           existing.templateId = null;
+//         }
+//       }
+
+//       // Save updated document
+//       const updated = await existing.save();
+//       return sendResponse(
+//         res,
+//         200,
+//         false,
+//         "External template image updated successfully",
+//         updated
+//       );
+//     } catch (err) {
+//       console.error("Update External Template Image Error:", {
+//         message: err.message,
+//         stack: err.stack,
+//         eventId: req.params.eventId,
+//         requestBody: req.body,
+//       });
+//       return sendResponse(res, 500, true, "Server error");
+//     }
+//   }
+// );
+
+const deleteFileWithRetry = async (filePath, retries = 3, delay = 100) => {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      await fs.unlink(filePath);
+      console.log(`Successfully deleted file: ${filePath}`);
+      return;
+    } catch (err) {
+      console.error(`Attempt ${attempt} to delete file ${filePath} failed:`, err.message);
+      if (attempt === retries) {
+        console.error(`Failed to delete file ${filePath} after ${retries} attempts`);
+        return; // Don't throw error to avoid interrupting the response
+      }
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+};
+
+router.put(
+  "/event-invites/external-template/:eventId",
+  (req, res, next) => {
+    uploadSingle(req, res, (err) => {
+      if (err) return sendResponse(res, 400, true, err.message);
+      next();
+    });
+  },
+  async (req, res) => {
+    try {
+      const { eventId } = req.params;
+      if (!mongoose.Types.ObjectId.isValid(eventId)) {
+        return sendResponse(res, 400, true, "Invalid event ID");
+      }
+
+      const file = req.file;
+      const userId = req.body.userId;
+
+      // Validate userId
+      if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+        return sendResponse(res, 400, true, "Invalid or missing user ID");
+      }
+
+      // Find the existing invite
+      const existing = await EventInvite.findById(eventId);
+      if (!existing) return sendResponse(res, 404, true, "Invite not found");
+
+      // If no file is provided and not clearing, return error
+      if (!file && req.body.clearImage !== "true") {
+        return sendResponse(
+          res,
+          400,
+          true,
+          "External template image is required or set clearImage to true"
+        );
+      }
+
+      // Handle image upload
+      if (file) {
+        // Delete existing external template image from S3 if it exists
+        if (existing.externalTemplateImageKey) {
+          await deleteFromS3(existing.externalTemplateImageKey);
+        }
+
+        // Generate unique filename for WebP
+        const webpFileName = `external-template-${Date.now()}.webp`;
+        const webpPath = file.path.replace(/\.(png|jpeg|jpg)$/i, "") + ".webp";
+
+        // Generate WebP image
+        await generateThumbnail(file.path, webpPath);
+
+        // Upload WebP image to S3
+        const uploadResult = await uploadImageToS3(
+          webpPath,
+          webpFileName,
+          userId,
+          eventId,
+          "image/webp",
+          "event-invites"
+        );
+
+        // Update document with new image details
+        existing.externalTemplateImageUrl = uploadResult.Location;
+        existing.externalTemplateImageKey = uploadResult.Key;
+        existing.templateId = null; // Set templateId to null
+
+       // Cleanup local files with retry
+        await Promise.all([
+          deleteFileWithRetry(file.path),
+          deleteFileWithRetry(webpPath),
+        ]);
+      } else if (req.body.clearImage === "true") {
+        // Clear existing image if clearImage is true
+        if (existing.externalTemplateImageKey) {
+          await deleteFromS3(existing.externalTemplateImageKey);
+          existing.externalTemplateImageUrl = null;
+          existing.externalTemplateImageKey = null;
+          existing.templateId = null;
+        }
+      }
+
+      // Save updated document
+      const updated = await existing.save();
+      return sendResponse(
+        res,
+        200,
+        false,
+        "External template image updated successfully",
+        updated
+      );
+    } catch (err) {
+      console.error("Update External Template Image Error:", {
+        message: err.message,
+        stack: err.stack,
+        eventId: req.params.eventId,
+        requestBody: req.body,
+      });
+      return sendResponse(res, 500, true, "Server error");
+    }
+  }
+);
 
 module.exports = router;

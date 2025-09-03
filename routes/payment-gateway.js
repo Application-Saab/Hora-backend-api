@@ -17,9 +17,9 @@ router.post("/payment", async (req, res) => {
         success: false,
       });
     }
-    if (!/^\+?\d{10,12}$/.test(phone)) {
+    if (!/^\+?\d{10,13}$/.test(phone)) {
       return res.status(400).send({
-        message: "Invalid phone number. Must be 10-12 digits (optionally with +)",
+        message: "Invalid phone number. Must be 10-13 digits (optionally with +)",
         success: false,
       });
     }

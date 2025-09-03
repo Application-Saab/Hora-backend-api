@@ -11,6 +11,9 @@ const eventInviteSchema = new mongoose.Schema({
     imageUrl: { type: String },
     imageKey: { type: String },
     wonderland_id: { type: Number },
+    templateId: { type: mongoose.Schema.Types.ObjectId, ref: "eventTemplates" },
+    externalTemplateImageKey: { type: String },
+    externalTemplateImageUrl: { type: String },
 }, {
     strict: false,
     timestamps: true

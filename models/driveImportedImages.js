@@ -3,16 +3,16 @@ const mongoose = require('mongoose');
 const driveImportedImagesSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User', // Assuming you have a User model
+    ref: 'User',
     required: true,
-    unique: true // One document per user
+    unique: true
   },
   images: [{
     originalName: { type: String, required: true },
-    url: { type: String, required: true }, // S3 original URL
-    key: { type: String, required: true }, // S3 original key
-    thumbnailUrl: { type: String, required: true }, // S3 thumbnail URL
-    thumbnailKey: { type: String, required: true }, // S3 thumbnail key
+    url: { type: String, required: true },
+    key: { type: String, required: true },
+    thumbnailUrl: { type: String, required: true },
+    thumbnailKey: { type: String, required: true },
     createdAt: { type: Date, default: Date.now }
   }]
 });

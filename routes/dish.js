@@ -22,9 +22,9 @@ router.post('/add', async(req, res) => {
             attributes: null,
             inclusion: req.body.preperationtext,
             tag: req.body.mealId,
-	    vendorMaterialPrice: req.body.vendorMaterialPrice,
+	        vendorMaterialPrice: req.body.vendorMaterialPrice,
             executionPrice: req.body.executionPrice,
-            horaAdvance: req.body.horaAdvance
+            horaAdvance: req.body.horaAdvance,
         });
     
         try {
@@ -57,9 +57,10 @@ router.post('/add', async(req, res) => {
                 attributes: null,
                 inclusion: req.body.preperationtext,
                 tag: req.body.mealId,
-		vendorMaterialPrice: req.body.vendorMaterialPrice,
-        	executionPrice: req.body.executionPrice,
-        	horaAdvance: req.body.horaAdvance
+		        vendorMaterialPrice: req.body.vendorMaterialPrice,
+        	    executionPrice: req.body.executionPrice,
+        	    horaAdvance: req.body.horaAdvance,
+                duration: req.body.duration
             });
         
             try {

@@ -1384,6 +1384,8 @@ const deleteFileWithRetry = async (filePath, retries = 3, delay = 100) => {
   }
 };
 
+
+
 router.put(
   "/event-invites/external-template/:eventId",
   (req, res, next) => {
@@ -1398,7 +1400,6 @@ router.put(
       if (!mongoose.Types.ObjectId.isValid(eventId)) {
         return sendResponse(res, 400, true, "Invalid event ID");
       }
-
       const file = req.file;
       const userId = req.body.userId;
 
@@ -1485,5 +1486,6 @@ router.put(
     }
   }
 );
+
 
 module.exports = router;

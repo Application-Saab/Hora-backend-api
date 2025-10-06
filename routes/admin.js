@@ -152,9 +152,10 @@ router.post('/update_user_status', async (req, res) => {
                 status: req.body.status
             };
             if(user[0].device_token != ""){
-                if(req.body.status == 0){
-                    notificationFunction.sendNotifications(user[0].device_token,req.body._id,'Account Blocked','Please reach out to below contact +91 888-422-1287',req.body.status,1)
-                }else if(req.body.status == 2){
+                // if(req.body.status == 0){
+                //     notificationFunction.sendNotifications(user[0].device_token,req.body._id,'Account Blocked','Please reach out to below contact +91 888-422-1287',req.body.status,1)
+                // }
+                if(req.body.status == 2){
                     notificationFunction.sendNotifications(user[0].device_token,req.body._id,'Account Deleted','Please reach out to below contact +91 888-422-1287',req.body.status,1)
                 }
             }

@@ -12,6 +12,11 @@ const request = require("request");
 var ObjectId = require('mongoose').Types.ObjectId; 
 var async = require("async");
 const NodeCache = require('node-cache');
+const { default: mongoose } = require('mongoose');
+const { generateThumbnail } = require('../store/multerS3Config');
+const multer = require('multer');
+const fs = require("fs");
+const AWS = require("aws-sdk");
 const cache = new NodeCache({ stdTTL: 60 * 10 }); // Cache TTL: 5 minutes
 
 
@@ -270,6 +275,288 @@ router.get('/user_details', async(req, res) => {
         res.status(400).json({ message: error.message, error: true })
     }
 })
+
+const sendResponse = (res, status, error, message, data = null) =>
+  res.status(status).json({ error, status, message, data });
+
+
+router.get("/user-details/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return sendResponse(res, 400, true, "Invalid user id");
+    }
+
+    const user = await UserModel.findById(id).lean();
+    if (!user) {
+      return sendResponse(res, 404, true, "User not found");
+    }
+
+    let respData = {
+        name : user.name,
+        _id: user._id,
+        phone: user.phone,
+        avatar: user.avatar
+    }
+
+    return sendResponse(
+      res,
+      200,
+      false,
+      "User fetched successfully",
+      respData
+    );
+  } catch (err) {
+    console.error("Fetch user error:", {
+      message: err.message,
+      stack: err.stack,
+      eventId: req.params.id,
+    });
+    return sendResponse(res, 500, true, `Server error ${err.message}`);
+  }
+});
+
+// AWS S3 Configuration
+const s3 = new AWS.S3({
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  region: process.env.AWS_REGION,
+});
+
+const S3_BUCKET = process.env.S3_BUCKET_NAME;
+const S3_BASE_URL = `https://${S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com`;
+
+
+// Temporary storage for uploaded files
+const storage = multer.diskStorage({
+  destination: "./uploads/",
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`);
+  },
+});
+
+const uploadSingle = multer({
+  storage,
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB limit
+}).single("image");
+
+const uploadImageToS3 = async (
+  filePath,
+  fileName,
+  userId,
+  eventId,
+  mimeType,
+  folderName
+) => {
+  const params = {
+    Bucket: process.env.S3_BUCKET_NAME,
+    Key: `${folderName}/${userId}/${eventId}/${fileName}`, // Folder name at the start
+    Body: fs.createReadStream(filePath),
+    ContentType: mimeType,
+  };
+  const data = await s3.upload(params).promise();
+  return data;
+};
+
+async function deleteFromS3(key) {
+  if (!key) return;
+  const params = {
+    Bucket: S3_BUCKET,
+    Key: key,
+  };
+  await s3.deleteObject(params).promise();
+}
+
+const deleteFileWithRetry = async (filePath, retries = 3, delay = 100) => {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      await fs.unlink(filePath);
+      console.log(`Successfully deleted file: ${filePath}`);
+      return;
+    } catch (err) {
+      console.error(
+        `Attempt ${attempt} to delete file ${filePath} failed:`,
+        err.message
+      );
+      if (attempt === retries) {
+        console.error(
+          `Failed to delete file ${filePath} after ${retries} attempts`
+        );
+        return; // Don't throw error to avoid interrupting the response
+      }
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+};
+
+function isS3Url(str) {
+  if (typeof str !== "string" || str.length === 0) return false;
+  const regex = new RegExp(
+    `^${S3_BASE_URL}/event-invites/[^/]+/[^/]+\.[a-zA-Z]+$`
+  );
+  return regex.test(str);
+}
+
+
+
+router.put("/user-details/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return sendResponse(res, 400, true, "Invalid user id");
+    }
+
+    const { name, phone, avatar } = req.body;
+
+    // Agar kuch bhi update fields nahi bheji
+    if (!name && !phone && !avatar) {
+      return sendResponse(res, 400, true, "No fields provided to update");
+    }
+
+    // Update object prepare karo
+    let updateData = {};
+    if (name) updateData.name = name;
+    if (phone) updateData.phone = phone;
+    if (avatar) updateData.avatar = avatar;
+
+    const updatedUser = await UserModel.findByIdAndUpdate(
+      id,
+      { $set: updateData },
+      { new: true, lean: true }
+    );
+
+    if (!updatedUser) {
+      return sendResponse(res, 404, true, "User not found");
+    }
+
+    let respData = {
+      name: updatedUser.name,
+      _id: updatedUser._id,
+      phone: updatedUser.phone,
+      avatar: updatedUser.avatar,
+    };
+
+    return sendResponse(res, 200, false, "User updated successfully", respData);
+  } catch (err) {
+    console.error("Update user error:", {
+      message: err.message,
+      stack: err.stack,
+      userId: req.params.id,
+    });
+    return sendResponse(res, 500, true, `Server error ${err.message}`);
+  }
+});
+
+router.put(
+  "/user-avatar/:id",
+  (req, res, next) => {
+    uploadSingle(req, res, (err) => {
+      if (err) return sendResponse(res, 400, true, err.message);
+      next();
+    });
+  },
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return sendResponse(res, 400, true, "Invalid user ID");
+      }
+
+      const file = req.file;
+      const { avatar, clearAvatar } = req.body;
+
+      // Find the existing user
+      const user = await UserModel.findById(id);
+      if (!user) return sendResponse(res, 404, true, "User not found");
+
+      // Handle clearAvatar
+      if (clearAvatar === "true") {
+        if (user.avatar) {
+          // Extract key from URL if it's S3 URL
+          const key = user.avatar.split(`${process.env.S3_BUCKET_NAME}/`)[1];
+          if (key) await deleteFromS3(key);
+        }
+        user.avatar = null;
+      } else if (file) {
+        // Delete existing avatar from S3 if it exists
+        if (user.avatar) {
+          const key = user.avatar.split(`${process.env.S3_BUCKET_NAME}/`)[1];
+          if (key) await deleteFromS3(key);
+        }
+
+        // Generate unique filename for WebP, but fixed structure
+        const webpFileName = `avatar.webp`;
+        const webpPath = file.path.replace(/\.(png|jpeg|jpg)$/i, "") + ".webp";
+
+        // Generate WebP image
+        await generateThumbnail(file.path, webpPath);
+
+        // Upload WebP image to S3 with fixed key
+        const uploadResult = await uploadImageToS3(
+          webpPath,
+          webpFileName,
+          id,
+          id, // Using id as eventId equivalent
+          "image/webp",
+          "user-profile"
+        );
+
+        // Update user with new avatar URL
+        user.avatar = uploadResult.Location;
+
+        // Cleanup local files with retry
+        await Promise.all([
+          deleteFileWithRetry(file.path),
+          deleteFileWithRetry(webpPath),
+        ]);
+      } else if (avatar) {
+        // If avatar is provided as URL, save as is
+        if (isS3Url(avatar)) {
+          user.avatar = avatar;
+        } else {
+          return sendResponse(
+            res,
+            400,
+            true,
+            "Invalid avatar format. Must be a valid S3 URL"
+          );
+        }
+      } else {
+        return sendResponse(
+          res,
+          400,
+          true,
+          "Avatar image, URL, or clearAvatar is required"
+        );
+      }
+
+      // Save updated user
+      const updated = await user.save();
+      return sendResponse(
+        res,
+        200,
+        false,
+        "User avatar updated successfully",
+        {
+          _id: updated._id,
+          avatar: updated.avatar,
+        }
+      );
+    } catch (err) {
+      console.error("Update User Avatar Error:", {
+        message: err.message,
+        stack: err.stack,
+        userId: req.params.id,
+        requestBody: req.body,
+      });
+      return sendResponse(res, 500, true, "Server error");
+    }
+  }
+);
+
+
 
 router.post('/user_update', async(req, res) => {
     const id = req.user._id;

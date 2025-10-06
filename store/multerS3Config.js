@@ -73,5 +73,29 @@ const generateThumbnail = async (inputPath, outputPath) => {
     }
 };
 
+
+const generateTemplateThumbnail = async (inputPath, outputPath) => {
+        try {
+        // Resize and compress in a single step
+        const outputBuffer = await sharp(inputPath).rotate().webp({ quality: 90 }).withMetadata({ orientation: 1 })
+        .toBuffer();
+
+        // If the image is still too large, reduce quality a bit
+        const finalBuffer = outputBuffer.length > 200 * 1024
+        ? await sharp(outputBuffer).webp({ quality: 80 }).toBuffer()
+        : outputBuffer;
+
+        // Save thumbnail
+        await fs.writeFile(outputPath, finalBuffer);
+
+        console.log(`Thumbnail saved at: ${outputPath} (Size: ${(finalBuffer.length / 1024).toFixed(2)} KB)`);
+    } catch (error) {
+        console.error('Error generating thumbnail:', error);
+    }
+};
+
+
+
+
 // Export both upload and uploadFileToS3 functions properly
-module.exports = { uploadFileToS3, upload, generateThumbnail };
+module.exports = { uploadFileToS3, upload, generateThumbnail, generateTemplateThumbnail };

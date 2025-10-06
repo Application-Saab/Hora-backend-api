@@ -9,7 +9,7 @@ const TicketCounter = require("../models/ticket-counter-luckydraw");
 const EventImages = require("../models/eventImages");
 const multer = require("multer");
 const fs = require("fs");
-const { generateThumbnail } = require("../store/multerS3Config");
+const { generateThumbnail, generateTemplateThumbnail } = require("../store/multerS3Config");
 
 // AWS S3 Configuration
 const s3 = new AWS.S3({
@@ -149,6 +149,19 @@ router.post("/create-event-invite", async (req, res) => {
         ? Number(lastWonderlandId.wonderland_id) + 1
         : 2206;
 
+    // Check if this is the first event for the user
+    const existingEventsCount = await EventInvite.countDocuments({ userId });
+    console.log('%c [ existingEventsCount ]-154', 'font-size:13px; background:pink; color:#bf2c9f;', existingEventsCount)
+
+    if (existingEventsCount === 0 && hostName) {
+      const User = require("../models/user");
+      const user = await User.findById(userId);
+      if (user) {
+        user.name = hostName;
+        await user.save();
+      }
+    }
+
     const eventInvite = new EventInvite({
       userId,
       eventType,
@@ -250,17 +263,26 @@ router.get("/event-invites/all/:userId", async (req, res) => {
     }
 
     const hostedEvents = await EventInvite.find({ userId }).lean();
-
     const guestEntries = await EventGuest.find({ userId }).lean();
 
     const guestEventIds = guestEntries.map((guest) => guest.eventId);
-
     const asAGuestEvents = await EventInvite.find({
       _id: { $in: guestEventIds },
     }).lean();
+
+    // ✅ filter only valid events
+    const isValidEvent = (event) =>
+      event.hostName &&
+      event.eventType &&
+      event.eventDate &&
+      event.eventTime;
+
+    const filteredHosted = (hostedEvents || []).filter(isValidEvent);
+    const filteredGuest = (asAGuestEvents || []).filter(isValidEvent);
+
     return sendResponse(res, 200, false, "Events fetched successfully", {
-      hostedEvents: hostedEvents || [],
-      asAGuestEvents: asAGuestEvents || [],
+      hostedEvents: filteredHosted,
+      asAGuestEvents: filteredGuest,
     });
   } catch (err) {
     console.error("Fetch Events Error:", {
@@ -271,6 +293,7 @@ router.get("/event-invites/all/:userId", async (req, res) => {
     return sendResponse(res, 500, true, "Server error");
   }
 });
+
 
 // Update event invite
 router.put("/event-invites/:id", async (req, res) => {
@@ -307,6 +330,19 @@ router.put("/event-invites/:id", async (req, res) => {
       hostImage,
       templateId,
     } = value;
+
+    // Check if this is the first event for the user and hostName is not already set
+    const oldestEvent = await EventInvite.findOne({ userId: existing.userId }).sort({ createdAt: 1 });
+    const isFirstEvent = oldestEvent && oldestEvent._id.equals(existing._id);
+
+    if (isFirstEvent && !existing.hostName && hostName) {
+      const User = require("../models/user");
+      const user = await User.findById(existing.userId);
+      if (user) {
+        user.name = hostName;
+        await user.save();
+      }
+    }
 
     // If Template ID is provided, then remove external image
     if (templateId) {
@@ -900,9 +936,10 @@ router.put(
 
       const newImages = await Promise.all(
         files.map(async (file) => {
-          const fileName = `self-uploaded-${Date.now()}-${file.originalname
-            .split(".")
-            .pop()}`;
+          const fileExt = file.originalname.split(".").pop();
+          const fileName = `self-uploaded-${Date.now()}-${Math.round(
+            Math.random() * 1e9
+          )}.${fileExt}`;
           const thumbnailFileName = `thumb_${fileName.replace(
             /\.(png|jpeg|jpg)$/i,
             ""
@@ -1332,9 +1369,14 @@ const deleteFileWithRetry = async (filePath, retries = 3, delay = 100) => {
       console.log(`Successfully deleted file: ${filePath}`);
       return;
     } catch (err) {
-      console.error(`Attempt ${attempt} to delete file ${filePath} failed:`, err.message);
+      console.error(
+        `Attempt ${attempt} to delete file ${filePath} failed:`,
+        err.message
+      );
       if (attempt === retries) {
-        console.error(`Failed to delete file ${filePath} after ${retries} attempts`);
+        console.error(
+          `Failed to delete file ${filePath} after ${retries} attempts`
+        );
         return; // Don't throw error to avoid interrupting the response
       }
       await new Promise((resolve) => setTimeout(resolve, delay));
@@ -1391,7 +1433,7 @@ router.put(
         const webpPath = file.path.replace(/\.(png|jpeg|jpg)$/i, "") + ".webp";
 
         // Generate WebP image
-        await generateThumbnail(file.path, webpPath);
+        await generateTemplateThumbnail(file.path, webpPath);
 
         // Upload WebP image to S3
         const uploadResult = await uploadImageToS3(

@@ -72,7 +72,6 @@
 //   }
 // }
 
-
 // router.post("/import-drive-folder", async (req, res) => {
 //   try {
 //     let { folderUrl, vendorId } = req.body;
@@ -292,7 +291,6 @@
 //   }
 // });
 
-
 const express = require("express");
 const router = express.Router();
 const axios = require("axios");
@@ -339,11 +337,15 @@ async function isFolderPubliclyAccessible(folderId, apiKey) {
     const response = await axios.get(metadataUrl);
     const permissions = response.data.permissions || [];
 
-    if (permissions.some(
-      (perm) =>
-        perm.type === "anyone" &&
-        (perm.role === "viewer" || perm.role === "reader" || perm.role === "writer")
-    )) {
+    if (
+      permissions.some(
+        (perm) =>
+          perm.type === "anyone" &&
+          (perm.role === "viewer" ||
+            perm.role === "reader" ||
+            perm.role === "writer")
+      )
+    ) {
       return true;
     }
 
@@ -364,7 +366,8 @@ async function handleDriveFolderUpload(folderUrl, vendorId) {
 
   // check access
   const isPublic = await isFolderPubliclyAccessible(folderId, apiKey);
-  if (!isPublic) throw new Error("Google Drive folder link is not publicly accessible");
+  if (!isPublic)
+    throw new Error("Google Drive folder link is not publicly accessible");
 
   const order = await OrderModel.findOne({ order_id: vendorId - 10800 });
   if (!order) throw new Error("Order not found");
@@ -405,7 +408,10 @@ async function handleDriveFolderUpload(folderUrl, vendorId) {
       const originalName = file.name;
       const fileName = `${Date.now()}_${originalName}`;
       const filePath = path.join(tempDir, fileName);
-      const thumbnailPath = path.join(tempDir, `thumb_${fileName.replace(/\.(png|jpeg|jpg)$/i, "")}.webp`);
+      const thumbnailPath = path.join(
+        tempDir,
+        `thumb_${fileName.replace(/\.(png|jpeg|jpg)$/i, "")}.webp`
+      );
 
       const downloadUrl = `https://drive.google.com/uc?export=download&id=${file.id}`;
       await downloadFile(downloadUrl, filePath);
@@ -413,12 +419,25 @@ async function handleDriveFolderUpload(folderUrl, vendorId) {
       console.log(`Processing file: ${fileName}`);
 
       const thumbnailPromise = generateThumbnail(filePath, thumbnailPath);
-      const s3UploadPromise = uploadFileToS3(filePath, fileName, folderPath, phoneNo);
+      const s3UploadPromise = uploadFileToS3(
+        filePath,
+        fileName,
+        folderPath,
+        phoneNo
+      );
 
       await thumbnailPromise;
 
-      const thumbnailFileName = `thumb_${fileName.replace(/\.(png|jpeg|jpg)$/i, "")}.webp`;
-      const s3ThumbPromise = uploadFileToS3(thumbnailPath, thumbnailFileName, folderPath, phoneNo);
+      const thumbnailFileName = `thumb_${fileName.replace(
+        /\.(png|jpeg|jpg)$/i,
+        ""
+      )}.webp`;
+      const s3ThumbPromise = uploadFileToS3(
+        thumbnailPath,
+        thumbnailFileName,
+        folderPath,
+        phoneNo
+      );
 
       const [s3Response, s3ThumbResponse] = await Promise.all([
         s3UploadPromise,
@@ -426,8 +445,12 @@ async function handleDriveFolderUpload(folderUrl, vendorId) {
       ]);
 
       // cleanup
-      try { await fsp.unlink(filePath); } catch {}
-      try { await fsp.unlink(thumbnailPath); } catch {}
+      try {
+        await fsp.unlink(filePath);
+      } catch {}
+      try {
+        await fsp.unlink(thumbnailPath);
+      } catch {}
 
       return {
         fileName: originalName,
@@ -458,7 +481,9 @@ router.post("/import-drive-folder", async (req, res) => {
     const { folderUrl, vendorId } = req.body;
 
     if (!folderUrl || !vendorId) {
-      return res.status(400).json({ message: "Folder URL and Vendor ID are required." });
+      return res
+        .status(400)
+        .json({ message: "Folder URL and Vendor ID are required." });
     }
 
     // 🚀 Turant response bhej do
@@ -475,7 +500,6 @@ router.post("/import-drive-folder", async (req, res) => {
         console.error("❌ Background upload failed:", err);
       }
     });
-
   } catch (error) {
     console.error("Drive Upload error:", error);
     if (!res.headersSent) {
@@ -484,12 +508,62 @@ router.post("/import-drive-folder", async (req, res) => {
   }
 });
 
+router.post("/add-order-drive-link", async (req, res) => {
+  try {
+    const { folderUrl, order_id } = req.body;
+    if (!folderUrl || !order_id) {
+      return res
+        .status(400)
+        .json({ message: "Folder URL and order_id are required." });
+    }
+
+    const folderId = getFolderIdFromUrl(folderUrl);
+    if (!folderId) throw new Error("Invalid Google Drive folder URL");
+    if (!apiKey) throw new Error("Google Drive API key not configured");
+
+    // check access
+    const isPublic = await isFolderPubliclyAccessible(folderId, apiKey);
+    if (!isPublic)
+      throw new Error("Google Drive folder link is not publicly accessible");
+
+    // find order
+    const order = await OrderModel.findOne({ order_id: order_id });
+    if (!order) throw new Error(`Order not found for order_id : ${order_id}`);
+
+    // update order
+    let result = await OrderModel.updateOne(
+      { order_id: order_id },
+      { $set: { orderDriveLink: folderUrl } }
+    );
+
+    if (result.modifiedCount > 0) {
+      res.status(201).json({
+        message: `Drive link successfully added for Order_id: ${order_id}`,
+      });
+    } else {
+      throw new Error("Order update failed");
+    }
+  } catch (error) {
+    console.error("Error on adding google drive link to :", error.message);
+    res
+      .status(500)
+      .json({ error: error.message});
+  }
+});
 
 router.post("/update-google-sheet", async (req, res) => {
   try {
+    let updatedPhoneNumber = req.body.phone;
+    if (!updatedPhoneNumber.startsWith("+91")) {
+      updatedPhoneNumber = `+91${updatedPhoneNumber}`;
+    }
+    let payload = {
+      ...req.body,
+      phone: updatedPhoneNumber,
+    };
     const googleResp = await axios.post(
-      "https://script.google.com/macros/s/AKfycbzoU9skjFIqA4yKQMfF4Tuh1uhYhk_vNfKjH5pEt4ZRtd9T_ouGSw_SYPiluq3zj62E/exec",
-      req.body,
+      "https://script.google.com/macros/s/AKfycbygkJKWyvk4xBpU0CZwoyCBL05v_W7kzwHb-wGOvWvzaoEVhulMfQRLatrT4FG1HPzl/exec",
+      payload,
       {
         headers: { "Content-Type": "application/json" },
       }
@@ -501,7 +575,6 @@ router.post("/update-google-sheet", async (req, res) => {
     res.status(500).json({ error: "Failed to update Google Sheet" });
   }
 });
-
 
 // Script That written in google sheet create script section for sync
 // function doPost(e) {
@@ -528,7 +601,5 @@ router.post("/update-google-sheet", async (req, res) => {
 //     ).setMimeType(ContentService.MimeType.JSON);
 //   }
 // }
-
-
 
 module.exports = router;

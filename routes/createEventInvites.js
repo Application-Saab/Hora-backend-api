@@ -9,7 +9,13 @@ const TicketCounter = require("../models/ticket-counter-luckydraw");
 const EventImages = require("../models/eventImages");
 const multer = require("multer");
 const fs = require("fs");
-const { generateThumbnail, generateTemplateThumbnail } = require("../store/multerS3Config");
+const fsPromises = require("fs").promises;
+
+const {
+  generateThumbnail,
+  generateTemplateThumbnail,
+  generateVideoPreview,
+} = require("../store/multerS3Config");
 
 // AWS S3 Configuration
 const s3 = new AWS.S3({
@@ -151,7 +157,11 @@ router.post("/create-event-invite", async (req, res) => {
 
     // Check if this is the first event for the user
     const existingEventsCount = await EventInvite.countDocuments({ userId });
-    console.log('%c [ existingEventsCount ]-154', 'font-size:13px; background:pink; color:#bf2c9f;', existingEventsCount)
+    console.log(
+      "%c [ existingEventsCount ]-154",
+      "font-size:13px; background:pink; color:#bf2c9f;",
+      existingEventsCount
+    );
 
     if (existingEventsCount === 0 && hostName) {
       const User = require("../models/user");
@@ -272,10 +282,7 @@ router.get("/event-invites/all/:userId", async (req, res) => {
 
     // ✅ filter only valid events
     const isValidEvent = (event) =>
-      event.hostName &&
-      event.eventType &&
-      event.eventDate &&
-      event.eventTime;
+      event.hostName && event.eventType && event.eventDate && event.eventTime;
 
     const filteredHosted = (hostedEvents || []).filter(isValidEvent);
     const filteredGuest = (asAGuestEvents || []).filter(isValidEvent);
@@ -293,7 +300,6 @@ router.get("/event-invites/all/:userId", async (req, res) => {
     return sendResponse(res, 500, true, "Server error");
   }
 });
-
 
 // Update event invite
 router.put("/event-invites/:id", async (req, res) => {
@@ -332,7 +338,9 @@ router.put("/event-invites/:id", async (req, res) => {
     } = value;
 
     // Check if this is the first event for the user and hostName is not already set
-    const oldestEvent = await EventInvite.findOne({ userId: existing.userId }).sort({ createdAt: 1 });
+    const oldestEvent = await EventInvite.findOne({
+      userId: existing.userId,
+    }).sort({ createdAt: 1 });
     const isFirstEvent = oldestEvent && oldestEvent._id.equals(existing._id);
 
     if (isFirstEvent && !existing.hostName && hostName) {
@@ -614,13 +622,8 @@ const storage = multer.diskStorage({
 
 const uploadSingle = multer({
   storage,
-  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB limit
+  limits: { fileSize: 100 * 1024 * 1024 }, // 20MB limit
 }).single("image");
-
-const uploadMultiple = multer({
-  storage,
-  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB per file limit
-}).array("selfUploadedImages", 10000); // Multiple files, max 10000
 
 const uploadImageToS3 = async (
   filePath,
@@ -890,10 +893,236 @@ router.put(
 );
 
 // Upload self-uploaded images for an event by eventId and userId
+// router.put(
+//   "/event-images/:eventId/self-uploaded",
+//   (req, res, next) => {
+//     uploadSingle(req, res, (err) => {
+//       if (err) return sendResponse(res, 400, true, err.message);
+//       next();
+//     });
+//   },
+//   async (req, res) => {
+//     try {
+//       const { eventId } = req.params;
+//       if (!mongoose.Types.ObjectId.isValid(eventId)) {
+//         return sendResponse(res, 400, true, "Invalid event ID");
+//       }
+
+//       const file = req.file;
+//       if (!file) {
+//         return sendResponse(res, 400, true, "selfUploadedImage is required");
+//       }
+
+//       const userId = req.body.userId;
+//       if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+//         return sendResponse(res, 400, true, "Invalid user ID");
+//       }
+
+//       let eventImage = await EventImages.findOne({ eventId, userId });
+//       if (!eventImage) {
+//         eventImage = new EventImages({
+//           eventId,
+//           userId,
+//           userType: "guest",
+//           luckyDrawImages: [],
+//           thankYouNoteImages: [],
+//           selfUploadedImages: [],
+//         });
+//       }
+
+//       const fileExt = file.originalname.split(".").pop();
+//       const fileName = `self-uploaded-${Date.now()}-${Math.round(
+//         Math.random() * 1e9
+//       )}.${fileExt}`;
+//       const thumbnailFileName = `thumb_${fileName.replace(
+//         /\.(png|jpeg|jpg)$/i,
+//         ""
+//       )}.webp`;
+//       const thumbnailPath =
+//         file.path.replace(/\.(png|jpeg|jpg)$/i, "") + "_thumbnail.webp";
+
+//       // Generate thumbnail
+//       await generateThumbnail(file.path, thumbnailPath);
+
+//       // Upload both images to S3
+//       const [uploadResult, thumbnailUploadResult] = await Promise.all([
+//         uploadImageToS3(
+//           file.path,
+//           fileName,
+//           userId,
+//           eventId,
+//           file.mimetype,
+//           "self-uploaded"
+//         ),
+//         uploadImageToS3(
+//           thumbnailPath,
+//           thumbnailFileName,
+//           userId,
+//           eventId,
+//           "image/webp",
+//           "self-uploaded"
+//         ),
+//       ]);
+
+//       // Cleanup local files
+//       try {
+//         await Promise.all([fs.unlink(file.path), fs.unlink(thumbnailPath)]);
+//       } catch (cleanupErr) {
+//         console.error("Cleanup error:", cleanupErr.message);
+//       }
+
+//       const newImage = {
+//         _id: new mongoose.Types.ObjectId(),
+//         selfUploadedImageUrl: uploadResult.Location,
+//         selfUploadedImageKey: uploadResult.Key,
+//         selfUploadedThumbnailUrl: thumbnailUploadResult.Location,
+//         selfUploadedThumbnailKey: thumbnailUploadResult.Key,
+//         imageType: "selfUploaded",
+//       };
+
+//       eventImage.selfUploadedImages.push(newImage);
+//       const updatedEventImage = await eventImage.save();
+
+//       return sendResponse(
+//         res,
+//         200,
+//         false,
+//         "Self-uploaded image uploaded successfully",
+//         updatedEventImage
+//       );
+//     } catch (err) {
+//       console.error("Upload Error:", err);
+//       return sendResponse(res, 500, true, "Server error");
+//     }
+//   }
+// );
+
+// Upload self-uploaded images for an event by eventId and userId
+// router.put(
+//   "/event-images/:eventId/self-uploaded",
+//   (req, res, next) => {
+//     uploadSingle(req, res, (err) => {
+//       if (err) return sendResponse(res, 400, true, err.message);
+//       next();
+//     });
+//   },
+//   async (req, res) => {
+//     try {
+//       const { eventId } = req.params;
+//       if (!mongoose.Types.ObjectId.isValid(eventId)) {
+//         return sendResponse(res, 400, true, "Invalid event ID");
+//       }
+
+//       const file = req.file;
+//       if (!file) {
+//         return sendResponse(res, 400, true, "selfUploadedImage is required");
+//       }
+
+//       const userId = req.body.userId;
+//       if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+//         return sendResponse(res, 400, true, "Invalid user ID");
+//       }
+
+//       let eventImage = await EventImages.findOne({ eventId, userId });
+//       if (!eventImage) {
+//         eventImage = new EventImages({
+//           eventId,
+//           userId,
+//           userType: "guest",
+//           luckyDrawImages: [],
+//           thankYouNoteImages: [],
+//           selfUploadedImages: [],
+//         });
+//       }
+
+//       const fileExt = file.originalname.split(".").pop();
+//       const fileName = `self-uploaded-${Date.now()}-${Math.round(
+//         Math.random() * 1e9
+//       )}.${fileExt}`;
+
+//       let thumbnailFileName = null;
+//       let thumbnailPath = null;
+//       let thumbnailUploadResult = null;
+
+//       // ✅ Generate thumbnail only if file is image
+//       if (file.mimetype.startsWith("image/")) {
+//         thumbnailFileName = `thumb_${fileName.replace(
+//           /\.(png|jpeg|jpg|webp)$/i,
+//           ""
+//         )}.webp`;
+//         thumbnailPath =
+//           file.path.replace(/\.(png|jpeg|jpg|webp)$/i, "") + "_thumbnail.webp";
+
+//         await generateThumbnail(file.path, thumbnailPath);
+//       }
+
+//       // ✅ Upload main image
+//       const uploadResult = await uploadImageToS3(
+//         file.path,
+//         fileName,
+//         userId,
+//         eventId,
+//         file.mimetype,
+//         "self-uploaded"
+//       );
+
+//       // ✅ Upload thumbnail only if it was generated
+//       if (thumbnailPath && fs.existsSync(thumbnailPath)) {
+//         thumbnailUploadResult = await uploadImageToS3(
+//           thumbnailPath,
+//           thumbnailFileName,
+//           userId,
+//           eventId,
+//           "image/webp",
+//           "self-uploaded"
+//         );
+//       }
+
+//       // ✅ Cleanup local files
+//       try {
+//         const deleteFiles = [fs.unlink(file.path)];
+//         if (thumbnailPath && fs.existsSync(thumbnailPath))
+//           deleteFiles.push(fs.unlink(thumbnailPath));
+//         await Promise.all(deleteFiles);
+//       } catch (cleanupErr) {
+//         console.error("Cleanup error:", cleanupErr.message);
+//       }
+
+//       const newImage = {
+//         _id: new mongoose.Types.ObjectId(),
+//         selfUploadedImageUrl: uploadResult.Location,
+//         selfUploadedImageKey: uploadResult.Key,
+//         selfUploadedThumbnailUrl: thumbnailUploadResult
+//           ? thumbnailUploadResult.Location
+//           : null,
+//         selfUploadedThumbnailKey: thumbnailUploadResult
+//           ? thumbnailUploadResult.Key
+//           : null,
+//         imageType: "selfUploaded",
+//       };
+
+//       eventImage.selfUploadedImages.push(newImage);
+//       const updatedEventImage = await eventImage.save();
+
+//       return sendResponse(
+//         res,
+//         200,
+//         false,
+//         "Self-uploaded image uploaded successfully",
+//         updatedEventImage
+//       );
+//     } catch (err) {
+//       console.error("Upload Error:", err);
+//       return sendResponse(res, 500, true, "Server error");
+//     }
+//   }
+// );
+
+// Upload self-uploaded images/videos for an event by eventId and userId
 router.put(
   "/event-images/:eventId/self-uploaded",
   (req, res, next) => {
-    uploadMultiple(req, res, (err) => {
+    uploadSingle(req, res, (err) => {
       if (err) return sendResponse(res, 400, true, err.message);
       next();
     });
@@ -905,9 +1134,9 @@ router.put(
         return sendResponse(res, 400, true, "Invalid event ID");
       }
 
-      const files = req.files;
-      if (!files || files.length === 0) {
-        return sendResponse(res, 400, true, "selfUploadedImages are required");
+      const file = req.file;
+      if (!file) {
+        return sendResponse(res, 400, true, "selfUploadedImage is required");
       }
 
       const userId = req.body.userId;
@@ -925,85 +1154,106 @@ router.put(
           thankYouNoteImages: [],
           selfUploadedImages: [],
         });
-      } else {
-        console.log(
-          "Found existing eventImage for eventId:",
+      }
+
+      const fileExt = file.originalname.split(".").pop();
+      const fileName = `self-uploaded-${Date.now()}-${Math.round(
+        Math.random() * 1e9
+      )}.${fileExt}`;
+
+      let thumbnailFileName = null;
+      let thumbnailPath = null;
+      let thumbnailUploadResult = null;
+
+      // ✅ Image thumbnail
+      if (file.mimetype.startsWith("image/")) {
+        thumbnailFileName = `thumb_${fileName.replace(/\.[^.]+$/, "")}.webp`;
+        thumbnailPath = file.path.replace(/\.[^.]+$/, "") + "_thumbnail.webp";
+
+        await generateThumbnail(file.path, thumbnailPath);
+      }
+
+      // ✅ Video preview (3-4 sec)
+      if (file.mimetype.startsWith("video/")) {
+        thumbnailFileName = `thumb_${fileName.replace(/\.[^.]+$/, ".mp4")}`;
+        thumbnailPath = file.path.replace(/\.[^.]+$/, "_thumbnail.mp4");
+
+        try {
+          await generateVideoPreview(file.path, thumbnailPath, 4, 0);
+        } catch (videoErr) {
+          console.error("Video preview generation failed:", videoErr);
+        }
+      }
+
+      // ✅ Upload main file (image/video)
+      const uploadResult = await uploadImageToS3(
+        file.path,
+        fileName,
+        userId,
+        eventId,
+        file.mimetype,
+        "self-uploaded"
+      );
+
+      // ✅ Upload thumbnail if exists
+      if (thumbnailPath && fs.existsSync(thumbnailPath)) {
+        thumbnailUploadResult = await uploadImageToS3(
+          thumbnailPath,
+          thumbnailFileName,
+          userId,
           eventId,
-          "userId:",
-          userId
+          file.mimetype.startsWith("video/") ? "video/mp4" : "image/webp",
+          "self-uploaded"
         );
       }
 
-      const newImages = await Promise.all(
-        files.map(async (file) => {
-          const fileExt = file.originalname.split(".").pop();
-          const fileName = `self-uploaded-${Date.now()}-${Math.round(
-            Math.random() * 1e9
-          )}.${fileExt}`;
-          const thumbnailFileName = `thumb_${fileName.replace(
-            /\.(png|jpeg|jpg)$/i,
-            ""
-          )}.webp`;
-          const thumbnailPath =
-            file.path.replace(/\.(png|jpeg|jpg)$/i, "") + "_thumbnail.webp";
+      // ✅ Cleanup local files
+      try {
+        const deleteFiles = [];
 
-          // Generate thumbnail
-          await generateThumbnail(file.path, thumbnailPath);
+        // Delete main uploaded file
+        if (file.path) deleteFiles.push(fsPromises.unlink(file.path));
 
-          // Upload original image and thumbnail concurrently
-          const [uploadResult, thumbnailUploadResult] = await Promise.all([
-            uploadImageToS3(
-              file.path,
-              fileName,
-              userId,
-              eventId,
-              file.mimetype,
-              "self-uploaded"
-            ),
-            uploadImageToS3(
-              thumbnailPath,
-              thumbnailFileName,
-              userId,
-              eventId,
-              "image/webp",
-              "self-uploaded"
-            ),
-          ]);
-
-          // Cleanup local files
+        // Delete generated thumbnail if exists
+        if (thumbnailPath) {
           try {
-            await Promise.all([fs.unlink(file.path), fs.unlink(thumbnailPath)]);
-          } catch (cleanupErr) {
-            console.error("Error cleaning up local files:", cleanupErr.message);
-          }
+            await fsPromises.access(thumbnailPath); // check if exists
+            deleteFiles.push(fsPromises.unlink(thumbnailPath));
+          } catch {}
+        }
 
-          return {
-            _id: new mongoose.Types.ObjectId(),
-            selfUploadedImageUrl: uploadResult.Location,
-            selfUploadedImageKey: uploadResult.Key,
-            selfUploadedThumbnailUrl: thumbnailUploadResult.Location,
-            selfUploadedThumbnailKey: thumbnailUploadResult.Key,
-            imageType: "selfUploaded",
-          };
-        })
-      );
+        await Promise.all(deleteFiles);
+        console.log("✅ Local temp files deleted successfully");
+      } catch (cleanupErr) {
+        console.error("❌ Cleanup error:", cleanupErr.message);
+      }
 
-      eventImage.selfUploadedImages.push(...newImages);
+      // ✅ Build new image/video object
+      const newImage = {
+        _id: new mongoose.Types.ObjectId(),
+        selfUploadedImageUrl: uploadResult.Location,
+        selfUploadedImageKey: uploadResult.Key,
+        selfUploadedThumbnailUrl: thumbnailUploadResult
+          ? thumbnailUploadResult.Location
+          : null,
+        selfUploadedThumbnailKey: thumbnailUploadResult
+          ? thumbnailUploadResult.Key
+          : null,
+        imageType: "selfUploaded",
+      };
+
+      eventImage.selfUploadedImages.push(newImage);
       const updatedEventImage = await eventImage.save();
 
       return sendResponse(
         res,
         200,
         false,
-        "Self-uploaded images uploaded successfully",
+        "Self-uploaded file uploaded successfully",
         updatedEventImage
       );
     } catch (err) {
-      console.error("Upload Self-Uploaded Images Error:", {
-        message: err.message,
-        stack: err.stack,
-        eventId: req.params.eventId,
-      });
+      console.error("Upload Error:", err);
       return sendResponse(res, 500, true, "Server error");
     }
   }
@@ -1384,8 +1634,6 @@ const deleteFileWithRetry = async (filePath, retries = 3, delay = 100) => {
   }
 };
 
-
-
 router.put(
   "/event-invites/external-template/:eventId",
   (req, res, next) => {
@@ -1451,7 +1699,7 @@ router.put(
         existing.externalTemplateImageKey = uploadResult.Key;
         existing.templateId = null; // Set templateId to null
 
-       // Cleanup local files with retry
+        // Cleanup local files with retry
         await Promise.all([
           deleteFileWithRetry(file.path),
           deleteFileWithRetry(webpPath),
@@ -1486,6 +1734,5 @@ router.put(
     }
   }
 );
-
 
 module.exports = router;

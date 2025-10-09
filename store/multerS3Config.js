@@ -5,6 +5,7 @@ const path = require('path');
 const sharp = require('sharp');
 require('dotenv').config();
 const fss = require('fs')
+const ffmpeg = require('fluent-ffmpeg');
 
 const router = express.Router();
 
@@ -95,7 +96,43 @@ const generateTemplateThumbnail = async (inputPath, outputPath) => {
 };
 
 
+// helper to generate 3-4s preview clip
+
+
+// Try to set ffmpeg path from ffmpeg-static (optional fallback)
+try {
+  const ffmpegStatic = require('ffmpeg-static');
+  if (ffmpegStatic) ffmpeg.setFfmpegPath(ffmpegStatic);
+} catch (e) {
+  // ffmpeg-static not installed — fluent-ffmpeg will try system ffmpeg (/usr/bin/ffmpeg)
+}
+
+const generateVideoPreview = (inputPath, outputPath, duration = 4, start = 0) => {
+  return new Promise((resolve, reject) => {
+    // ensure output dir exists
+    const outDir = path.dirname(outputPath);
+    if (!fss.existsSync(outDir)) fss.mkdirSync(outDir, { recursive: true });
+
+    ffmpeg(inputPath)
+      .setStartTime(start)               // start from beginning or a small offset
+      .setDuration(duration)             // seconds
+      .videoCodec('libx264')             // re-encode for compatibility & size
+      .outputOptions([
+        '-crf 28',                       // quality (higher -> smaller)
+        '-preset veryfast',              // speed
+        '-movflags +faststart',          // streaming friendly
+        '-pix_fmt yuv420p',              // compatibility
+        '-an'                            // remove audio to reduce size (optional)
+      ])
+      .size('640x?')                     // scale width to 640, keep aspect
+      .on('end', () => resolve(outputPath))
+      .on('error', (err) => reject(err))
+      .save(outputPath);
+  });
+};
+
+
 
 
 // Export both upload and uploadFileToS3 functions properly
-module.exports = { uploadFileToS3, upload, generateThumbnail, generateTemplateThumbnail };
+module.exports = { uploadFileToS3, upload, generateThumbnail, generateTemplateThumbnail, generateVideoPreview };

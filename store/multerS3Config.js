@@ -131,8 +131,29 @@ const generateVideoPreview = (inputPath, outputPath, duration = 4, start = 0) =>
   });
 };
 
+const compressVideo = (inputPath, outputPath, crf = 28) => {
+  return new Promise((resolve, reject) => {
+    const outDir = path.dirname(outputPath);
+    if (!fss.existsSync(outDir)) fss.mkdirSync(outDir, { recursive: true });
+
+    ffmpeg(inputPath)
+      .videoCodec('libx264')
+      .outputOptions([
+        `-crf ${crf}`,             // quality level 28(medium) = small size
+        '-preset veryfast',        // fast encoding
+        '-movflags +faststart',    // progressive playback
+        '-pix_fmt yuv420p',        // max compatibility
+        '-acodec aac',             // compress audio
+        '-b:a 128k'                // audio bitrate
+      ])
+      .on('end', () => resolve(outputPath))
+      .on('error', (err) => reject(err))
+      .save(outputPath);
+  });
+};
+
 
 
 
 // Export both upload and uploadFileToS3 functions properly
-module.exports = { uploadFileToS3, upload, generateThumbnail, generateTemplateThumbnail, generateVideoPreview };
+module.exports = { uploadFileToS3, upload, generateThumbnail, generateTemplateThumbnail, generateVideoPreview, compressVideo };

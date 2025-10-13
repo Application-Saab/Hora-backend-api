@@ -280,6 +280,7 @@ const sendResponse = (res, status, error, message, data = null) =>
   res.status(status).json({ error, status, message, data });
 
 
+//  Get user details by ID
 router.get("/user-details/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -399,7 +400,58 @@ function isS3Url(str) {
 }
 
 
+// Update user details by id
+// router.put("/user-details/:id", async (req, res) => {
+//   try {
+//     const { id } = req.params;
 
+//     if (!mongoose.Types.ObjectId.isValid(id)) {
+//       return sendResponse(res, 400, true, "Invalid user id");
+//     }
+
+//     const { name, phone, avatar } = req.body;
+
+//     // Agar kuch bhi update fields nahi bheji
+//     if (!name && !phone && !avatar) {
+//       return sendResponse(res, 400, true, "No fields provided to update");
+//     }
+
+//     // Update object prepare karo
+//     let updateData = {};
+//     if (name) updateData.name = name;
+//     if (phone) updateData.phone = phone;
+//     if (avatar) updateData.avatar = avatar;
+
+//     const updatedUser = await UserModel.findByIdAndUpdate(
+//       id,
+//       { $set: updateData },
+//       { new: true, lean: true }
+//     );
+
+//     if (!updatedUser) {
+//       return sendResponse(res, 404, true, "User not found");
+//     }
+
+//     let respData = {
+//       name: updatedUser.name,
+//       _id: updatedUser._id,
+//       phone: updatedUser.phone,
+//       avatar: updatedUser.avatar,
+//     };
+
+//     return sendResponse(res, 200, false, "User updated successfully", respData);
+//   } catch (err) {
+//     console.error("Update user error:", {
+//       message: err.message,
+//       stack: err.stack,
+//       userId: req.params.id,
+//     });
+//     return sendResponse(res, 500, true, `Server error ${err.message}`);
+//   }
+// });
+
+
+//  Update user details (Name) and also update name in guest models for RSVP
 router.put("/user-details/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -431,6 +483,18 @@ router.put("/user-details/:id", async (req, res) => {
       return sendResponse(res, 404, true, "User not found");
     }
 
+    // 🔥 EXTRA FEATURE: Update name in all EventGuest entries for this user
+    if (name) {
+      const EventGuest = require("../models/event-guest"); // Import lazily to avoid circular deps
+
+      await EventGuest.updateMany(
+        { userId: id },        // Find all entries with this userId
+        { $set: { name: name } } // Update the name field
+      );
+
+      console.log(`✅ Updated guest names for user ${id} in all event records`);
+    }
+
     let respData = {
       name: updatedUser.name,
       _id: updatedUser._id,
@@ -449,6 +513,7 @@ router.put("/user-details/:id", async (req, res) => {
   }
 });
 
+// Update user image avatar by id
 router.put(
   "/user-avatar/:id",
   (req, res, next) => {

@@ -15,6 +15,7 @@ const {
   generateThumbnail,
   generateTemplateThumbnail,
   generateVideoPreview,
+  // compressVideo,
 } = require("../store/multerS3Config");
 
 // AWS S3 Configuration
@@ -133,7 +134,89 @@ const eventGuestSchema = Joi.object({
 const sendResponse = (res, status, error, message, data = null) =>
   res.status(status).json({ error, status, message, data });
 
-// Create a new event invite
+// Create a new event invite old only creates event
+// router.post("/create-event-invite", async (req, res) => {
+//   try {
+//     const {
+//       userId,
+//       eventType,
+//       hostName,
+//       eventDate,
+//       eventTime,
+//       location,
+//       hostImage,
+//       templateId,
+//     } = req.body;
+
+//     const lastWonderlandId = await EventInvite.findOne()
+//       .sort({ wonderland_id: -1 })
+//       .select("wonderland_id");
+//     const nextWonderlandId =
+//       lastWonderlandId && lastWonderlandId.wonderland_id
+//         ? Number(lastWonderlandId.wonderland_id) + 1
+//         : 2206;
+
+//     // Check if this is the first event for the user
+//     const existingEventsCount = await EventInvite.countDocuments({ userId });
+//     console.log(
+//       "%c [ existingEventsCount ]-154",
+//       "font-size:13px; background:pink; color:#bf2c9f;",
+//       existingEventsCount
+//     );
+
+//     if (existingEventsCount === 0 && hostName) {
+//       const User = require("../models/user");
+//       const user = await User.findById(userId);
+//       if (user) {
+//         user.name = hostName;
+//         await user.save();
+//       }
+//     }
+
+//     const eventInvite = new EventInvite({
+//       userId,
+//       eventType,
+//       hostName,
+//       eventDate: eventDate ? new Date(eventDate) : "",
+//       eventTime,
+//       location,
+//       wonderland_id: Number(nextWonderlandId),
+//       templateId,
+//     });
+
+//     if (hostImage && isBase64Image(hostImage)) {
+//       const { url, key } = await uploadBase64ToS3(
+//         hostImage,
+//         userId,
+//         eventInvite._id.toString()
+//       );
+//       eventInvite.imageUrl = url;
+//       eventInvite.imageKey = key;
+//     } else if (hostImage !== null && hostImage !== undefined) {
+//       return sendResponse(
+//         res,
+//         400,
+//         true,
+//         "Invalid hostImage format. Must be base64 or null"
+//       );
+//     }
+
+//     const savedInvite = await eventInvite.save();
+//     return sendResponse(res, 201, false, "Event invite created", savedInvite);
+//   } catch (err) {
+//     console.error("Create Invite Error:", {
+//       message: err.message,
+//       stack: err.stack,
+//       requestBody: req.body,
+//     });
+//     return sendResponse(res, 500, true, "Server error");
+//   }
+// });
+
+
+
+
+// ✅ Combined route: Create event + register host as guest
 router.post("/create-event-invite", async (req, res) => {
   try {
     const {
@@ -147,31 +230,31 @@ router.post("/create-event-invite", async (req, res) => {
       templateId,
     } = req.body;
 
+    const User = require("../models/user");
+
+    // 🔹 Generate wonderland_id
     const lastWonderlandId = await EventInvite.findOne()
       .sort({ wonderland_id: -1 })
       .select("wonderland_id");
+
     const nextWonderlandId =
       lastWonderlandId && lastWonderlandId.wonderland_id
         ? Number(lastWonderlandId.wonderland_id) + 1
         : 2206;
 
-    // Check if this is the first event for the user
+    // 🔹 Count user’s existing events
     const existingEventsCount = await EventInvite.countDocuments({ userId });
-    console.log(
-      "%c [ existingEventsCount ]-154",
-      "font-size:13px; background:pink; color:#bf2c9f;",
-      existingEventsCount
-    );
 
+    // 🔹 If first event, update user name from hostName
+    let user = await User.findById(userId);
     if (existingEventsCount === 0 && hostName) {
-      const User = require("../models/user");
-      const user = await User.findById(userId);
       if (user) {
         user.name = hostName;
         await user.save();
       }
     }
 
+    // 🔹 Create event
     const eventInvite = new EventInvite({
       userId,
       eventType,
@@ -183,6 +266,7 @@ router.post("/create-event-invite", async (req, res) => {
       templateId,
     });
 
+    // 🔹 Upload host image if provided
     if (hostImage && isBase64Image(hostImage)) {
       const { url, key } = await uploadBase64ToS3(
         hostImage,
@@ -200,10 +284,41 @@ router.post("/create-event-invite", async (req, res) => {
       );
     }
 
+    // 🔹 Save event
     const savedInvite = await eventInvite.save();
-    return sendResponse(res, 201, false, "Event invite created", savedInvite);
+
+    // 🔹 Check if host already exists as a guest for this event
+    const existingGuest = await EventGuest.findOne({
+      userId,
+      eventId: savedInvite._id,
+    });
+
+    // 🔹 Determine which name to use for guest
+    let guestNameToUse = "";
+    if (existingEventsCount === 0 && hostName) {
+      // first event → use hostName
+      guestNameToUse = hostName;
+    } else if (user && user.name) {
+      // otherwise → use name from user collection
+      guestNameToUse = user.name;
+    }
+
+    // 🔹 Create guest entry with RSVP = "will Come" if not already exists
+    let savedGuest = null;
+    if (!existingGuest) {
+      const guest = new EventGuest({
+        userId,
+        eventId: savedInvite._id,
+        name: guestNameToUse,
+        rsvpStatus: "will Come",
+      });
+      savedGuest = await guest.save();
+    }
+
+    // ✅ Final response
+    return sendResponse(res, 201, false, "Event created & host registered as guest", savedInvite);
   } catch (err) {
-    console.error("Create Invite Error:", {
+    console.error("Create Invite+Guest Error:", {
       message: err.message,
       stack: err.stack,
       requestBody: req.body,
@@ -211,6 +326,10 @@ router.post("/create-event-invite", async (req, res) => {
     return sendResponse(res, 500, true, "Server error");
   }
 });
+
+
+
+
 
 // Fetch event details by eventId(_id)
 router.get("/event-invites/:id", async (req, res) => {
@@ -664,6 +783,7 @@ router.put(
         return sendResponse(res, 400, true, "luckyDrawImage is required");
       }
 
+      const userName = req.body.name;
       const userId = req.body.userId;
       if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
         return sendResponse(res, 400, true, "Invalid user ID");
@@ -674,7 +794,7 @@ router.put(
         eventImage = new EventImages({
           eventId,
           userId,
-          userType: "guest",
+          name: userName,
           luckyDrawImages: [],
           thankYouNoteImages: [],
           selfUploadedImages: [],
@@ -739,25 +859,38 @@ router.put(
 
       const newImage = {
         _id: new mongoose.Types.ObjectId(),
+        name: userName,
+        userId: userId,
         ticketNumber,
         luckyDrawImageUrl: uploadResult.Location,
         luckyDrawImageKey: uploadResult.Key,
         luckyDrawThumbnailUrl: thumbnailUploadResult.Location,
         luckyDrawThumbnailKey: thumbnailUploadResult.Key,
         imageType: "luckyDraw",
-        createdAt: new Date(),
       };
 
       eventImage.luckyDrawImages.push(newImage);
-      const updatedEventImage = await eventImage.save();
-      console.log("Saved eventImage:", updatedEventImage);
+      await eventImage.save();
+
+      // Construct response with only the newly uploaded image
+      const responseImage = {
+        _id: newImage._id,
+        userId: eventImage.userId,
+        name: userName,
+        imageUrl: newImage.luckyDrawImageUrl,
+        imageKey: newImage.luckyDrawImageKey,
+        webpUrl: newImage.luckyDrawThumbnailUrl,
+        webpKey: newImage.luckyDrawThumbnailKey,
+        imageType: newImage.imageType,
+        createdAt: newImage.createdAt,
+      };
 
       return sendResponse(
         res,
         200,
         false,
         "Lucky draw image uploaded successfully",
-        updatedEventImage
+        [responseImage]
       );
     } catch (err) {
       console.error("Upload Lucky Draw Image Error:", {
@@ -791,6 +924,7 @@ router.put(
         return sendResponse(res, 400, true, "thankYouNoteImage is required");
       }
 
+      const userName = req.body.name;
       const userId = req.body.userId;
       if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
         return sendResponse(res, 400, true, "Invalid user ID");
@@ -801,7 +935,7 @@ router.put(
         eventImage = new EventImages({
           eventId,
           userId,
-          userType: "guest",
+          name: userName,
           luckyDrawImages: [],
           thankYouNoteImages: [],
           selfUploadedImages: [],
@@ -863,23 +997,36 @@ router.put(
 
       const newImage = {
         _id: new mongoose.Types.ObjectId(),
+        name: userName,
+        userId: userId,
         thankYouNoteImageUrl: uploadResult.Location,
         thankYouNoteImageKey: uploadResult.Key,
         thankYouNoteThumbnailUrl: thumbnailUploadResult.Location,
         thankYouNoteThumbnailKey: thumbnailUploadResult.Key,
-        imageType: "thankYouNote",
       };
 
       eventImage.thankYouNoteImages.push(newImage);
-      const updatedEventImage = await eventImage.save();
-      console.log("Saved eventImage:", updatedEventImage);
+      await eventImage.save();
+
+      // Construct response with only the newly uploaded image
+      const responseImage = {
+        _id: newImage._id,
+        userId: eventImage.userId,
+        name: userName,
+        imageUrl: newImage.thankYouNoteImageUrl,
+        imageKey: newImage.thankYouNoteImageKey,
+        webpUrl: newImage.thankYouNoteThumbnailUrl,
+        webpKey: newImage.thankYouNoteThumbnailKey,
+        imageType: newImage.imageType,
+        createdAt: newImage.createdAt,
+      };
 
       return sendResponse(
         res,
         200,
         false,
         "Thank you note image uploaded successfully",
-        updatedEventImage
+        [responseImage]
       );
     } catch (err) {
       console.error("Upload Thank You Note Image Error:", {
@@ -923,7 +1070,6 @@ router.put(
 //         eventImage = new EventImages({
 //           eventId,
 //           userId,
-//           userType: "guest",
 //           luckyDrawImages: [],
 //           thankYouNoteImages: [],
 //           selfUploadedImages: [],
@@ -1028,7 +1174,6 @@ router.put(
 //         eventImage = new EventImages({
 //           eventId,
 //           userId,
-//           userType: "guest",
 //           luckyDrawImages: [],
 //           thankYouNoteImages: [],
 //           selfUploadedImages: [],
@@ -1139,6 +1284,7 @@ router.put(
         return sendResponse(res, 400, true, "selfUploadedImage is required");
       }
 
+      const userName = req.body.name;
       const userId = req.body.userId;
       if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
         return sendResponse(res, 400, true, "Invalid user ID");
@@ -1149,7 +1295,7 @@ router.put(
         eventImage = new EventImages({
           eventId,
           userId,
-          userType: "guest",
+          name: userName,
           luckyDrawImages: [],
           thankYouNoteImages: [],
           selfUploadedImages: [],
@@ -1173,7 +1319,7 @@ router.put(
         await generateThumbnail(file.path, thumbnailPath);
       }
 
-      // ✅ Video preview (3-4 sec)
+      // ✅ Video preview (3-4 sec) + compressed version
       if (file.mimetype.startsWith("video/")) {
         thumbnailFileName = `thumb_${fileName.replace(/\.[^.]+$/, ".mp4")}`;
         thumbnailPath = file.path.replace(/\.[^.]+$/, "_thumbnail.mp4");
@@ -1183,6 +1329,34 @@ router.put(
         } catch (videoErr) {
           console.error("Video preview generation failed:", videoErr);
         }
+
+        // // ✅ Generate compressed version
+        // try {
+        //   const compressedFileName = `compressed_${fileName}`;
+        //   const compressedPath = file.path.replace(
+        //     /\.[^.]+$/,
+        //     "_compressed.mp4"
+        //   );
+
+        //   console.log("Compressing video...");
+        //   await compressVideo(file.path, compressedPath, 28); // lower CRF = better quality, higher = smaller
+
+        //   // Upload compressed file
+        //   const compressedUploadResult = await uploadImageToS3(
+        //     compressedPath,
+        //     compressedFileName,
+        //     userId,
+        //     eventId,
+        //     "video/mp4",
+        //     "self-uploaded"
+        //   );
+
+        //   // Attach compressed video info for saving later
+        //   req.compressedUploadResult = compressedUploadResult;
+        //   req.compressedPath = compressedPath;
+        // } catch (compErr) {
+        //   console.error("❌ Video compression failed:", compErr);
+        // }
       }
 
       // ✅ Upload main file (image/video)
@@ -1222,15 +1396,24 @@ router.put(
           } catch {}
         }
 
+        // if (req.compressedPath) {
+        //   try {
+        //     await fsPromises.access(req.compressedPath);
+        //     deleteFiles.push(fsPromises.unlink(req.compressedPath));
+        //   } catch {}
+        // }
+
         await Promise.all(deleteFiles);
-        console.log("✅ Local temp files deleted successfully");
+        console.log("Local temp files deleted successfully");
       } catch (cleanupErr) {
-        console.error("❌ Cleanup error:", cleanupErr.message);
+        console.error("Cleanup error:", cleanupErr.message);
       }
 
       // ✅ Build new image/video object
       const newImage = {
         _id: new mongoose.Types.ObjectId(),
+        name: userName,
+        userId: userId,
         selfUploadedImageUrl: uploadResult.Location,
         selfUploadedImageKey: uploadResult.Key,
         selfUploadedThumbnailUrl: thumbnailUploadResult
@@ -1239,18 +1422,38 @@ router.put(
         selfUploadedThumbnailKey: thumbnailUploadResult
           ? thumbnailUploadResult.Key
           : null,
-        imageType: "selfUploaded",
+        // selfUploadedCompressedUrl: req.compressedUploadResult
+        //   ? req.compressedUploadResult.Location
+        //   : null,
+        // selfUploadedCompressedKey: req.compressedUploadResult
+        //   ? req.compressedUploadResult.Key
+        //   : null,
       };
 
+      // Add to the document's selfUploadedImages array
       eventImage.selfUploadedImages.push(newImage);
-      const updatedEventImage = await eventImage.save();
+      await eventImage.save();
 
+      // Construct response with only the newly uploaded image
+      const responseImage = {
+        _id: newImage._id,
+        userId: eventImage.userId,
+        name: userName,
+        imageUrl: newImage.selfUploadedImageUrl,
+        imageKey: newImage.selfUploadedImageKey,
+        webpUrl: newImage.selfUploadedThumbnailUrl,
+        webpKey: newImage.selfUploadedThumbnailKey,
+        imageType: 'selfUploaded',
+        createdAt: newImage.createdAt,
+      };
+
+      // Return only the new image in an array
       return sendResponse(
         res,
         200,
         false,
         "Self-uploaded file uploaded successfully",
-        updatedEventImage
+        [responseImage] // Return as an array
       );
     } catch (err) {
       console.error("Upload Error:", err);
@@ -1482,6 +1685,8 @@ router.get("/event-images/:eventId", async (req, res) => {
             imageKey: image.selfUploadedImageKey,
             webpUrl: image.selfUploadedThumbnailUrl,
             webpKey: image.selfUploadedThumbnailKey,
+            // selfUploadedCompressedUrl: image.selfUploadedCompressedUrl,
+            // selfUploadedCompressedKey: image.selfUploadedCompressedKey,
             imageType: image.imageType || "selfUploaded",
             createdAt: image.createdAt,
           });
@@ -1511,6 +1716,102 @@ router.get("/event-images/:eventId", async (req, res) => {
     return sendResponse(res, 500, true, "Server error");
   }
 });
+
+// Optimized version of get all images with remove userid and name maping
+// router.get("/event-images/:eventId", async (req, res) => {
+//   try {
+//     const { eventId } = req.params;
+
+//     // Validate eventId
+//     if (!mongoose.Types.ObjectId.isValid(eventId)) {
+//       return sendResponse(res, 400, true, "Invalid event ID");
+//     }
+
+//     // Fetch all EventImages documents for the given eventId
+//     const eventImagesList = await EventImages.find({ eventId }).lean();
+//     if (!eventImagesList || eventImagesList.length === 0) {
+//       return sendResponse(res, 404, true, "No images found for this event");
+//     }
+
+//     // Combine all images into a single array
+//     const allImages = [];
+
+//     for (const doc of eventImagesList) {
+//       // Add luckyDrawImages
+//       if (doc.luckyDrawImages && Array.isArray(doc.luckyDrawImages)) {
+//         for (const image of doc.luckyDrawImages) {
+//           allImages.push({
+//             _id: image._id,
+//             userId: image.userId || doc.userId, // Fallback to doc.userId if needed
+//             name: image.name || "", // Use embedded name, default to empty string
+//             imageUrl: image.luckyDrawImageUrl,
+//             imageKey: image.luckyDrawImageKey,
+//             webpUrl: image.luckyDrawThumbnailUrl,
+//             webpKey: image.luckyDrawThumbnailKey,
+//             imageType: image.imageType || "luckyDraw",
+//             createdAt: image.createdAt || new Date(), // Fallback to current date
+//           });
+//         }
+//       }
+
+//       // Add thankYouNoteImages
+//       if (doc.thankYouNoteImages && Array.isArray(doc.thankYouNoteImages)) {
+//         for (const image of doc.thankYouNoteImages) {
+//           allImages.push({
+//             _id: image._id,
+//             userId: image.userId || doc.userId, // Fallback to doc.userId
+//             name: image.name || "", // Use embedded name
+//             imageUrl: image.thankYouNoteImageUrl,
+//             imageKey: image.thankYouNoteImageKey,
+//             webpUrl: image.thankYouNoteThumbnailUrl,
+//             webpKey: image.thankYouNoteThumbnailKey,
+//             imageType: image.imageType || "thankYouNote",
+//             createdAt: image.createdAt || new Date(),
+//           });
+//         }
+//       }
+
+//       // Add selfUploadedImages
+//       if (doc.selfUploadedImages && Array.isArray(doc.selfUploadedImages)) {
+//         for (const image of doc.selfUploadedImages) {
+//           allImages.push({
+//             _id: image._id,
+//             userId: image.userId || doc.userId, // Fallback to doc.userId
+//             name: image.name || "", // Use embedded name
+//             imageUrl: image.selfUploadedImageUrl,
+//             imageKey: image.selfUploadedImageKey,
+//             webpUrl: image.selfUploadedThumbnailUrl,
+//             webpKey: image.selfUploadedThumbnailKey,
+//             imageType: image.imageType || "selfUploaded",
+//             createdAt: image.createdAt || new Date(),
+//           });
+//         }
+//       }
+//     }
+
+//     // Sort by createdAt (newest first)
+//     allImages.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+//     if (allImages.length === 0) {
+//       return sendResponse(res, 404, true, "No images found for this event");
+//     }
+
+//     return sendResponse(
+//       res,
+//       200,
+//       false,
+//       "Event images fetched successfully",
+//       allImages
+//     );
+//   } catch (err) {
+//     console.error("Fetch Event Images Error:", {
+//       message: err.message,
+//       stack: err.stack,
+//       eventId: req.params.eventId,
+//     });
+//     return sendResponse(res, 500, true, "Server error");
+//   }
+// });
 
 // New route: Update external template image for an event invite
 // router.put(

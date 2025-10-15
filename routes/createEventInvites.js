@@ -311,6 +311,7 @@ router.post("/create-event-invite", async (req, res) => {
         eventId: savedInvite._id,
         name: guestNameToUse,
         rsvpStatus: "will Come",
+        isHost: true
       });
       savedGuest = await guest.save();
     }
@@ -383,6 +384,45 @@ router.get("/event-invites/:id", async (req, res) => {
 });
 
 // Fetch all event invites for a user as a guest or host
+// router.get("/event-invites/all/:userId", async (req, res) => {
+//   try {
+//     const { userId } = req.params;
+
+//     if (!mongoose.Types.ObjectId.isValid(userId)) {
+//       return sendResponse(res, 400, true, "Invalid user ID");
+//     }
+
+//     const hostedEvents = await EventInvite.find({ userId }).lean();
+//     const guestEntries = await EventGuest.find({ userId }).lean();
+
+//     const guestEventIds = guestEntries.map((guest) => guest.eventId);
+//     const asAGuestEvents = await EventInvite.find({
+//       _id: { $in: guestEventIds },
+//     }).lean();
+
+//     // ✅ filter only valid events
+//     const isValidEvent = (event) =>
+//       event.hostName && event.eventType && event.eventDate && event.eventTime;
+
+//     const filteredHosted = (hostedEvents || []).filter(isValidEvent);
+//     const filteredGuest = (asAGuestEvents || []).filter(isValidEvent);
+
+//     return sendResponse(res, 200, false, "Events fetched successfully", {
+//       hostedEvents: filteredHosted,
+//       asAGuestEvents: filteredGuest,
+//     });
+//   } catch (err) {
+//     console.error("Fetch Events Error:", {
+//       message: err.message,
+//       stack: err.stack,
+//       userId: req.params.userId,
+//     });
+//     return sendResponse(res, 500, true, "Server error");
+//   }
+// });
+
+
+// Fetch all event invites for a user as a guest or host
 router.get("/event-invites/all/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
@@ -391,15 +431,21 @@ router.get("/event-invites/all/:userId", async (req, res) => {
       return sendResponse(res, 400, true, "Invalid user ID");
     }
 
+    // Fetch all events hosted by user
     const hostedEvents = await EventInvite.find({ userId }).lean();
+
+    // Fetch all guest entries by user
     const guestEntries = await EventGuest.find({ userId }).lean();
 
-    const guestEventIds = guestEntries.map((guest) => guest.eventId);
+    const guestEventIds = guestEntries.map((guest) => guest.eventId.toString());
+    const hostedEventIds = hostedEvents.map((event) => event._id.toString());
+
+    // Fetch event details for guest entries (excluding those that user hosted)
     const asAGuestEvents = await EventInvite.find({
-      _id: { $in: guestEventIds },
+      _id: { $in: guestEventIds.filter((id) => !hostedEventIds.includes(id)) },
     }).lean();
 
-    // ✅ filter only valid events
+    // Filter only valid events (having all required details)
     const isValidEvent = (event) =>
       event.hostName && event.eventType && event.eventDate && event.eventTime;
 
@@ -988,11 +1034,24 @@ router.put(
         ),
       ]);
 
-      // Cleanup local files
+            // ✅ Cleanup local files
       try {
-        await Promise.all([fs.unlink(file.path), fs.unlink(thumbnailPath)]);
+        const deleteFiles = [];
+
+        // Delete main uploaded file
+        if (file.path) deleteFiles.push(fsPromises.unlink(file.path));
+
+        // Delete generated thumbnail if exists
+        if (thumbnailPath) {
+          try {
+            await fsPromises.access(thumbnailPath); // check if exists
+            deleteFiles.push(fsPromises.unlink(thumbnailPath));
+          } catch {}
+        }
+        await Promise.all(deleteFiles);
+        console.log("Local temp files deleted successfully");
       } catch (cleanupErr) {
-        console.error("Error cleaning up local files:", cleanupErr.message);
+        console.error("Cleanup error:", cleanupErr.message);
       }
 
       const newImage = {

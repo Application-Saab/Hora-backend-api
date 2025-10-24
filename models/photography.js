@@ -57,6 +57,7 @@ const photographySchema = new mongoose.Schema({
         ref: "meal"
     }],
     duration: { type : String, default : '' },
+    advance_amount : { type : String, default : '' },
     status: {  type: Number, default: 1 /* 1-active 0-inactive 2-delete  */ }
 },{
     strict: false,

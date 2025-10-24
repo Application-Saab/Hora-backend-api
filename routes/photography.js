@@ -25,7 +25,9 @@ router.post('/add', async (req, res) => {
         ratings,
         attributes,
         inclusion,
-        tag
+        tag,
+        duration,
+        advance_amount
     } = req.body;
 
     const data = new photographyModel({
@@ -42,7 +44,9 @@ router.post('/add', async (req, res) => {
         ratings: ratings,
         attributes: attributes,
         inclusion: inclusion,
-        tag: tag
+        tag: tag,
+        duration: duration,
+        advance_amount: advance_amount
     });
 
     try {

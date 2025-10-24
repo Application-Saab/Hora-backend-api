@@ -80,33 +80,86 @@ exports.getOrderComplete = function (orderObject) {
     return flag;
 }
 
+// exports.getOrderExpire = function (orderObject) {
+//     var flag = false;
+//     // let order_datetime = new Date(orderObject.createdAt);
+//     let order_datetime = new Date(orderObject.order_date);
+//     let current_datetime = new Date();
+//     let order_day = order_datetime.getDate(); var order_month = order_datetime.getMonth() + 1;
+
+//     if (order_day < 10) { order_day = '0' + order_day }
+//     if (order_month < 10) { order_month = '0' + order_month }
+
+//     // let formatted_order_date = order_datetime.getFullYear()+ "-" + order_month + "-" + order_day + "T" +orderObject.order_time.slice(0, 5) +":00";
+//     let formatted_order_date = order_datetime;
+//     let formatted_current_date = current_datetime;
+
+//     var date1 = new Date(formatted_order_date).getTime();
+//     var date2 = new Date(formatted_current_date).getTime();
+//     // var addingHoursInOrderDateTime = date1+ 1*3600*1000; /* 1 hours in ms */
+//     var addingHoursInOrderDateTime = date1 + 12 * 3600 * 1000; /* 15 hours in ms */
+
+//     if (date2 > addingHoursInOrderDateTime) {
+//         flag = true;
+//     } else {
+//         flag = false;
+//     }
+//     // console.log("flag>>>>Expire"+orderObject._id+'-'+orderObject.order_date,flag)
+//     return flag;
+// }
+
 exports.getOrderExpire = function (orderObject) {
-    var flag = false;
-    // let order_datetime = new Date(orderObject.createdAt);
-    let order_datetime = new Date(orderObject.order_date);
-    let current_datetime = new Date();
-    let order_day = order_datetime.getDate(); var order_month = order_datetime.getMonth() + 1;
+    let flag = false;
+    const current_datetime = new Date();
+    const order_date = new Date(orderObject.order_date); // order ka date
 
-    if (order_day < 10) { order_day = '0' + order_day }
-    if (order_month < 10) { order_month = '0' + order_month }
+    try {
+        if (orderObject.order_time && orderObject.order_time.includes('-')) {
+            // order_time example: "7:00 AM - 10:00 AM"
+            const timeRange = orderObject.order_time.split('-').map(t => t.trim());
+            const endTimeStr = timeRange[1]; // end time
+            
+            // Parse end time
+            let [time, meridian] = endTimeStr.split(' ');
+            let [hours, minutes] = time.split(':').map(Number);
 
-    // let formatted_order_date = order_datetime.getFullYear()+ "-" + order_month + "-" + order_day + "T" +orderObject.order_time.slice(0, 5) +":00";
-    let formatted_order_date = order_datetime;
-    let formatted_current_date = current_datetime;
+            if (meridian.toUpperCase() === 'PM' && hours !== 12) {
+                hours += 12;
+            } else if (meridian.toUpperCase() === 'AM' && hours === 12) {
+                hours = 0;
+            }
 
-    var date1 = new Date(formatted_order_date).getTime();
-    var date2 = new Date(formatted_current_date).getTime();
-    // var addingHoursInOrderDateTime = date1+ 1*3600*1000; /* 1 hours in ms */
-    var addingHoursInOrderDateTime = date1 + 12 * 3600 * 1000; /* 15 hours in ms */
+            // Set order end datetime
+            let orderEndDateTime = new Date(order_date);
+            orderEndDateTime.setHours(hours, minutes, 0, 0);
 
-    if (date2 > addingHoursInOrderDateTime) {
-        flag = true;
-    } else {
-        flag = false;
+            // Add 3 hours
+            orderEndDateTime = new Date(orderEndDateTime.getTime() + 3 * 3600 * 1000);
+
+            // Compare current datetime
+            if (current_datetime >= orderEndDateTime) {
+                flag = true;
+            }
+        } else {
+            // Fallback: agar order_time missing ya invalid ho to purana 12 hours logic
+            const order_datetime = new Date(orderObject.order_date);
+            const addingHoursInOrderDateTime = order_datetime.getTime() + 12 * 3600 * 1000; // 12 hours
+            if (current_datetime.getTime() > addingHoursInOrderDateTime) {
+                flag = true;
+            }
+        }
+    } catch (err) {
+        // Agar koi parsing error ho to fallback use karenge
+        const order_datetime = new Date(orderObject.order_date);
+        const addingHoursInOrderDateTime = order_datetime.getTime() + 12 * 3600 * 1000; // 12 hours
+        if (current_datetime.getTime() > addingHoursInOrderDateTime) {
+            flag = true;
+        }
     }
-    // console.log("flag>>>>Expire"+orderObject._id+'-'+orderObject.order_date,flag)
+
     return flag;
-}
+};
+
 
 exports.getCalcalutionOfChefAndHelper = function (totalTime) {
     var value = { chef: 0, helper: 0 };

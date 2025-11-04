@@ -14,6 +14,7 @@ const eventInviteSchema = new mongoose.Schema({
     templateId: { type: mongoose.Schema.Types.ObjectId, ref: "eventTemplates" },
     externalTemplateImageKey: { type: String },
     externalTemplateImageUrl: { type: String },
+    googleMapLink: {type: String, default: ''}
 }, {
     strict: false,
     timestamps: true

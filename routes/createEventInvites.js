@@ -216,7 +216,7 @@ const sendResponse = (res, status, error, message, data = null) =>
 
 
 
-// ✅ Combined route: Create event + register host as guest
+// Combined route: Create event + register host as guest
 router.post("/create-event-invite", async (req, res) => {
   try {
     const {
@@ -226,13 +226,12 @@ router.post("/create-event-invite", async (req, res) => {
       eventDate,
       eventTime,
       location,
-      hostImage,
-      templateId,
+      googleMapLink
     } = req.body;
 
     const User = require("../models/user");
 
-    // 🔹 Generate wonderland_id
+    // Generate wonderland_id
     const lastWonderlandId = await EventInvite.findOne()
       .sort({ wonderland_id: -1 })
       .select("wonderland_id");
@@ -242,10 +241,10 @@ router.post("/create-event-invite", async (req, res) => {
         ? Number(lastWonderlandId.wonderland_id) + 1
         : 2206;
 
-    // 🔹 Count user’s existing events
+    // Count user’s existing events
     const existingEventsCount = await EventInvite.countDocuments({ userId });
 
-    // 🔹 If first event, update user name from hostName
+    // If first event, update user name from hostName
     let user = await User.findById(userId);
     if (existingEventsCount === 0 && hostName) {
       if (user) {
@@ -254,7 +253,7 @@ router.post("/create-event-invite", async (req, res) => {
       }
     }
 
-    // 🔹 Create event
+    // Create event
     const eventInvite = new EventInvite({
       userId,
       eventType,
@@ -263,37 +262,19 @@ router.post("/create-event-invite", async (req, res) => {
       eventTime,
       location,
       wonderland_id: Number(nextWonderlandId),
-      templateId,
+      googleMapLink
     });
 
-    // 🔹 Upload host image if provided
-    if (hostImage && isBase64Image(hostImage)) {
-      const { url, key } = await uploadBase64ToS3(
-        hostImage,
-        userId,
-        eventInvite._id.toString()
-      );
-      eventInvite.imageUrl = url;
-      eventInvite.imageKey = key;
-    } else if (hostImage !== null && hostImage !== undefined) {
-      return sendResponse(
-        res,
-        400,
-        true,
-        "Invalid hostImage format. Must be base64 or null"
-      );
-    }
-
-    // 🔹 Save event
+    // Save event
     const savedInvite = await eventInvite.save();
 
-    // 🔹 Check if host already exists as a guest for this event
+    // Check if host already exists as a guest for this event
     const existingGuest = await EventGuest.findOne({
       userId,
       eventId: savedInvite._id,
     });
 
-    // 🔹 Determine which name to use for guest
+    // Determine which name to use for guest
     let guestNameToUse = "";
     if (existingEventsCount === 0 && hostName) {
       // first event → use hostName
@@ -303,7 +284,7 @@ router.post("/create-event-invite", async (req, res) => {
       guestNameToUse = user.name;
     }
 
-    // 🔹 Create guest entry with RSVP = "will Come" if not already exists
+    // Create guest entry with RSVP = "will Come" if not already exists
     let savedGuest = null;
     if (!existingGuest) {
       const guest = new EventGuest({
@@ -316,7 +297,7 @@ router.post("/create-event-invite", async (req, res) => {
       savedGuest = await guest.save();
     }
 
-    // ✅ Final response
+    // Final response
     return sendResponse(res, 201, false, "Event created & host registered as guest", savedInvite);
   } catch (err) {
     console.error("Create Invite+Guest Error:", {
@@ -475,32 +456,30 @@ router.put("/event-invites/:id", async (req, res) => {
   }
 
   try {
-    const { error, value } = eventInviteSchema.validate(req.body, {
-      abortEarly: false,
-    });
+    // const { error, value } = eventInviteSchema.validate(req.body, {
+    //   abortEarly: false,
+    // });
 
-    if (error) {
-      const details = error.details.map((err) => ({
-        path: err.path.join("."),
-        message: err.message,
-      }));
-      return sendResponse(res, 422, true, "Validation failed", details);
-    }
+    // if (error) {
+    //   const details = error.details.map((err) => ({
+    //     path: err.path.join("."),
+    //     message: err.message,
+    //   }));
+    //   return sendResponse(res, 422, true, "Validation failed", details);
+    // }
 
     // Find the existing invite
     const existing = await EventInvite.findById(id);
     if (!existing) return sendResponse(res, 404, true, "Invite not found");
 
     const {
-      userId,
       eventType,
       hostName,
       eventDate,
       eventTime,
       location,
-      hostImage,
-      templateId,
-    } = value;
+      googleMapLink
+    } = req.body;
 
     // Check if this is the first event for the user and hostName is not already set
     const oldestEvent = await EventInvite.findOne({
@@ -517,53 +496,13 @@ router.put("/event-invites/:id", async (req, res) => {
       }
     }
 
-    // If Template ID is provided, then remove external image
-    if (templateId) {
-      // Clear existing image if templateId is provided
-      if (existing.externalTemplateImageKey) {
-        await deleteFromS3(existing.externalTemplateImageKey);
-        existing.externalTemplateImageUrl = null;
-        existing.externalTemplateImageKey = null;
-        existing.templateId = null;
-      }
-    }
-
-    // Handle hostImage
-    if (hostImage !== undefined) {
-      if (isBase64Image(hostImage)) {
-        // Case 1: hostImage is a base64 string
-        if (existing.imageKey) {
-          await deleteFromS3(existing.imageKey);
-        }
-        const { url, key } = await uploadBase64ToS3(hostImage, userId, id);
-        existing.imageUrl = url;
-        existing.imageKey = key;
-      } else if (hostImage === null) {
-        // Case 2: hostImage is null, clear the image
-        if (existing.imageKey) {
-          await deleteFromS3(existing.imageKey);
-          existing.imageUrl = null;
-          existing.imageKey = null;
-        }
-      } else if (isS3Url(hostImage)) {
-        console.log("hostImage is an S3 URL, no update required:", hostImage);
-      } else {
-        return sendResponse(
-          res,
-          400,
-          true,
-          "Invalid hostImage format. Must be base64, null, or a valid S3 URL"
-        );
-      }
-    }
-
     // Update other fields
     if (eventType !== undefined) existing.eventType = eventType;
     if (hostName !== undefined) existing.hostName = hostName;
-    if (eventDate !== undefined) existing.eventDate = new Date(eventDate);
+    if (eventDate !== undefined || '') existing.eventDate = new Date(eventDate);
     if (eventTime !== undefined) existing.eventTime = eventTime;
     if (location !== undefined) existing.location = location;
-    if (templateId !== undefined) existing.templateId = templateId;
+    if (googleMapLink !== undefined) existing.googleMapLink = googleMapLink;
 
     // Save updated document
     const updated = await existing.save();

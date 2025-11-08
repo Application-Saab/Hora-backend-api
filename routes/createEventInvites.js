@@ -428,7 +428,7 @@ router.get("/event-invites/all/:userId", async (req, res) => {
 
     // Filter only valid events (having all required details)
     const isValidEvent = (event) =>
-      event.hostName && event.eventType && event.eventDate && event.eventTime;
+      event.hostName;
 
     const filteredHosted = (hostedEvents || []).filter(isValidEvent);
     const filteredGuest = (asAGuestEvents || []).filter(isValidEvent);
@@ -456,18 +456,6 @@ router.put("/event-invites/:id", async (req, res) => {
   }
 
   try {
-    // const { error, value } = eventInviteSchema.validate(req.body, {
-    //   abortEarly: false,
-    // });
-
-    // if (error) {
-    //   const details = error.details.map((err) => ({
-    //     path: err.path.join("."),
-    //     message: err.message,
-    //   }));
-    //   return sendResponse(res, 422, true, "Validation failed", details);
-    // }
-
     // Find the existing invite
     const existing = await EventInvite.findById(id);
     if (!existing) return sendResponse(res, 404, true, "Invite not found");
@@ -587,7 +575,7 @@ router.get("/event-guest/:eventId/user/:userId", async (req, res) => {
     // Find the guest details by userId and eventId
     const guest = await EventGuest.findOne({ userId, eventId }).lean();
     if (!guest) {
-      return sendResponse(res, 404, false, "User not found", null);
+      return sendResponse(res, 200, false, "User not registered to this event", []);
     }
 
     // Find lucky draw images for the user and event

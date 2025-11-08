@@ -80,7 +80,8 @@ router.post('/otp_generate', async(req, res) => {
             if (otp) {
                 const update = {
                     otp: otp,
-                    device_token: req.body.device_token
+                    device_token: req.body.device_token,
+                    name: req.body.name && req.body.name || user[0].name
                 };
                 const result = await UserModel.findByIdAndUpdate(user[0]._id, { $set: update });
                 request({
@@ -94,7 +95,7 @@ router.post('/otp_generate', async(req, res) => {
         } else {
             const data = new UserModel({
                 email: '',
-                name: '',
+                name: req.body.name && req.body.name,
                 role: req.body.role,
                 password: '',
                 phone: req.body.phone,

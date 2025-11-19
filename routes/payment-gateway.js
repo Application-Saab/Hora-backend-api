@@ -2,10 +2,12 @@ const crypto = require("crypto");
 const request = require("request");
 const express = require("express");
 const router = express.Router();
+const userModel = require("../models/user");
+const orderModel = require("../models/order");
 router.post("/payment", async (req, res) => {
   try {
     let { user_id, price, phone, name, merchantTransactionId } = req.body;
-    if(user_id === '670cafda63f0548f592bf2f2'){
+    if (user_id === "670cafda63f0548f592bf2f2") {
       price = 1; // For testing purpose only
     }
 
@@ -18,7 +20,8 @@ router.post("/payment", async (req, res) => {
     }
     if (!/^\+?\d{10,12}$/.test(phone)) {
       return res.status(400).send({
-        message: "Invalid phone number. Must be 10-12 digits (optionally with +)",
+        message:
+          "Invalid phone number. Must be 10-12 digits (optionally with +)",
         success: false,
       });
     }
@@ -152,6 +155,111 @@ router.post("/status/:txnId", async (req, res) => {
     });
   }
 });
+
+router.post("/razorpay/webhook", async (req, res) => {
+  try {
+    // Verify Razorpay signature (for security)
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    const receivedSignature = req.headers["x-razorpay-signature"];
+    const body = JSON.stringify(req.body);
+
+    const expectedSignature = crypto
+      .createHmac("sha256", webhookSecret)
+      .update(body)
+      .digest("hex");
+
+    if (expectedSignature !== receivedSignature) {
+      console.log("Invalid webhook signature");
+      return res
+        .status(400)
+        .send({ success: false, message: "Invalid signature" });
+    }
+
+    // Get webhook event data
+    const event = req.body.event;
+    const payload =
+      req.body.payload.payment.entity ||
+      req.body.payload.payment_link.entity;
+    console.log("Webhook event received:", event);
+
+    // Handle only relevant events
+    if (event === "payment_link.paid" || event === "payment.captured") {
+      const referenceId =
+        payload.reference_id || payload.notes.merchantTransactionId;
+
+      if (!referenceId) {
+        console.log("Missing referenceId, skipping");
+        return res
+          .status(400)
+          .send({ success: false, message: "Missing referenceId" });
+      }
+
+      // Update your DB (order status)
+      const order = await orderModel.findOne({ _id: referenceId });
+
+      if (!order) {
+        console.log("Order not found for referenceId:", referenceId);
+        return res
+          .status(404)
+          .send({ success: false, message: "Order not found" });
+      }
+
+      if (order.status === 1) {
+        console.log("Order already marked as paid");
+        return res.status(200).send({ success: true, message: "Already paid" });
+      }
+
+      await orderModel.findByIdAndUpdate(order._id, { $set: { status: 1 } });
+
+      console.log("Order updated successfully for:", referenceId);
+
+      // Send notification (optional, same as your existing logic)
+      // try {
+      //   var userSupplierIdsArray = [];
+      //   var userFinder = {
+      //     role: "supplier",
+      //     device_token: { $nin: [null, ""] },
+      //   };
+      //   const userIds = await userModel.find(userFinder);
+      //   const orderLocality = order.order_locality || "";
+      //   const orderType = order.type || "";
+
+      //   let filteredSuppliers = userIds.filter(
+      //     (user) =>
+      //       user.city &&
+      //       user.order_type &&
+      //       user.city == orderLocality &&
+      //       user.order_type == orderType
+      //   );
+
+      //   filteredSuppliers.forEach((element) => {
+      //     userSupplierIdsArray.push(element._id);
+      //     notificationFunction.sendNotifications(
+      //       element.device_token,
+      //       order.fromId,
+      //       "New order",
+      //       "You have a new order!!!",
+      //       "",
+      //       0
+      //     );
+      //   });
+      // } catch (notifyError) {
+      //   console.error("Notification error:", notifyError);
+      // }
+
+      return res
+        .status(200)
+        .send({ success: true, message: "Payment webhook processed" });
+    } else {
+      console.log("Ignored event:", event);
+      return res.status(200).send({ success: true, message: "Event ignored" });
+    }
+  } catch (error) {
+    console.error("Webhook error:", error);
+    return res.status(500).send({ success: false, message: error.message });
+  }
+});
+
 router.post("/payment/v2", async (req, res) => {
   try {
     const { user_id, price, phone, name, merchantTransactionId } = req.body;

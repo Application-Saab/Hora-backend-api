@@ -17,6 +17,10 @@ const {
   generateVideoPreview,
   // compressVideo,
 } = require("../store/multerS3Config");
+const eventPosts = require("../models/event-posts");
+const postLikes = require("../models/post-likes");
+const postComment = require("../models/post-comment");
+const { cleanupLocalFiles } = require("../store/cleanupLocalFiles");
 
 // AWS S3 Configuration
 const s3 = new AWS.S3({
@@ -213,9 +217,6 @@ const sendResponse = (res, status, error, message, data = null) =>
 //   }
 // });
 
-
-
-
 // Combined route: Create event + register host as guest
 router.post("/create-event-invite", async (req, res) => {
   try {
@@ -226,7 +227,7 @@ router.post("/create-event-invite", async (req, res) => {
       eventDate,
       eventTime,
       location,
-      googleMapLink
+      googleMapLink,
     } = req.body;
 
     const User = require("../models/user");
@@ -262,7 +263,7 @@ router.post("/create-event-invite", async (req, res) => {
       eventTime,
       location,
       wonderland_id: Number(nextWonderlandId),
-      googleMapLink
+      googleMapLink,
     });
 
     // Save event
@@ -292,13 +293,19 @@ router.post("/create-event-invite", async (req, res) => {
         eventId: savedInvite._id,
         name: guestNameToUse,
         rsvpStatus: "will Come",
-        isHost: true
+        isHost: true,
       });
       savedGuest = await guest.save();
     }
 
     // Final response
-    return sendResponse(res, 201, false, "Event created & host registered as guest", savedInvite);
+    return sendResponse(
+      res,
+      201,
+      false,
+      "Event created & host registered as guest",
+      savedInvite
+    );
   } catch (err) {
     console.error("Create Invite+Guest Error:", {
       message: err.message,
@@ -308,10 +315,6 @@ router.post("/create-event-invite", async (req, res) => {
     return sendResponse(res, 500, true, "Server error");
   }
 });
-
-
-
-
 
 // Fetch event details by eventId(_id)
 router.get("/event-invites/:id", async (req, res) => {
@@ -402,7 +405,6 @@ router.get("/event-invites/:id", async (req, res) => {
 //   }
 // });
 
-
 // Fetch all event invites for a user as a guest or host
 router.get("/event-invites/all/:userId", async (req, res) => {
   try {
@@ -427,8 +429,7 @@ router.get("/event-invites/all/:userId", async (req, res) => {
     }).lean();
 
     // Filter only valid events (having all required details)
-    const isValidEvent = (event) =>
-      event.hostName;
+    const isValidEvent = (event) => event.hostName;
 
     const filteredHosted = (hostedEvents || []).filter(isValidEvent);
     const filteredGuest = (asAGuestEvents || []).filter(isValidEvent);
@@ -466,7 +467,7 @@ router.put("/event-invites/:id", async (req, res) => {
       eventDate,
       eventTime,
       location,
-      googleMapLink
+      googleMapLink,
     } = req.body;
 
     // Check if this is the first event for the user and hostName is not already set
@@ -487,7 +488,7 @@ router.put("/event-invites/:id", async (req, res) => {
     // Update other fields
     if (eventType !== undefined) existing.eventType = eventType;
     if (hostName !== undefined) existing.hostName = hostName;
-    if (eventDate !== undefined || '') existing.eventDate = new Date(eventDate);
+    if (eventDate !== undefined || "") existing.eventDate = new Date(eventDate);
     if (eventTime !== undefined) existing.eventTime = eventTime;
     if (location !== undefined) existing.location = location;
     if (googleMapLink !== undefined) existing.googleMapLink = googleMapLink;
@@ -575,7 +576,13 @@ router.get("/event-guest/:eventId/user/:userId", async (req, res) => {
     // Find the guest details by userId and eventId
     const guest = await EventGuest.findOne({ userId, eventId }).lean();
     if (!guest) {
-      return sendResponse(res, 200, false, "User not registered to this event", []);
+      return sendResponse(
+        res,
+        200,
+        false,
+        "User not registered to this event",
+        []
+      );
     }
 
     // Find lucky draw images for the user and event
@@ -961,7 +968,7 @@ router.put(
         ),
       ]);
 
-            // ✅ Cleanup local files
+      // ✅ Cleanup local files
       try {
         const deleteFiles = [];
 
@@ -1429,7 +1436,7 @@ router.put(
         imageKey: newImage.selfUploadedImageKey,
         webpUrl: newImage.selfUploadedThumbnailUrl,
         webpKey: newImage.selfUploadedThumbnailKey,
-        imageType: 'selfUploaded',
+        imageType: "selfUploaded",
         createdAt: newImage.createdAt,
       };
 
@@ -1447,6 +1454,401 @@ router.put(
     }
   }
 );
+
+
+
+router.post("/get-presigned-url", async (req, res) => {
+  try {
+    const { fileName, fileType, folder, userId, eventId } = req.body;
+    if (!fileName || !fileType) return res.status(400).json({ message: "Missing file data" });
+
+    const key = `${folder}/${userId}/${eventId}/${Date.now()}-${fileName}`;
+
+    const params = {
+      Bucket: process.env.S3_BUCKET_NAME,
+      Key: key,
+      ContentType: fileType,
+      Expires: 300,
+    };
+
+    const uploadURL = await s3.getSignedUrlPromise("putObject", params);
+    res.json({ uploadURL, key });
+  } catch (err) {
+    console.error("Presign error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Create A Post Route for all type of posts
+// router.put(
+//   "/event-posts/:eventId",
+//   (req, res, next) => {
+//     uploadSingle(req, res, (err) => {
+//       if (err) return sendResponse(res, 400, true, err.message);
+//       next();
+//     });
+//   },
+//   async (req, res) => {
+//     try {
+//       const { eventId } = req.params;
+//       const { postById, postByName, postType, badgeId, taggedUserIds } =
+//         req.body;
+//       const file = req.file;
+
+//       // Basic validations
+//       if (!mongoose.Types.ObjectId.isValid(eventId))
+//         return sendResponse(res, 400, true, "Invalid event ID");
+//       if (!postById || !mongoose.Types.ObjectId.isValid(postById))
+//         return sendResponse(res, 400, true, "Invalid postById");
+//       if (!postByName)
+//         return sendResponse(res, 400, true, "postByName is required");
+//       if (!file) return sendResponse(res, 400, true, "Image file is required");
+//       if (
+//         !["selfUploaded", "thankYouNote", "postBadge", "luckyDraw"].includes(
+//           postType
+//         )
+//       )
+//         return sendResponse(res, 400, true, "Invalid postType");
+
+//       // File processing
+//       const fileExt = file.originalname.split(".").pop();
+//       const fileName = `${postType}-${Date.now()}-${Math.round(
+//         Math.random() * 1e9
+//       )}.${fileExt}`;
+//       const folder = postType;
+//       let thumbnailFileName = null;
+//       let thumbnailPath = null;
+
+//       // Generate thumbnail or video preview
+//       if (file.mimetype.startsWith("image/")) {
+//         thumbnailFileName = `thumb_${fileName.replace(/\.[^.]+$/, "")}.webp`;
+//         thumbnailPath = file.path.replace(/\.[^.]+$/, "") + "_thumbnail.webp";
+//         await generateThumbnail(file.path, thumbnailPath);
+//       } else if (file.mimetype.startsWith("video/")) {
+//         thumbnailFileName = `thumb_${fileName.replace(/\.[^.]+$/, ".mp4")}`;
+//         thumbnailPath = file.path.replace(/\.[^.]+$/, "_thumbnail.mp4");
+//         await generateVideoPreview(file.path, thumbnailPath, 4, 0);
+//       }
+
+//       // LuckyDraw ticketNumber handling
+//       let ticketNumber = null;
+//       if (postType === "luckyDraw") {
+//         const counter = await TicketCounter.findOneAndUpdate(
+//           { _id: "luckyDrawCounter" },
+//           { $inc: { sequenceValue: 1 } },
+//           { new: true, upsert: true }
+//         ).lean();
+//         ticketNumber = counter.sequenceValue.toString();
+//       }
+
+//       // Upload main file + thumbnail to S3
+//       const [uploadResult, thumbnailUploadResult] = await Promise.all([
+//         uploadImageToS3(
+//           file.path,
+//           fileName,
+//           postById,
+//           eventId,
+//           file.mimetype,
+//           folder
+//         ),
+//         thumbnailPath
+//           ? uploadImageToS3(
+//               thumbnailPath,
+//               thumbnailFileName,
+//               postById,
+//               eventId,
+//               file.mimetype.startsWith("video/") ? "video/mp4" : "image/webp",
+//               folder
+//             )
+//           : Promise.resolve({ Location: null, Key: null }),
+//       ]);
+
+//       // Cleanup local files
+//       // try {
+//       //   const cleanupFiles = [file.path];
+//       //   if (thumbnailPath) cleanupFiles.push(thumbnailPath);
+//       //   await Promise.all(cleanupFiles.map((f) => fs.unlink(f)));
+//       // } catch (cleanupErr) {
+//       //   console.error("Cleanup error:", cleanupErr.message);
+//       // }
+
+//       await cleanupLocalFiles([
+//         file?.path,
+//         thumbnailPath,
+//         // req.compressedPath
+//       ]);
+
+//       // Prepare new post object
+//       const newPost = new eventPosts({
+//         eventId,
+//         postById,
+//         postByName,
+//         postType,
+//         postUrl: uploadResult.Location,
+//         postKey: uploadResult.Key,
+//         postWebpUrl: thumbnailUploadResult.Location,
+//         postWebpKey: thumbnailUploadResult.Key,
+//         ...(postType === "luckyDraw" && { ticketNumber }),
+//         ...(postType === "postBadge" && {
+//           badgeId,
+//           taggedUserIds: Array.isArray(taggedUserIds)
+//             ? taggedUserIds
+//             : taggedUserIds
+//             ? [taggedUserIds]
+//             : [],
+//         }),
+//       });
+
+//       await newPost.save();
+
+//       // Response object
+//       const responseData = {
+//         _id: newPost._id,
+//         eventId: newPost.eventId,
+//         postById: newPost.postById,
+//         postByName: newPost.postByName,
+//         imageUrl: newPost.postUrl,
+//         webpUrl: newPost.postWebpUrl,
+//         postType: newPost.postType,
+//         ...(ticketNumber && { ticketNumber }),
+//         ...(badgeId && { badgeId }),
+//         createdAt: newPost.createdAt,
+//       };
+
+//       return sendResponse(
+//         res,
+//         200,
+//         false,
+//         "Post uploaded successfully",
+//         responseData
+//       );
+//     } catch (err) {
+//       console.error("Upload Post Error:", err);
+//       return sendResponse(res, 500, true, "Server error");
+//     }
+//   }
+// );
+
+
+
+// Create A Post Route for already-uploaded S3 media
+router.post("/event-posts/:eventId", async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const {
+      postById,
+      postByName,
+      postType,
+      badgeId,
+      taggedUserIds,
+      postUrl,
+      postKey,
+      postWebpUrl,
+      postWebpKey,
+    } = req.body;
+
+    // Basic validations
+    if (!mongoose.Types.ObjectId.isValid(eventId))
+      return sendResponse(res, 400, true, "Invalid event ID");
+    if (!postById || !mongoose.Types.ObjectId.isValid(postById))
+      return sendResponse(res, 400, true, "Invalid postById");
+    if (!postByName)
+      return sendResponse(res, 400, true, "postByName is required");
+    if (!postUrl || !postKey)
+      return sendResponse(
+        res,
+        400,
+        true,
+        "postUrl and postKey are required"
+      );
+    if (
+      !["selfUploaded", "thankYouNote", "postBadge", "luckyDraw"].includes(
+        postType
+      )
+    )
+      return sendResponse(res, 400, true, "Invalid postType");
+
+    // LuckyDraw ticketNumber handling
+    let ticketNumber = null;
+    if (postType === "luckyDraw") {
+      const counter = await TicketCounter.findOneAndUpdate(
+        { _id: "luckyDrawCounter" },
+        { $inc: { sequenceValue: 1 } },
+        { new: true, upsert: true }
+      ).lean();
+      ticketNumber = counter.sequenceValue.toString();
+    }
+
+    // Prepare new Post object
+    const newPost = new eventPosts({
+      eventId,
+      postById,
+      postByName,
+      postType,
+      postUrl,
+      postKey,
+      postWebpUrl,
+      postWebpKey,
+      ...(postType === "luckyDraw" && { ticketNumber }),
+      ...(postType === "postBadge" && {
+        badgeId,
+        taggedUserIds: Array.isArray(taggedUserIds)
+          ? taggedUserIds
+          : taggedUserIds
+          ? [taggedUserIds]
+          : [],
+      }),
+    });
+
+    await newPost.save();
+
+    // Response object
+    const responseData = {
+      _id: newPost._id,
+      eventId: newPost.eventId,
+      postById: newPost.postById,
+      postByName: newPost.postByName,
+      postUrl: newPost.postUrl,
+      postWebpUrl: newPost.postWebpUrl,
+      postType: newPost.postType,
+      ...(ticketNumber && { ticketNumber }),
+      ...(badgeId && { badgeId }),
+      createdAt: newPost.createdAt,
+    };
+
+    return sendResponse(
+      res,
+      200,
+      false,
+      "Post uploaded successfully",
+      responseData
+    );
+  } catch (err) {
+    console.error("Upload Post Error:", err);
+    return sendResponse(res, 500, true, "Server error");
+  }
+});
+
+// Get all posts for an event
+router.get("/event-posts/:eventId", async (req, res) => {
+  try {
+    const { eventId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(eventId)) {
+      return sendResponse(res, 400, true, "Invalid event ID");
+    }
+
+    const posts = await eventPosts
+      .find({ eventId })
+      .sort({ createdAt: -1 }) // latest first
+      .lean();
+
+    return sendResponse(
+      res,
+      200,
+      false,
+      "Posts fetched successfully",
+      posts
+    );
+  } catch (err) {
+    console.error("Get Posts Error:", err);
+    return sendResponse(res, 500, true, "Server error");
+  }
+});
+
+
+router.post("/:postId/like", async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const { likedById, likedByName } = req.body;
+
+    if (!likedById || !likedByName) {
+      return res
+        .status(400)
+        .json({ message: "likedById and likedByName are required" });
+    }
+
+    const post = await eventPosts.findById(postId);
+    if (!post) {
+      return res.status(404).json({ message: "Post not found" });
+    }
+
+    const existingLike = await postLikes.findOne({ postId, likedById });
+
+    if (existingLike) {
+      // 👉 Already liked → Unlike it
+      await postLikes.findByIdAndDelete(existingLike._id);
+
+      // Decrement like count safely
+      post.likeCounts = Math.max(0, (post.likeCounts || 0) - 1);
+      await post.save();
+
+      return res.status(200).json({
+        message: "Post unliked successfully",
+        action: "unliked",
+        likeCounts: post.likeCounts,
+      });
+    } else {
+      // 👉 Not liked → Add new like
+      const newLike = new postLikes({ postId, likedById, likedByName });
+      await newLike.save();
+
+      // Increment like count
+      post.likeCounts = (post.likeCounts || 0) + 1;
+      await post.save();
+
+      return res.status(201).json({
+        message: "Post liked successfully",
+        action: "liked",
+        likeCounts: post.likeCounts,
+        like: newLike,
+      });
+    }
+  } catch (error) {
+    console.error("Error toggling like:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.post("/:postId/comment", async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const { commentedById, commentedByName, commentTitle } = req.body;
+
+    if (!commentedById || !commentedByName || !commentTitle) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+
+    // ✅ Check if post exists
+    const post = await eventPosts.findById(postId);
+    if (!post) {
+      return res.status(404).json({ message: "Post not found" });
+    }
+
+    // ✅ Create new comment
+    const newComment = new postComment({
+      postId,
+      commentedById,
+      commentedByName,
+      commentTitle,
+    });
+
+    await newComment.save();
+
+    // Increment comment count
+    post.commentCounts = (post.commentCounts || 0) + 1;
+    await post.save();
+
+    res.status(201).json({
+      message: "Comment added successfully",
+      comment: newComment,
+      commentCounts: post.commentCounts,
+    });
+  } catch (error) {
+    console.error("Error adding comment:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 
 // Function to delete image from S3
 const deleteImageFromS3 = async (key) => {

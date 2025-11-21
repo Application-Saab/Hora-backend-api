@@ -468,7 +468,7 @@ async function deleteFromS3(key) {
 // Upload Template (only previewImage)
 router.post(
   "/upload-template",
-  upload.single("previewImage"), // Single preview image only
+  upload.single("previewImage"),
   async (req, res) => {
     try {
       const { category, ...configs } = req.body;
@@ -608,7 +608,7 @@ router.get("/templates", async (req, res) => {
   try {
     const templates = await TemplateMaster.find(
       {},
-      "_id webpUrl isDisabled category configs"
+      "_id webpUrl isDisabled category configs templateSize"
     ).sort({ createdAt: -1 });
     res.status(200).json({ templates });
   } catch (error) {

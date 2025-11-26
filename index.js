@@ -120,6 +120,7 @@ database.once("connected", () => {
 const AdminRoutes = require("./routes/admin");
 const UserRoutes = require("./routes/user");
 const EventInviteRoutes = require("./routes/createEventInvites");
+const EventBadgeRoutes = require("./routes/event-badge");
 const ConfigurationRoutes = require("./routes/configuration");
 const IngredientRoutes = require("./routes/ingredient");
 const ingredientTypeRoutes = require("./routes/ingredientType");
@@ -159,6 +160,7 @@ app.use("/api/decoration", DecorationRoutes);
 app.use("/api/photography", PhotographyRoutes);
 app.use("/api/photo", PhotoRoutes);
 app.use("/api/photo/drive", DriveImportRoute);
+app.use("/api/wonderland/badge", EventBadgeRoutes);
 
 const notificationFunction = require("./store/notifications");
 const UserModel = require("./models/user");

@@ -13,8 +13,7 @@ const cron = require('node-cron');
 // Database Connection Start
 mongoose.set("strictQuery", true);
 mongoose.connect(
-  `mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASS}@${process.env.MONGO_CLUSTER}/${process.env.MONGO_DATABASE}?retryWrites=true&w=majority`,
-  { useNewUrlParser: true, useUnifiedTopology: true }
+  `mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASS}@${process.env.MONGO_CLUSTER}/${process.env.MONGO_DATABASE}?retryWrites=true&w=majority`
 );
 const database = mongoose.connection;
 // Database Connection End
@@ -23,7 +22,7 @@ const database = mongoose.connection;
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+// app.use(express.json());
 app.use(bodyParser.json({ limit: "50mb" }));
 app.use(
   bodyParser.urlencoded({
@@ -104,10 +103,10 @@ cron.schedule('0 0 * * 0', () => {
   commonFunction.updateDecorationPopularity()
 });
 
-setTimeout(async()=>{
-  console.log("Updating scores")
-  await commonFunction.updateDecorationPopularity()
-},10000)
+// setTimeout(async()=>{
+//   console.log("Updating scores")
+//   await commonFunction.updateDecorationPopularity()
+// },10000)
 
 database.on("error", (error) => {
   console.log(error);
@@ -358,9 +357,18 @@ app.get('/test-s3', async (req, res) => {
 
 
 // Not Found Error
-app.use(function (req, res) {
+// app.use(function (req, res) {
+//   res.status(404).json({ message: "Api Not Exits In Server.", error: true });
+// });
+
+app.use((req, res, next) => {
+  if (req.path.startsWith("/socket.io")) {
+    return next(); // let socket.io handle it
+  }
+
   res.status(404).json({ message: "Api Not Exits In Server.", error: true });
 });
+
 
 // error handler
 app.use(function (err, req, res, next) {

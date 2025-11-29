@@ -18,7 +18,7 @@ const multer = require('multer');
 const fs = require("fs");
 const AWS = require("aws-sdk");
 const cache = new NodeCache({ stdTTL: 60 * 10 }); // Cache TTL: 5 minutes
-
+const axios = require("axios");
 
 router.post('/otp_generate_backup', async(req, res) => {
     const { phone } = req.body;
@@ -62,8 +62,9 @@ router.post('/otp_generate_backup', async(req, res) => {
     }
 })
 
-router.post('/otp_generate', async(req, res) => {
+router.post('/otp_generate', async (req, res) => {
     const { phone } = req.body;
+
     if (!phone) {
         return res.json({
             error: true,
@@ -73,26 +74,32 @@ router.post('/otp_generate', async(req, res) => {
             ]
         });
     }
+
     try {
         const user = await UserModel.find({ phone: req.body.phone });
         const otp = commonFunction.OTP();
+
         if (user.length > 0) {
+
             if (otp) {
                 const update = {
                     otp: otp,
                     device_token: req.body.device_token,
                     name: req.body.name && req.body.name || user[0].name
                 };
+
                 const result = await UserModel.findByIdAndUpdate(user[0]._id, { $set: update });
-                request({
-                    url: 'https://www.fast2sms.com/dev/bulkV2?authorization=' + process.env.FAST2SMS_API_KEY + '&message=182194&variables_values=' + otp + '&route=dlt&numbers=' + req.body.phone + '&sender_id=HORASR',
-                    method: 'GET',
-                }, async(response, error) => {
-                    console.log("error>>>>>>>>>>>111111111", error);
-                })
-                return res.json({ error: false, status: 200, otp: otp, message: 'Otp Send Successfully' })
+
+                // ⚡ request → axios (same URL, same logic)
+                await axios.get(
+                    `https://www.fast2sms.com/dev/bulkV2?authorization=${process.env.FAST2SMS_API_KEY}&message=182194&variables_values=${otp}&route=dlt&numbers=${req.body.phone}&sender_id=HORASR`
+                ).catch((err) => console.log("SMS Error:", err?.message));
+
+                return res.json({ error: false, status: 200, otp: otp, message: 'Otp Send Successfully' });
             }
+
         } else {
+
             const data = new UserModel({
                 email: '',
                 name: req.body.name && req.body.name,
@@ -122,23 +129,26 @@ router.post('/otp_generate', async(req, res) => {
                 userCuisioness: [],
                 userAppliance: [],
                 description: '',
-                is_veg:true,
-                isPersonalStatus : 0,
-                isProfessionStatus  : 0,
-            })
-            request({
-                url: 'https://www.fast2sms.com/dev/bulkV2?authorization=' + process.env.FAST2SMS_API_KEY + '&variables_values=' + otp + '&route=otp&numbers=' + req.body.phone,
-                method: 'GET',
-            }, async(response, error) => {
-                console.log("error>>>>>>>>>>>22222222222222", error);
-            })
-            const dataToSave = await data.save();
-            return res.json({ error: false, status: 200, otp: otp, message: 'Otp Send Successfully' })
+                is_veg: true,
+                isPersonalStatus: 0,
+                isProfessionStatus: 0,
+            });
+
+            // ⚡ request → axios (same URL)
+            await axios.get(
+                `https://www.fast2sms.com/dev/bulkV2?authorization=${process.env.FAST2SMS_API_KEY}&variables_values=${otp}&route=otp&numbers=${req.body.phone}`
+            ).catch((err) => console.log("SMS Error:", err?.message));
+
+            await data.save();
+
+            return res.json({ error: false, status: 200, otp: otp, message: 'Otp Send Successfully' });
         }
+
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        res.status(400).json({ message: error.message, error: true });
     }
-})
+});
+
 
 router.post('/otp_verify', async(req, res) => {
     const { phone, otp, role } = req.body;

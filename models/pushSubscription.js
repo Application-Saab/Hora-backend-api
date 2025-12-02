@@ -1,4 +1,3 @@
-// models/PushSubscription.js
 const mongoose = require('mongoose');
 const pushSubSchema = new mongoose.Schema({
   userId: { type: mongoose.Types.ObjectId, ref: 'User', required: true },

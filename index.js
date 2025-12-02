@@ -103,10 +103,10 @@ cron.schedule('0 0 * * 0', () => {
   commonFunction.updateDecorationPopularity()
 });
 
-// setTimeout(async()=>{
-//   console.log("Updating scores")
-//   await commonFunction.updateDecorationPopularity()
-// },10000)
+setTimeout(async()=>{
+  console.log("Updating scores")
+  await commonFunction.updateDecorationPopularity()
+},10000)
 
 database.on("error", (error) => {
   console.log(error);
@@ -141,7 +141,7 @@ let passportAuth = require("./store/passportAuth").passportAuth;
 
 app.use("/api/admin", AdminRoutes);
 app.use("/api/user", UserRoutes);
-app.use("/api/customer/event", passportAuth, EventInviteRoutes);
+app.use("/api/customer/event", EventInviteRoutes);
 app.use("/api/users", passportAuth, UserRoutes);
 app.use("/api/configuration", ConfigurationRoutes);
 app.use("/api/ingredient", IngredientRoutes);

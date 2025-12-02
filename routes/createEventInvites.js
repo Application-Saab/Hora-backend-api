@@ -22,6 +22,7 @@ const postLikes = require("../models/post-likes");
 const postComment = require("../models/post-comment");
 const ChatRoom = require("../models/eventChatRoom");
 const ChatMessage = require("../models/eventMessage");
+const PushSub = require('../models/pushSubscription');
 const { cleanupLocalFiles } = require("../store/cleanupLocalFiles");
 
 // AWS S3 Configuration
@@ -155,7 +156,7 @@ router.post("/create-event-invite", async (req, res) => {
       roomId: savedInvite._id,
       roomName: hostName,
       createdBy: userId,
-      members: [userId], // ← ADD HOST AS FIRST MEMBER
+      members: [userId], // ADD HOST AS FIRST MEMBER
     });
 
     await newRoom.save();
@@ -603,8 +604,9 @@ router.post("/mark-read", async (req, res) => {
   try {
     const { roomId, userId } = req.body;
 
-    const room = await ChatRoom.findOne({_id : roomId});
-    if (!room) return res.status(404).json({ error: true, message: "Room not found" });
+    const room = await ChatRoom.findOne({ _id: roomId });
+    if (!room)
+      return res.status(404).json({ error: true, message: "Room not found" });
 
     room.lastReadAt.set(userId, new Date());
     await room.save();
@@ -616,6 +618,35 @@ router.post("/mark-read", async (req, res) => {
   }
 });
 
+router.post("/subscribe", async (req, res) => {
+  try {
+    const { userId, roomId, subscription } = req.body;
+    if (!subscription || !userId)
+      return res.status(400).json({ error: true, message: "missing" });
+
+    // optionally dedupe by endpoint
+    await PushSub.updateOne(
+      { "subscription.endpoint": subscription.endpoint },
+      { $set: { userId, roomId: roomId || null, subscription } },
+      { upsert: true }
+    );
+    return res.json({ error: false });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: true });
+  }
+});
+
+router.post("/unsubscribe", async (req, res) => {
+  try {
+    const { endpoint } = req.body;
+    if (!endpoint) return res.status(400).json({ error: true });
+    await PushSub.deleteOne({ "subscription.endpoint": endpoint });
+    return res.json({ error: false });
+  } catch (err) {
+    return res.status(500).json({ error: true });
+  }
+});
 
 // Temporary storage for uploaded files
 const storage = multer.diskStorage({

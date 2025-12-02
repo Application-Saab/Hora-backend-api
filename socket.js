@@ -78,7 +78,15 @@ function initSocket(server) {
 
     socket.on("message:send", async (data) => {
       try {
-        const { roomId, message, type, tempId, mediaUrl } = data;
+        const {
+          roomId,
+          message,
+          type,
+          tempId,
+          mediaUrl,
+          senderPhone,
+          senderName,
+        } = data;
 
         // 1) SAVE MESSAGE
         const saved = await EventMessage.create({
@@ -87,6 +95,8 @@ function initSocket(server) {
           message,
           type: type || "text",
           mediaUrl: mediaUrl || "",
+          senderPhone,
+          senderName,
         });
 
         const finalMsg = {
@@ -116,7 +126,7 @@ function initSocket(server) {
 
         sendPushToRoom(roomId, message, {
           roomName: "test room name",
-          title: "New message from backend",
+          // title: "",
           body: message,
           data: { messageId: saved._id, senderId: socket.userId },
         });

@@ -2,7 +2,8 @@ const mongoose = require("mongoose");
 
 const chatRoomSchema = new mongoose.Schema(
   {
-    roomId: { type: mongoose.Schema.Types.ObjectId, ref: "EventInvite" }, // eventId
+    roomId: { type: mongoose.Schema.Types.ObjectId, ref: "EventInvite" },
+    roomProfileUrl: { type: String, default: "" },
     roomName: { type: String, required: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     members: [

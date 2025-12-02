@@ -25,6 +25,14 @@ const eventMessageSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    senderPhone: {
+      type: String,
+      required: true,
+    },
+    senderName: {
+      type: String,
+      required: true,
+    },
   },
   { timestamps: true }
 );

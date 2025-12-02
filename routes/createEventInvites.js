@@ -550,7 +550,7 @@ router.get("/chatrooms/user/:userId", async (req, res) => {
     }
 
     const rooms = await ChatRoom.find({ members: userId })
-      .select("roomId roomName members createdAt")
+      .select("roomId roomName members createdAt roomProfileUrl")
       .lean();
 
     return sendResponse(res, 200, false, "Rooms fetched successfully", rooms);

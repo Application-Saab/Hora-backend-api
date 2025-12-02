@@ -16,6 +16,7 @@ const photographyModel = require('../models/photography')
 var _ = require('lodash');
 const AddressModel = require('../models/address');
 
+//not used in admin
 router.post('/add_backup1', async(req, res) => {
     const otp = commonFunction.OTP();
     const totalorder = await orderModel.find({});
@@ -58,7 +59,7 @@ router.post('/add_backup1', async(req, res) => {
         res.status(400).json({ message: error.message, error: true })
     }
 })
-
+//not used in admin
 router.post('/add/v2', async(req, res) => {
     const totalorder = await orderModel.find({});
     const otp = commonFunction.OTP();
@@ -160,7 +161,7 @@ router.post('/add/v2', async(req, res) => {
         res.status(400).json({ message: error.message, error: true })
     }
 })
-
+//not used in admin
 router.post('/add/v3', async(req, res) => {
     const totalorder = await orderModel.find({});
     const otp = commonFunction.OTP();
@@ -253,7 +254,7 @@ router.post('/add/v3', async(req, res) => {
         res.status(400).json({ message: error.message, error: true })
     }
 })
-
+//not used in admin
 router.post('/add_backup', async(req, res) => {
     const totalorder = await orderModel.find({});
     const otp = commonFunction.OTP();
@@ -356,185 +357,149 @@ router.post('/add_backup', async(req, res) => {
         res.status(400).json({ message: error.message, error: true })
     }
 })
+//fixed
+router.post('/add', async (req, res) => {
+    try {
+        // Get last order_id
+        const lastOrder = await orderModel.findOne().sort({ order_id: -1 }).select('order_id');
+        const nextOrderId = lastOrder ? lastOrder.order_id + 1 : 1;
 
-router.post('/add', async(req, res) => {
-    const lastOrder = await orderModel.findOne().sort({ order_id: -1 }).select('order_id');
-    const nextOrderId = lastOrder ? lastOrder.order_id + 1 : 1;
-    const otp = commonFunction.OTP();
-    const data = new orderModel({
-        order_date: req.body.order_date,
-        order_time: req.body.order_time,
-        no_of_people: req.body.no_of_people,
-        no_of_burner: req.body.no_of_burner,
-        type: req.body.type,
-        order_type: req.body.order_type,
-        items: req.body.items,
-        total_amount: req.body.total_amount,
-        is_gst: req.body.is_gst,
-        is_discount: req.body.is_discount,
-        payable_amount: req.body.payable_amount,
-        addressId: req.body.addressId,
-        fromId: req.body.fromId,
-        toId: req.body.toId,
-        orderApplianceIds: req.body.orderApplianceIds,
-        categoryIds: req.body.categoryIds,
-        otp: otp,
-        order_id: Number(nextOrderId),
-        order_locality: req.body.order_locality,
-        order_pincode: req.body.order_pincode,
-        decoration_comments:req.body.decoration_comments,
-	status:req.body.status,
-	add_on:req.body.add_on,
-	advance_amount:req.body.advance_amount,
-	balance_amount:req.body.balance_amount,
-        vendor_amount:req.body.vendor_amount,
-	phone_no:req.body.phone_no,
-	online_phone_no:req.body.online_phone_no,
-	order_taken_by:req.body.order_taken_by,
-    eventName:req.body.eventName,
-    })
-    if(req.body.items.length>0){
-        let hasKey = req.body.items[0].hasOwnProperty('item_id');
-        if(hasKey){
-            req.body.items.forEach(element => {
-                data.selecteditems.push(element.item_id)
-            });
-        }else{
-            req.body.items.forEach(element => {
-                data.selecteditems.push(element)
+        const otp = commonFunction.OTP();
+
+        // Create new order
+        const data = new orderModel({
+            order_date: req.body.order_date,
+            order_time: req.body.order_time,
+            no_of_people: req.body.no_of_people,
+            no_of_burner: req.body.no_of_burner,
+            type: req.body.type,
+            order_type: req.body.order_type,
+            items: req.body.items,
+            total_amount: req.body.total_amount,
+            is_gst: req.body.is_gst,
+            is_discount: req.body.is_discount,
+            payable_amount: req.body.payable_amount,
+            addressId: req.body.addressId,
+            fromId: req.body.fromId,
+            toId: req.body.toId,
+            orderApplianceIds: req.body.orderApplianceIds,
+            categoryIds: req.body.categoryIds,
+            otp: otp,
+            order_id: Number(nextOrderId),
+            order_locality: req.body.order_locality,
+            order_pincode: req.body.order_pincode,
+            decoration_comments: req.body.decoration_comments,
+            status: req.body.status,
+            add_on: req.body.add_on,
+            advance_amount: req.body.advance_amount,
+            balance_amount: req.body.balance_amount,
+            vendor_amount: req.body.vendor_amount,
+            phone_no: req.body.phone_no,
+            online_phone_no: req.body.online_phone_no,
+            order_taken_by: req.body.order_taken_by,
+            eventName: req.body.eventName,
+        });
+
+        // Populate selecteditems
+        if (req.body.items.length > 0) {
+            const hasKey = req.body.items[0].hasOwnProperty('item_id');
+            if (hasKey) {
+                req.body.items.forEach(element => {
+                    data.selecteditems.push(element.item_id);
+                });
+            } else {
+                req.body.items.forEach(element => {
+                    data.selecteditems.push(element);
+                });
+            }
+        }
+
+        // Find suppliers and send notifications
+        var userSupplierIdsArray = [];
+        var userFinder = { role: 'supplier', device_token: { "$nin": [null, ""] } };
+        const userIds = await userModel.find(userFinder);
+
+        const orderLocality = req.body.order_locality || '';
+        const orderType = req.body.type || '';
+        const orderStatus = req.body.status;
+
+        if (orderStatus == 1) {
+            const filteredSuppliers = userIds.filter(user =>
+                user.city &&
+                user.order_type &&
+                user.city === orderLocality &&
+                user.order_type === orderType
+            );
+
+            filteredSuppliers.forEach(element => {
+                userSupplierIdsArray.push(element._id);
+                notificationFunction.sendNotifications(
+                    element.device_token,
+                    req.body.fromId,
+                    'New order',
+                    'You have a new order!!!',
+                    '',
+                    0
+                );
             });
         }
-    }
-    try {
-        //var userArray=[];
-        //var userSupplierIdsArray=[];
-        //const orderAddress = await AddressModel.find({_id:req.body.addressId});
-        //var userFinder = {  role:'supplier',device_token :{ "$nin": [ null, "" ] }  };
-        //const userIds= await userModel.find(userFinder).populate('userServedLocalities');
-        //console.log("Token User Token>>>",userIds.length)
-        //if(orderAddress.length>0){
-        //    userIds.forEach(element => {
-        //        var obj=[];
-        //        if(element.userServedLocalities && element.userServedLocalities.length>0){
-        //            element.userServedLocalities.forEach(location => {
-                       // obj.push(Number(commonFunction.getDistanceFromLatLonInKm(orderAddress[0].lat,orderAddress[0].lng,location.lat,location.lng)//.toFixed(2)))
-        //            });
-        //            userArray.push({_id:element._id,name:element.name,locationDistance:obj,device_token:element.device_token})
-        //        }
-        //    });
-        //    if(userArray.length>0){
-        //        console.log("userArray>>>>",JSON.stringify(userArray))
-        //        let filteredArray = userArray.filter((element_recp) => { return element_recp.locationDistance.some((subElement) => subElement <= 10) });
-        //       console.log("filteredArray>>>>>",filteredArray)
-        //        if(filteredArray.length>0){
-        //            filteredArray.forEach(element => {
-        //                userSupplierIdsArray.push(element._id)
-        //                notificationFunction.sendNotifications(element.device_token,req.body.fromId,'New order','You have a new order!!!','',0)
-        //            });
-        //        }
-        //    }
-        //}
 
-               var userSupplierIdsArray = [];
-               // Find all suppliers with device_token not null/empty
-               var userFinder = { role: 'supplier', device_token: { "$nin": [null, ""] } };
-               console.log("Finding suppliers with finder:", userFinder);
-               const userIds = await userModel.find(userFinder);
-               console.log("Total suppliers found with device_token:", userIds.length);
-
-               // Get the order's locality, type, and status
-               const orderLocality = req.body.order_locality || '';
-               const orderType = req.body.type || '';
-               const orderStatus = req.body.status;
-
-               console.log("Order locality:", orderLocality, "Order type:", orderType, "Order status:", orderStatus);
-
-               // Only send notifications to suppliers where:
-               // order.order_locality == user.city
-               // order.type == user.order_type
-               // order.status == 1
-               if (orderStatus == 1) {
-                   let filteredSuppliers = userIds.filter(user => {
-                       // user.city and user.order_type must exist
-                       return (
-                           user.city &&
-                           user.order_type &&
-                           user.city == orderLocality &&
-                           user.order_type == orderType
-                       );
-                   });
-
-                   console.log("Filtered suppliers matching locality and type:", filteredSuppliers.length);
-
-                   if (filteredSuppliers.length > 0) {
-                       filteredSuppliers.forEach(element => {
-                           userSupplierIdsArray.push(element._id);
-                           console.log(`Sending notification to supplier: ${element._id}, device_token: ${element.device_token}`);
-                           notificationFunction.sendNotifications(
-                               element.device_token,
-                               req.body.fromId,
-                               'New order',
-                               'You have a new order!!!',
-                               '',
-                               0
-                           );
-                       });
-                   } else {
-                       console.log("No suppliers matched the locality and type for notification.");
-                   }
-               } else {
-                   console.log("Order status is not 1, no notifications sent to suppliers.");
-               }
-
+        // Calculate chef and helper
         let dishfinder = { status: 1 };
-        var index = 0;
         let noOfChefHelper = 0;
-        async.eachSeries(data.selecteditems, function (dish_elements, loop4){
-            let responseobject={};
-            dishfinder[`_id`]={ '$in': [ String(dish_elements) ] }
-            responseobject.mealObject=dish_elements;
-            (async () => {
-                await dishModel.find(dishfinder).exec(function(err, dishResponse) {
-                    if(dishResponse.length>0){
-                        noOfChefHelper=noOfChefHelper+Number(dishResponse[0].cooking_min);
-                    }
-                    loop4();
-                    index = index + 1;
-                });
-            })();
-            
-        }, async(errSelPro) => {
-            if(errSelPro){
-                return res.json({ error: true, status: 503, message: errSelPro })  
-            }else{
-                data.chef=commonFunction.getCalcalutionOfChefAndHelper(noOfChefHelper).chef;
-                data.helper=commonFunction.getCalcalutionOfChefAndHelper(noOfChefHelper).helper;
-                //data.supplierUserIds=userSupplierIdsArray;
-                const dataToSave = await data.save();
-                // const dataToSave = data;
-                return res.json({ error: false, status: 200, message: 'Order Created Successfully', data: dataToSave })
+
+        for (const dish_elements of data.selecteditems) {
+            dishfinder['_id'] = { '$in': [String(dish_elements)] };
+            const dishResponse = await dishModel.find(dishfinder);
+            if (dishResponse.length > 0) {
+                noOfChefHelper += Number(dishResponse[0].cooking_min);
             }
-        })
-    } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
-    }
-})
+        }
 
-router.post('/edit', async(req, res) => {
+        data.chef = commonFunction.getCalcalutionOfChefAndHelper(noOfChefHelper).chef;
+        data.helper = commonFunction.getCalcalutionOfChefAndHelper(noOfChefHelper).helper;
+        // data.supplierUserIds = userSupplierIdsArray;
+
+        // Save order
+        const dataToSave = await data.save();
+        return res.json({ error: false, status: 200, message: 'Order Created Successfully', data: dataToSave });
+
+    } catch (error) {
+        return res.status(400).json({ message: error.message, error: true });
+    }
+});
+
+//fixed
+router.post('/edit', async (req, res) => {
+  try {
     const id = req.body._id;
-    const updatedData = req.body;
-    console.log("updatedData",updatedData)
-    const options = { new: true };
-    try {
-        const result = await orderModel.findByIdAndUpdate(
-            id, updatedData, options
-        )
-        return res.json({ error: false, status: 200, message: 'Updated Successfully', data: result })
-    } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+    if (!id) {
+      return res.status(422).json({
+        error: true,
+        status: 422,
+        data: [{ path: '_id', message: 'Order ID is required.' }]
+      });
     }
-})
 
+    const updatedData = { ...req.body };
+    console.log("updatedData:", updatedData);
+
+    const options = { new: true, runValidators: true }; // runValidators ensures schema validation
+
+    const result = await orderModel.findByIdAndUpdate(id, updatedData, options);
+
+    if (!result) {
+      return res.status(404).json({ error: true, status: 404, message: 'Order not found' });
+    }
+
+    return res.json({ error: false, status: 200, message: 'Updated Successfully', data: result });
+  } catch (error) {
+    console.error("Error updating order:", error);
+    return res.status(400).json({ message: error.message, error: true });
+  }
+});
+
+//not used in admin
 router.get('/details/:id', async(req, res) => {
     try {
         const data = await orderModel.findById(req.params.id).populate("categoryId")
@@ -544,86 +509,79 @@ router.get('/details/:id', async(req, res) => {
     }
 })
 
-router.post('/update_order_status', async(req, res) => {
-    const { _id } = req.body;
-    if (!_id) {
-        return res.json({
-            error: true,
-            status: 422,
-            data: [
-                { path: '_id', message: 'Id is required.' }
-            ]
-        });
-    }
-    try {
-        const order = await orderModel.find({ _id: req.body._id });
-        if (order.length > 0) {
-            const update = {
-                status: req.body.status
-            };
-            const result = await orderModel.findByIdAndUpdate(order[0]._id, { $set: update })
-        try {
-            
-           if (req.body.status == 1) {
-                var userSupplierIdsArray = [];
-                // Find all suppliers with device_token not null/empty
-                var userFinder = { role: 'supplier', device_token: { "$nin": [null, ""] } };
-                console.log("Finding suppliers with finder:", userFinder);
-                const userIds = await userModel.find(userFinder);
-                console.log("Total suppliers found with device_token:", userIds.length);
- 
-                // Get the order's locality, type, and status from the order document
-                const orderLocality = order[0].order_locality || '';
-                const orderType = order[0].type || '';
-                const orderStatus = req.body.status;
- 
-                console.log("Order locality:", orderLocality, "Order type:", orderType, "Order status:", orderStatus);
- 
-                if (orderStatus == 1) {
-                    let filteredSuppliers = userIds.filter(user => {
-                        // user.city and user.order_type must exist
-                        return (
-                            user.city &&
-                            user.order_type &&
-                            user.city == orderLocality &&
-                            user.order_type == orderType
-                        );
-                    });
- 
-                    console.log("Filtered suppliers matching locality and type:", filteredSuppliers.length);
- 
-                    if (filteredSuppliers.length > 0) {
-                        filteredSuppliers.forEach(element => {
-                            userSupplierIdsArray.push(element._id);
-                            console.log(`Sending notification to supplier: ${element._id}, device_token: ${element.device_token}`);
-                            notificationFunction.sendNotifications(
-                                element.device_token,
-                                order[0].fromId, // Use fromId from the order document
-                                'New order',
-                                'You have a new order!!!',
-                                '',
-                                0
-                            );
-                        });
-                    } else {
-                        console.log("No suppliers matched the locality and type for notification.");
-                    }
-                } else {
-                    console.log("Order status is not 1, no notifications sent to suppliers.");
-                }
-            }
-        } catch (error) {
-            
-        } 
-            return res.json({ error: false, status: 200, message: 'Status Update Successfully' })
-        } else {
-            return res.json({ error: true, status: 503, message: 'Details Not Found' })
-        }
-    } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
-    }
-})
+//fixed
+router.post('/update_order_status', async (req, res) => {
+  const { _id, status } = req.body;
 
+  if (!_id) {
+    return res.status(422).json({
+      error: true,
+      status: 422,
+      data: [{ path: '_id', message: 'Id is required.' }]
+    });
+  }
+
+  try {
+    // Find the order by ID
+    const order = await orderModel.findById(_id);
+
+    if (!order) {
+      return res.status(404).json({ error: true, status: 404, message: 'Details Not Found' });
+    }
+
+    // Update the status
+    order.status = status;
+    await order.save();
+
+    // If status is 1, send notifications to suppliers
+    if (status == 1) {
+      try {
+        const userSupplierIdsArray = [];
+        const userFinder = { role: 'supplier', device_token: { $nin: [null, ""] } };
+        console.log("Finding suppliers with finder:", userFinder);
+
+        const suppliers = await userModel.find(userFinder);
+        console.log("Total suppliers found with device_token:", suppliers.length);
+
+        const orderLocality = order.order_locality || '';
+        const orderType = order.type || '';
+
+        const filteredSuppliers = suppliers.filter(user =>
+          user.city && user.order_type && user.city === orderLocality && user.order_type === orderType
+        );
+
+        console.log("Filtered suppliers matching locality and type:", filteredSuppliers.length);
+
+        filteredSuppliers.forEach(supplier => {
+          userSupplierIdsArray.push(supplier._id);
+          console.log(`Sending notification to supplier: ${supplier._id}, device_token: ${supplier.device_token}`);
+          notificationFunction.sendNotifications(
+            supplier.device_token,
+            order.fromId, // fromId from order
+            'New order',
+            'You have a new order!!!',
+            '',
+            0
+          );
+        });
+
+        if (filteredSuppliers.length === 0) {
+          console.log("No suppliers matched the locality and type for notification.");
+        }
+      } catch (notifError) {
+        console.error("Error sending notifications:", notifError);
+      }
+    }
+
+    return res.json({ error: false, status: 200, message: 'Status Updated Successfully' });
+
+  } catch (error) {
+    console.error("Error updating order status:", error);
+    return res.status(400).json({ message: error.message, error: true });
+  }
+});
+
+//not used in admin
 router.post('/order_list', async(req, res) => {
     let finder = {
         status: { $ne: 2 }
@@ -700,6 +658,7 @@ router.get('/order_details/:id', async(req, res) => {
     }
 })
 
+//used in admin
 router.get('/order_details/v1/:id', async(req, res) => {
     try {
         const order = await orderModel.findById(req.params.id).populate('addressId').populate('fromId').populate('addressId').populate({
@@ -741,6 +700,7 @@ router.get('/order_details/v1/:id', async(req, res) => {
     }
 })
 
+//used in admin
 router.post('/acceptOrder', async(req, res) => {
     const { requestdata } = req.body;
     if (!req.body._id) {
@@ -777,6 +737,7 @@ router.post('/acceptOrder', async(req, res) => {
     }
 })
 
+//not used in admin
 router.post('/startOrder', async(req, res) => {
     const { requestdata } = req.body;
     if (!req.body._id) {
@@ -819,7 +780,7 @@ router.post('/startOrder', async(req, res) => {
         res.status(400).json({ message: error.message, error: true })
     }
 })
-
+//not used in admin
 router.post('/completeOrder', async(req, res) => {
     const { requestdata } = req.body;
     if (!req.body._id) {
@@ -854,7 +815,7 @@ router.post('/completeOrder', async(req, res) => {
         res.status(400).json({ message: error.message, error: true })
     }
 })
-
+//not used in admin
 router.post('/publicOrderList/v2', async(req, res) => {
     let finder = { status: 1 };
     finder['toId'] = "";
@@ -915,6 +876,7 @@ router.post('/publicOrderList/v2', async(req, res) => {
     }
 })
 
+//not used in admin
 router.get('/order_view_details/:id', async(req, res) => {
     let responseobject={};
     try {
@@ -1058,6 +1020,7 @@ router.get('/order_view_details/:id', async(req, res) => {
     }
 })
 
+// not used in admin
 router.post('/getInProgressOrderList', async(req, res) => {
     let finder = {fromId:req.body.userId};
     finder[`order_status`] = {
@@ -1131,6 +1094,7 @@ router.post('/getInProgressOrderList', async(req, res) => {
     }
 })
 
+//not used in admin
 router.post('/add-order-feedback', async (req, res) => {
     const data = new orderFeedbackModel({
         slabPicture: req.body.slabPicture,
@@ -1161,6 +1125,7 @@ router.post('/add-order-feedback', async (req, res) => {
     }
 })
 
+//not used in admin
 router.post('/order_status_list', async(req, res) => {
     if (!req.body._id) {
         return res.json({
@@ -1236,6 +1201,7 @@ router.post('/order_status_list', async(req, res) => {
     }
 })
 
+// updateBookingDetails
 router.post('/updateBookingDetails', async(req, res) => {
     if (!req.body._id) {
         return res.json({
@@ -1263,6 +1229,7 @@ router.post('/updateBookingDetails', async(req, res) => {
     }
 })
 
+//not used in admin
 router.post('/createCustomerFeedback', async(req, res) => {
     if (!req.body._id) {
         return res.json({
@@ -1302,6 +1269,7 @@ router.post('/createCustomerFeedback', async(req, res) => {
     }
 })
 
+//not used in admin
 router.post('/user_review_list', async(req, res) => {
     if (!req.body._id) {
         return res.json({
@@ -1346,6 +1314,7 @@ router.post('/user_review_list', async(req, res) => {
     }
 })
 
+//used in admin
 router.post('/cancelOrder', async(req, res) => {
     const { requestdata } = req.body;
     if (!req.body._id) {
@@ -1495,7 +1464,7 @@ router.get('/booking_details/:id', async(req, res) => {
         res.status(400).json({ message: error.message, error: true })
     }
 })
-
+//fixed
 router.post('/user_order_list', async(req, res) => {
     if (!req.body._id) {
         return res.json({
@@ -1506,51 +1475,73 @@ router.post('/user_order_list', async(req, res) => {
             ]
         });
     }
+
     let finder = {
         status: 1
     };
+
     let finderMany = { };
+
     finder['fromId'] = req.body._id;
+
     if (!req.body.page) {
         req.body.page = 1;
     }
+
     if (!req.body.per_page) {
         req.body.per_page = 20;
     }
+
     try {
+
         finderMany[`order_status`] = {
-            $in: [1,2]
+            $in: [1, 2]
         };
-        const order = await orderModel.find(finder).sort({ order_status: 1}).populate('fromId').populate('toId').populate('addressId').populate({
-            path: "selecteditems",
-            populate: {
-               path: "cuisineId"
-            }
-        }).populate({
-            path: "selecteditems",
-            populate: {
-               path: "mealId"
-            }
-        }).populate({
-            path: "selecteditems",
-            populate: {
-               path: "special_appliance_id"
-            }
-        }).populate({
-            path: "selecteditems",
-            populate: {
-               path: "general_appliance_id"
-            }
-        }).populate({
-            path: "selecteditems",
-            populate: {
-               path: "serving_dish"
-            }
-        }).populate({
-            path: "orderApplianceIds"
-        });
+
+        const order = await orderModel.find(finder)
+            .sort({ order_status: 1 })
+            .populate('fromId')
+            .populate('toId')
+            .populate('addressId')
+            .populate({
+                path: "selecteditems",
+                populate: {
+                   path: "cuisineId"
+                }
+            })
+            .populate({
+                path: "selecteditems",
+                populate: {
+                   path: "mealId"
+                }
+            })
+            .populate({
+                path: "selecteditems",
+                populate: {
+                   path: "special_appliance_id"
+                }
+            })
+            .populate({
+                path: "selecteditems",
+                populate: {
+                   path: "general_appliance_id"
+                }
+            })
+            .populate({
+                path: "selecteditems",
+                populate: {
+                   path: "serving_dish"
+                }
+            })
+            .populate({
+                path: "orderApplianceIds"
+            });
+
         let OverallResult = order;
-        const totalorder = await orderModel.count(finder);
+
+        // ⭐ Mongoose 9 change: .count() → .countDocuments()
+        const totalorder = await orderModel.countDocuments(finder);
+
         let paginate = {
             "total_item": totalorder,
             "showing": OverallResult.length,
@@ -1560,16 +1551,28 @@ router.post('/user_order_list', async(req, res) => {
             "next_page": (parseInt(req.body.page) + 1),
             "last_page": parseInt((totalorder) / parseInt(req.body.per_page))
         }
-        if(order.length>0){
-            return res.json({ error: false,status:200, message: 'Fetch Data Successfully', data: { order: OverallResult, paginate }})
-        }else{
-            return res.json({ error: true,status:503, message: 'No Record Found'})
+
+        if(order.length > 0){
+            return res.json({ 
+                error: false,
+                status: 200, 
+                message: 'Fetch Data Successfully', 
+                data: { order: OverallResult, paginate }
+            });
+        } else {
+            return res.json({ 
+                error: true, 
+                status: 503, 
+                message: 'No Record Found' 
+            });
         }
+
     } catch (error) {
         res.status(400).json({ message: error.message, error: true })
     }
-})
+});
 
+//not used in admin
 router.post('/publicOrderList/v1', async(req, res) => {
     const userId  = req.body.userId;
     if (!userId) {
@@ -1642,6 +1645,7 @@ router.post('/publicOrderList/v1', async(req, res) => {
     }
 })
 
+//not used in admin
 router.post('/publicOrderList/v2', async(req, res) => {
     const userId  = req.body.userId;
     if (!userId) {
@@ -1714,6 +1718,7 @@ router.post('/publicOrderList/v2', async(req, res) => {
     }
 })
 
+//not used in admin
 router.post('/getOrderCityCheck', async(req, res) => {
     let finder ={ status: 1 };
     try {
@@ -1734,7 +1739,7 @@ router.post('/getOrderCityCheck', async(req, res) => {
         res.status(400).json({ message: error.message ,error: true })
     }
 })
-
+//not used in admin
 router.post('/publicOrderList', async(req, res) => {
     let finder = { status: 1 };
     finder['toId'] = "";
@@ -1773,6 +1778,7 @@ router.post('/publicOrderList', async(req, res) => {
     }
 })
 
+//not used in admin
 router.get('/getIngredientByOrder/:id', async(req, res) => {
 	
 	try {
@@ -1887,44 +1893,87 @@ router.get('/getIngredientByOrder/:id', async(req, res) => {
 	
 })
 
+// router.get('/order_details_decoration/:id', async (req, res) => {
+//     try {
+//         const order = await orderModel.find({ order_id: req.params.id })
+//             .populate('addressId')
+//             .populate('fromId')
+//             .populate('addressId');
+
+//         let decorations;
+//         let orderWithDecorations;
+
+//         if (order.length > 0) {
+//             const decorationPromisesArray = order.map(async (orderItem) => {
+//                 const decorationPromises = orderItem.items.map(async (itemId) => {
+//                     return await decorationModel.findById(itemId);
+//                 });
+//                 return await Promise.all(decorationPromises);
+//             });
+
+//             // Resolve all promises
+//             decorations = await Promise.all(decorationPromisesArray);
+
+//             orderWithDecorations = {
+//                 ...order[0], // Access the first element directly, as order is an array
+//                 items: order[0].items.map((itemId, index) => ({
+//                     itemId: itemId,
+//                     decoration: decorations[index]
+//                 }))
+//             };
+//         }
+
+//         if (order.length > 0) {
+//             return res.json({ error: false, status: 200, message: 'Fetch Data Successfully', data: orderWithDecorations });
+//         } else {
+//             return res.json({ error: true, status: 503, message: 'No Record Found' });
+//         }
+//     } catch (error) {
+//         res.status(400).json({ message: error.message, error: true });
+//     }
+// });
+
 router.get('/order_details_decoration/:id', async (req, res) => {
-    try {
-        const order = await orderModel.find({ order_id: req.params.id })
-            .populate('addressId')
-            .populate('fromId')
-            .populate('addressId');
+  try {
+    const orderId = req.params.id;
 
-        let decorations;
-        let orderWithDecorations;
+    // Fetch order by order_id
+    const order = await orderModel.findOne({ order_id: orderId })
+      .populate('addressId')
+      .populate('fromId')
+      .populate('addressId');
 
-        if (order.length > 0) {
-            const decorationPromisesArray = order.map(async (orderItem) => {
-                const decorationPromises = orderItem.items.map(async (itemId) => {
-                    return await decorationModel.findById(itemId);
-                });
-                return await Promise.all(decorationPromises);
-            });
-
-            // Resolve all promises
-            decorations = await Promise.all(decorationPromisesArray);
-
-            orderWithDecorations = {
-                ...order[0], // Access the first element directly, as order is an array
-                items: order[0].items.map((itemId, index) => ({
-                    itemId: itemId,
-                    decoration: decorations[index]
-                }))
-            };
-        }
-
-        if (order.length > 0) {
-            return res.json({ error: false, status: 200, message: 'Fetch Data Successfully', data: orderWithDecorations });
-        } else {
-            return res.json({ error: true, status: 503, message: 'No Record Found' });
-        }
-    } catch (error) {
-        res.status(400).json({ message: error.message, error: true });
+    if (!order) {
+      return res.status(404).json({ error: true, status: 503, message: 'No Record Found' });
     }
+
+    // Fetch decorations for each item
+    const decorations = await Promise.all(
+      order.items.map(async (itemId) => {
+        return await decorationModel.findById(itemId);
+      })
+    );
+
+    // Combine order + decoration data
+    const orderWithDecorations = {
+      ...order.toObject(),          // convert mongoose doc → plain object
+      items: order.items.map((itemId, index) => ({
+        itemId,
+        decoration: decorations[index] || null
+      }))
+    };
+
+    return res.json({
+      error: false,
+      status: 200,
+      message: 'Fetch Data Successfully',
+      data: orderWithDecorations
+    });
+
+  } catch (error) {
+    console.error("Decoration Fetch Error:", error);
+    return res.status(400).json({ message: error.message, error: true });
+  }
 });
 
 router.get('/order_details_food_delivery/:id', async(req, res) => {

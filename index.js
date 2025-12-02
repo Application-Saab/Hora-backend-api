@@ -13,9 +13,14 @@ const cron = require('node-cron');
 // Database Connection Start
 mongoose.set("strictQuery", true);
 mongoose.connect(
-  `mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASS}@${process.env.MONGO_CLUSTER}/${process.env.MONGO_DATABASE}?retryWrites=true&w=majority`,
-  { useNewUrlParser: true, useUnifiedTopology: true }
-);
+  `mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASS}@${process.env.MONGO_CLUSTER}/${process.env.MONGO_DATABASE}?retryWrites=true&w=majority`
+).then(() => {
+  console.log("MongoDB Connected");
+}).catch((error) => {
+  console.log("MongoDB connection error:", error);
+});
+
+
 const database = mongoose.connection;
 // Database Connection End
 
@@ -31,7 +36,7 @@ app.use(
     extended: true,
     parameterLimit: 1000000,
   })
-);
+);   
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, "public")));
 app.use(async (req, res, next) => {
@@ -104,10 +109,10 @@ cron.schedule('0 0 * * 0', () => {
   commonFunction.updateDecorationPopularity()
 });
 
-setTimeout(async()=>{
-  console.log("Updating scores")
-  await commonFunction.updateDecorationPopularity()
-},10000)
+// setTimeout(async()=>{
+//   console.log("Updating scores")
+//   await commonFunction.updateDecorationPopularity()
+// },10000)
 
 database.on("error", (error) => {
   console.log(error);
@@ -259,6 +264,7 @@ const compressImageToWebP = async (buffer, outputPath, targetMaxKB = 40) => {
 };
 
 // API: Upload and compress to WebP
+//fixed
 app.post('/api/decoration_image_upload', compressedUpload.single('file'), async (req, res) => {
   try {
     const file = req.file;
@@ -275,7 +281,14 @@ app.post('/api/decoration_image_upload', compressedUpload.single('file'), async 
     const fileName = `${originalName}-${Date.now()}.webp`;
     const outputPath = path.join(outputFolder, fileName);
 
-    const success = await compressImageToWebP(file.buffer, outputPath);
+    // Compress image buffer to WebP and save
+    let success = false;
+    try {
+      success = await compressImageToWebP(file.buffer, outputPath);
+    } catch (compressErr) {
+      console.error('Compression failed, saving best effort:', compressErr);
+      // Optionally, you could fallback to saving original buffer as .webp
+    }
 
     return res.json({
       error: false,
@@ -283,11 +296,13 @@ app.post('/api/decoration_image_upload', compressedUpload.single('file'), async 
       message: success ? 'Compressed under 40KB' : 'Saved with best effort',
       data: fileName,
     });
+
   } catch (err) {
     console.error('Compression error:', err);
-    res.status(500).json({ error: true, message: 'Image compression failed' });
+    return res.status(500).json({ error: true, message: 'Image compression failed' });
   }
 });
+
 
 
 app.post("/firebase/notification", async (req, res) => {

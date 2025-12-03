@@ -127,7 +127,6 @@ router.get('/searchByName/:name', async (req, res) => {
     }
 });
 
-
 router.get('/searchByTag/:tag', async (req, res) => {
     const { tag } = req.params;
     const cacheKey = `search_tag_${tag}`;
@@ -139,7 +138,8 @@ router.get('/searchByTag/:tag', async (req, res) => {
             return res.json({ ...cached, cached: true });
         }
 
-        const decorations = await decorationModel.find({ tag: { $in: [tag] } });
+        // Mongoose 9 compatible query (no change needed)
+        const decorations = await decorationModel.find({ tag: { $in: [tag] } }).lean();
 
         if (decorations.length > 0) {
             const response = {
@@ -148,7 +148,7 @@ router.get('/searchByTag/:tag', async (req, res) => {
                 message: 'Search Successful',
                 data: decorations
             };
-            cache.set(cacheKey, response); // Cache the response
+            cache.set(cacheKey, response);
             return res.json(response);
         } else {
             const response = {
@@ -156,14 +156,16 @@ router.get('/searchByTag/:tag', async (req, res) => {
                 status: 404,
                 message: 'No matching decorations found.'
             };
-            cache.set(cacheKey, response); // Cache the not-found too (optional)
+            cache.set(cacheKey, response);
             return res.json(response);
         }
     } catch (error) {
-        return res.status(400).json({ error: true, message: error.message });
+        return res.status(400).json({
+            error: true,
+            message: error.message
+        });
     }
 });
-
 
 router.get('/details/:id', async (req, res) => {
     try {

@@ -55,18 +55,100 @@ router.post('/admin_signin', async (req, res) => {
     }
 });
 
+//prev
+
+// router.post('/admin_user_list', async (req, res) => {
+//     try {
+//         const {
+//             role,
+//             email,
+//             phone,
+//             _id,
+//             page = 1,
+//             per_page = 20
+//         } = req.body;
+
+//         // Query builder
+//         const finder = { status: { $ne: 2 } };
+
+//         if (role) finder.role = role;
+
+//         if (email) {
+//             finder.email = new RegExp(email.trim(), 'i');
+//         }
+
+//         if (phone) {
+//             finder.phone = new RegExp(phone.trim(), 'i');
+//         }
+
+//         if (_id) {
+//             finder._id = new ObjectId(_id.trim());
+//         }
+
+//         // Aggregation for user list
+//         const users = await UserModel.aggregate([
+//             { $match: finder },
+//             { $sort: { updatedAt: -1 } },
+//             { $skip: (Number(page) - 1) * Number(per_page) },
+//             { $limit: Number(per_page) }
+//         ]);
+
+//         const totalUsers = await UserModel.countDocuments(finder);
+
+//         const paginate = {
+//             total_item: totalUsers,
+//             showing: users.length,
+//             first_page: 1,
+//             previous_page: Number(page) > 1 ? Number(page) - 1 : null,
+//             current_page: Number(page),
+//             next_page: Number(page) * Number(per_page) < totalUsers ? Number(page) + 1 : null,
+//             last_page: Math.ceil(totalUsers / Number(per_page))
+//         };
+
+//         if (users.length > 0) {
+//             return res.json({
+//                 error: false,
+//                 status: 200,
+//                 message: "Fetch Data Successfully",
+//                 data: { users, paginate }
+//             });
+//         }
+
+//         return res.json({
+//             error: true,
+//             status: 503,
+//             message: "No Record Found"
+//         });
+
+//     } catch (error) {
+//         return res.status(400).json({
+//             error: true,
+//             message: error.message
+//         });
+//     }
+// });
+
+
+//again 
 router.post('/admin_user_list', async (req, res) => {
     try {
-        const {
+        let {
             role,
             email,
             phone,
             _id,
-            page = 1,
-            per_page = 20
+            page,
+            per_page
         } = req.body;
 
-        // Query builder
+        // Ensure page and per_page are valid numbers
+        page = Number(page);
+        per_page = Number(per_page);
+
+        if (isNaN(page) || page < 1) page = 1;
+        if (isNaN(per_page) || per_page < 1) per_page = 20;
+
+        // Build the query
         const finder = { status: { $ne: 2 } };
 
         if (role) finder.role = role;
@@ -80,15 +162,22 @@ router.post('/admin_user_list', async (req, res) => {
         }
 
         if (_id) {
-            finder._id = new ObjectId(_id.trim());
+            try {
+                finder._id = new ObjectId(_id.trim());
+            } catch (err) {
+                return res.status(400).json({
+                    error: true,
+                    message: "Invalid _id format"
+                });
+            }
         }
 
         // Aggregation for user list
         const users = await UserModel.aggregate([
             { $match: finder },
             { $sort: { updatedAt: -1 } },
-            { $skip: (Number(page) - 1) * Number(per_page) },
-            { $limit: Number(per_page) }
+            { $skip: (page - 1) * per_page },
+            { $limit: per_page }
         ]);
 
         const totalUsers = await UserModel.countDocuments(finder);
@@ -97,10 +186,10 @@ router.post('/admin_user_list', async (req, res) => {
             total_item: totalUsers,
             showing: users.length,
             first_page: 1,
-            previous_page: Number(page) > 1 ? Number(page) - 1 : null,
-            current_page: Number(page),
-            next_page: Number(page) * Number(per_page) < totalUsers ? Number(page) + 1 : null,
-            last_page: Math.ceil(totalUsers / Number(per_page))
+            previous_page: page > 1 ? page - 1 : null,
+            current_page: page,
+            next_page: page * per_page < totalUsers ? page + 1 : null,
+            last_page: Math.ceil(totalUsers / per_page)
         };
 
         if (users.length > 0) {
@@ -125,6 +214,7 @@ router.post('/admin_user_list', async (req, res) => {
         });
     }
 });
+
 
 router.post('/user_signup', async (req, res) => {
     try {

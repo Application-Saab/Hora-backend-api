@@ -589,85 +589,127 @@ router.put(
   }
 );
 
+// router.post('/getMealDish', async (req, res) => {
+//   try {
+//     const { cuisineId = [], is_dish } = req.body;
 
+//     let finder = { status: 1 };
+//     let dishfinder = { status: 1 };
 
+//     // Filter by cuisineId if provided
+//     if (Array.isArray(cuisineId) && cuisineId.length > 0) {
+//       dishfinder.cuisineId = { $in: cuisineId.map(id => mongoose.Types.ObjectId(id)) };
+//     }
+
+//     // Filter by is_dish
+//     if (is_dish === 1) {
+//       dishfinder.is_dish = 1;
+//     } else if (is_dish === 2) {
+//       dishfinder.is_dish = { $in: [1, 2] };
+//     }
+
+//     // Cache key based on request body
+//     const cacheKey = `mealDish_${JSON.stringify(req.body)}`;
+//     const cachedData = cache.get(cacheKey);
+//     if (cachedData) {
+//       console.log("Returning cached data:", cacheKey);
+//       return res.json({ ...cachedData, cached: true });
+//     }
+
+//     // Fetch all active meals
+//     const meals = await mealModel.find(finder).exec();
+
+//     const newArray = await Promise.all(
+//       meals.map(async (meal) => {
+//         // Filter dishes by mealId
+//         dishfinder.mealId = { $in: [meal._id] };
+
+//         // Build query safely
+//         let query = dishModel.find(dishfinder);
+
+//         // Only populate if schema has the path
+//         ['special_appliance_id', 'general_appliance_id', 'serving_dish'].forEach(field => {
+//           if (dishModel.schema.path(field)) {
+//             query = query.populate(field, '_id name image');
+//           }
+//         });
+
+//         const dishResponse = await query.exec();
+
+//         return { mealObject: meal, dish: dishResponse };
+//       })
+//     );
+
+//     const responseData = {
+//       error: false,
+//       status: 200,
+//       message: 'Fetch Data Successfully',
+//       data: newArray
+//     };
+
+//     // Save response in cache
+//     cache.put(cacheKey, responseData, 5 * 60 * 1000); // cache for 5 minutes
+
+//     return res.json(responseData);
+//   } catch (error) {
+//     console.error("Error in /getMealDish:", error);
+//     return res.status(500).json({ message: error.message, error: true });
+//   }
+// });
 
 router.post('/getMealDish', async (req, res) => {
   try {
-    const body = req.body ?? {};
+    const { cuisineId = [], is_dish } = req.body;
 
     let finder = { status: 1 };
     let dishfinder = { status: 1 };
 
-    // Validate cuisineId safely
-    if (Array.isArray(body.cuisineId) && body.cuisineId.length > 0) {
-      console.log(body.cuisineId);
-      const sortedCuisineIds = [...body.cuisineId].sort();
-      console.log(sortedCuisineIds);
-
-      dishfinder.cuisineId = { $in: sortedCuisineIds };
+    if (Array.isArray(cuisineId) && cuisineId.length > 0) {
+      dishfinder.cuisineId = { 
+        $in: cuisineId.map(id => new mongoose.Types.ObjectId(id)) 
+      };
     }
 
-    // is_dish logic (same as original)
-    if (body.is_dish === 1) {
+    if (is_dish === 1) {
       dishfinder.is_dish = 1;
-    } else if (body.is_dish === 2) {
+    } else if (is_dish === 2) {
       dishfinder.is_dish = { $in: [1, 2] };
-    } else {
-      delete dishfinder.is_dish;
     }
 
-    // Generate unique cache key
-    const cacheKey = `mealDish_${JSON.stringify(body)}`;
-
-    // Check cached result
-    const cachedData = cache.get(cacheKey);
-    if (cachedData) {
-      console.log("return cache data " + cacheKey);
-      return res.json({ ...cachedData, cached: true });
-    }
-
-    // Fetch meals
     const meals = await mealModel.find(finder).exec();
 
-    // Fetch dishes for each meal
     const newArray = await Promise.all(
-      meals.map(async (rec2) => {
-        dishfinder.mealId = { $in: [String(rec2._id)] };
+      meals.map(async (meal) => {
+        dishfinder.mealId = { $in: [new mongoose.Types.ObjectId(meal._id)] };
 
-        const dishResponse = await dishModel
-          .find(dishfinder)
-          .populate('special_appliance_id', '_id name image')
-          .populate('general_appliance_id', '_id name image')
-          .populate('serving_dish', '_id name image')
-          .exec();
+        let query = dishModel.find(dishfinder);
 
-        return {
-          mealObject: rec2,
-          dish: dishResponse
-        };
+        ['special_appliance_id', 'general_appliance_id', 'serving_dish']
+          .forEach(field => {
+            if (dishModel.schema.path(field)) {
+              query = query.populate(field, '_id name image');
+            }
+          });
+
+        const dishResponse = await query.exec();
+        return { mealObject: meal, dish: dishResponse };
       })
     );
 
-    const responseData = {
+    return res.json({
       error: false,
       status: 200,
-      message: 'Fetch Data Successfully',
+      message: "Fetch Data Successfully",
       data: newArray
-    };
-
-    // Save to cache
-    cache.set(cacheKey, responseData);
-
-    return res.json(responseData);
+    });
 
   } catch (error) {
-    return res.status(500).json({
-      message: error?.message || "Internal Server Error",
-      error: true
-    });
+    console.error("Error in /getMealDish:", error);
+    return res.status(500).json({ message: error.message, error: true });
   }
 });
+
+
 
 router.post('/supplier_personal_details_update', async (req, res) => {
     const id = req.user._id;
@@ -706,7 +748,7 @@ router.post('/supplier_personal_details_update', async (req, res) => {
             error: true
         });
     }
-});//remain postman
+});
 
 router.post('/update_resume_profile', async (req, res) => {
     try {

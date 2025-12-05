@@ -16,348 +16,10 @@ const photographyModel = require('../models/photography')
 var _ = require('lodash');
 const AddressModel = require('../models/address');
 
-//not used in admin
-router.post('/add_backup1', async(req, res) => {
-    const otp = commonFunction.OTP();
-    const totalorder = await orderModel.find({});
-    const data = new orderModel({
-        order_date: req.body.order_date,
-        order_time: req.body.order_time,
-        no_of_people: req.body.no_of_people,
-        no_of_burner: req.body.no_of_burner,
-        type: req.body.type,
-        order_type: req.body.order_type,
-        items: req.body.items,
-        total_amount: req.body.total_amount,
-        is_gst: req.body.is_gst,
-        is_discount: req.body.is_discount,
-        payable_amount: req.body.payable_amount,
-        addressId: req.body.addressId,
-        fromId: req.body.fromId,
-        toId: req.body.toId,
-        orderApplianceIds: req.body.orderApplianceIds,
-        categoryIds: req.body.categoryIds,
-        otp: otp,
-        order_id: Number(totalorder.length)+1,
-    })
-    req.body.items.forEach(element => {
-        data.selecteditems.push(element.item_id)
-    });
-    try {
-        // var userArray=[];
-        // const userIds= await userModel.find({role:'supplier'});
-        // var i = 0;
-        // async.eachSeries(userIds, function (rec2, loop2){
-        //     userArray.push(rec2._id);
-        //     loop2();
-        //     i = i + 1;
-        // });
-        // data.supplierUserIds=userArray;
-        const dataToSave = await data.save();
-        return res.json({ error: false, status: 200, message: 'Order Created Successfully', data: dataToSave })
-    } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
-    }
-})
-//not used in admin
-router.post('/add/v2', async(req, res) => {
-    const totalorder = await orderModel.find({});
-    const otp = commonFunction.OTP();
-    const data = new orderModel({
-        order_date: req.body.order_date,
-        order_time: req.body.order_time,
-        no_of_people: req.body.no_of_people,
-        no_of_burner: req.body.no_of_burner,
-        type: req.body.type,
-        order_type: req.body.order_type,
-        items: req.body.items,
-        total_amount: req.body.total_amount,
-        is_gst: req.body.is_gst,
-        is_discount: req.body.is_discount,
-        payable_amount: req.body.payable_amount,
-        addressId: req.body.addressId,
-        fromId: req.body.fromId,
-        toId: req.body.toId,
-        orderApplianceIds: req.body.orderApplianceIds,
-        categoryIds: req.body.categoryIds,
-        otp: otp,
-        order_id: Number(totalorder.length)+1,
-        order_locality: req.body.order_locality,
-    })
-    if(req.body.items.length>0){
-        let hasKey = req.body.items[0].hasOwnProperty('item_id');
-        if(hasKey){
-            req.body.items.forEach(element => {
-                data.selecteditems.push(element.item_id)
-            });
-        }else{
-            req.body.items.forEach(element => {
-                data.selecteditems.push(element)
-            });
-        }
-    }
-    try {
-        var userArray=[];
-        var userFinder = {  role:'supplier',device_token :{ "$nin": [ null, "" ] }  };
-        var localityFinder = { status : 1}
-        // localityFinder[`name`] = new RegExp((req.body.locality).trim(), 'i');
-        const localityData= await cityServedLocalityModel.find(localityFinder);
-        console.log("localityData>>>>>>",localityData);
-        console.log("req.body.locality>>>>>>",req.body.locality);
-        const localityIds= localityData.filter((x)=>String(x.name).toLowerCase() == String(req.body.order_locality).toLowerCase());
-        console.log("localityIds>>>>>",localityIds)
-        if(localityIds.length>0){
-            userFinder[`userServedLocalities`]={ '$in': [ String(localityIds[0]._id) ] }
-            const userIds= await userModel.find(userFinder);
-            console.log("userIds>>>>>",userIds);
-            var i = 0;
-            async.eachSeries(userIds, function (rec2, loop2){
-                userArray.push(rec2.device_token);
-                loop2();
-                i = i + 1;
-            });
-            if(userIds.length>0){
-                if(userArray.length>0){
-                    userArray.forEach(element => {
-                        notificationFunction.sendNotifications(element,req.body.fromId,'New order','You have a new order!!!','',0)
-                    });
-                }
-                let dishfinder = { status: 1 };
-                var index = 0;
-                let noOfChefHelper = 0;
-                async.eachSeries(data.selecteditems, function (dish_elements, loop4){
-                    let responseobject={};
-                    dishfinder[`_id`]={ '$in': [ String(dish_elements) ] }
-                    responseobject.mealObject=dish_elements;
-                    (async () => {
-                        await dishModel.find(dishfinder).exec(function(err, dishResponse) {
-                            if(dishResponse.length>0){
-                                noOfChefHelper=noOfChefHelper+Number(dishResponse[0].cooking_min);
-                            }
-                            loop4();
-                            index = index + 1;
-                        });
-                    })();
-                    
-                }, async(errSelPro) => {
-                    if(errSelPro){
-                        return res.json({ error: true, status: 503, message: errSelPro })  
-                    }else{
-                        data.chef=commonFunction.getCalcalutionOfChefAndHelper(noOfChefHelper).chef;
-                        data.helper=commonFunction.getCalcalutionOfChefAndHelper(noOfChefHelper).helper;
-                        // console.log("data>>>>>>>>",JSON.stringify(data));
-                        const dataToSave = await data.save();
-                        // const dataToSave = data;
-                        return res.json({ error: false, status: 200, message: 'Order Created Successfully', data: dataToSave })
-                    }
-                })
-            }else{
-                return res.json({ error: true, status: 503, message: 'No Supplier Are Available Right Now' })  
-            }
-        }else{
-            return res.json({ error: true, status: 503, message: 'Sorry, we are not in your city!! We will notify you as soon we enter into the city.' }) 
-        }
-    } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
-    }
-})
-//not used in admin
-router.post('/add/v3', async(req, res) => {
-    const totalorder = await orderModel.find({});
-    const otp = commonFunction.OTP();
-    const data = new orderModel({
-        order_date: req.body.order_date,
-        order_time: req.body.order_time,
-        no_of_people: req.body.no_of_people,
-        no_of_burner: req.body.no_of_burner,
-        type: req.body.type,
-        order_type: req.body.order_type,
-        items: req.body.items,
-        total_amount: req.body.total_amount,
-        is_gst: req.body.is_gst,
-        is_discount: req.body.is_discount,
-        payable_amount: req.body.payable_amount,
-        addressId: req.body.addressId,
-        fromId: req.body.fromId,
-        toId: req.body.toId,
-        orderApplianceIds: req.body.orderApplianceIds,
-        categoryIds: req.body.categoryIds,
-        otp: otp,
-        order_id: Number(totalorder.length)+1,
-        order_locality: req.body.order_locality,
-    })
-    if(req.body.items.length>0){
-        let hasKey = req.body.items[0].hasOwnProperty('item_id');
-        if(hasKey){
-            req.body.items.forEach(element => {
-                data.selecteditems.push(element.item_id)
-            });
-        }else{
-            req.body.items.forEach(element => {
-                data.selecteditems.push(element)
-            });
-        }
-    }
-    try {
-        var userArray=[];
-        const orderAddress = await AddressModel.find({_id:req.body.addressId});
-        var userFinder = {  role:'supplier',device_token :{ "$nin": [ null, "" ] }  };
-        const userIds= await userModel.find(userFinder).populate('userServedLocalities');
-        if(orderAddress.length>0){
-            userIds.forEach(element => {
-                var obj=[];
-                obj.locationDistance=[]
-                if(element.userServedLocalities && element.userServedLocalities.length>0){
-                    element.userServedLocalities.forEach(location => {
-                        obj.push(Number(commonFunction.getDistanceFromLatLonInKm(orderAddress[0].lat,orderAddress[0].lng,location.lat,location.lng).toFixed(2)))
-                    });
-                    userArray.push({_id:element._id,locationDistance:obj,device_token:element.device_token})
-                }
-            });
-            if(userArray.length>0){
-                let filteredArray = userArray.filter((element_recp) => { return element_recp.locationDistance.some((subElement) => subElement <= 0) });
-                console.log("filteredArray>>>>>",filteredArray)
-                // console.log("userArray>>>>>11111",JSON.stringify(userArray));
-            }
-        }
-        let dishfinder = { status: 1 };
-        var index = 0;
-        let noOfChefHelper = 0;
-        async.eachSeries(data.selecteditems, function (dish_elements, loop4){
-            let responseobject={};
-            dishfinder[`_id`]={ '$in': [ String(dish_elements) ] }
-            responseobject.mealObject=dish_elements;
-            (async () => {
-                await dishModel.find(dishfinder).exec(function(err, dishResponse) {
-                    if(dishResponse.length>0){
-                        noOfChefHelper=noOfChefHelper+Number(dishResponse[0].cooking_min);
-                    }
-                    loop4();
-                    index = index + 1;
-                });
-            })();
-            
-        }, async(errSelPro) => {
-            if(errSelPro){
-                return res.json({ error: true, status: 503, message: errSelPro })  
-            }else{
-                data.chef=commonFunction.getCalcalutionOfChefAndHelper(noOfChefHelper).chef;
-                data.helper=commonFunction.getCalcalutionOfChefAndHelper(noOfChefHelper).helper;
-                // console.log("data>>>>>>>>",JSON.stringify(data));
-                const dataToSave = await data.save();
-                // const dataToSave = data;
-                return res.json({ error: false, status: 200, message: 'Order Created Successfully', data: dataToSave })
-            }
-        })
 
-    } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
-    }
-})
-//not used in admin
-router.post('/add_backup', async(req, res) => {
-    const totalorder = await orderModel.find({});
-    const otp = commonFunction.OTP();
-    const data = new orderModel({
-        order_date: req.body.order_date,
-        order_time: req.body.order_time,
-        no_of_people: req.body.no_of_people,
-        no_of_burner: req.body.no_of_burner,
-        type: req.body.type,
-        order_type: req.body.order_type,
-        items: req.body.items,
-        total_amount: req.body.total_amount,
-        is_gst: req.body.is_gst,
-        is_discount: req.body.is_discount,
-        payable_amount: req.body.payable_amount,
-        addressId: req.body.addressId,
-        fromId: req.body.fromId,
-        toId: req.body.toId,
-        orderApplianceIds: req.body.orderApplianceIds,
-        categoryIds: req.body.categoryIds,
-        otp: otp,
-        order_id: Number(totalorder.length)+1,
-        order_locality: req.body.order_locality,
-    })
-    if(req.body.items.length>0){
-        let hasKey = req.body.items[0].hasOwnProperty('item_id');
-        if(hasKey){
-            req.body.items.forEach(element => {
-                data.selecteditems.push(element.item_id)
-            });
-        }else{
-            req.body.items.forEach(element => {
-                data.selecteditems.push(element)
-            });
-        }
-    }
-    try {
-        var userArray=[];
-        var userFinder = {  role:'supplier',device_token :{ "$nin": [ null, "" ] }  };
-        var localityFinder = { status : 1}
-        const localityData= await cityServedLocalityModel.find(localityFinder);
-        console.log("localityData>>>>>>",localityData);
-        console.log("req.body.locality>>>>>>",req.body.locality);
-        const localityIds= localityData.filter((x)=>String(x.name).toLowerCase() == String(req.body.order_locality).toLowerCase());
-        console.log("localityIds>>>>>",localityIds)
-        const userIds= await userModel.find(userFinder);
-        console.log("userIds>>>>>",userIds);
-        var i = 0;
-        async.eachSeries(userIds, function (rec2, loop2){
-            userArray.push(rec2.device_token);
-            loop2();
-            i = i + 1;
-        });
-        if(userIds.length>0){
-            if(userArray.length>0){
-                userArray.forEach(element => {
-                    notificationFunction.sendNotifications(element,req.body.fromId,'New order','You have a new order!!!','',0)
-                });
-            }
-        }
-        // if(localityIds.length>0){
-        //     userFinder[`userServedLocalities`]={ '$in': [ String(localityIds[0]._id) ] }
-        //     else{
-        //         return res.json({ error: true, status: 503, message: 'No Supplier Are Available Right Now' })  
-        //     }
-        // }else{
-        //     return res.json({ error: true, status: 503, message: 'Sorry, we are not in your city!! We will notify you as soon we enter into the city.' }) 
-        // }
+//................used api ..................
 
-        let dishfinder = { status: 1 };
-        var index = 0;
-        let noOfChefHelper = 0;
-        async.eachSeries(data.selecteditems, function (dish_elements, loop4){
-            let responseobject={};
-            dishfinder[`_id`]={ '$in': [ String(dish_elements) ] }
-            responseobject.mealObject=dish_elements;
-            (async () => {
-                await dishModel.find(dishfinder).exec(function(err, dishResponse) {
-                    if(dishResponse.length>0){
-                        noOfChefHelper=noOfChefHelper+Number(dishResponse[0].cooking_min);
-                    }
-                    loop4();
-                    index = index + 1;
-                });
-            })();
-            
-        }, async(errSelPro) => {
-            if(errSelPro){
-                return res.json({ error: true, status: 503, message: errSelPro })  
-            }else{
-                data.chef=commonFunction.getCalcalutionOfChefAndHelper(noOfChefHelper).chef;
-                data.helper=commonFunction.getCalcalutionOfChefAndHelper(noOfChefHelper).helper;
-                // console.log("data>>>>>>>>",JSON.stringify(data));
-                const dataToSave = await data.save();
-                // const dataToSave = data;
-                return res.json({ error: false, status: 200, message: 'Order Created Successfully', data: dataToSave })
-            }
-        })
-    } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
-    }
-})
-//fixed
+
 router.post('/add', async (req, res) => {
     try {
         // Get last order_id
@@ -469,7 +131,6 @@ router.post('/add', async (req, res) => {
     }
 });
 
-//fixed
 router.post('/edit', async (req, res) => {
   try {
     const id = req.body._id;
@@ -499,17 +160,6 @@ router.post('/edit', async (req, res) => {
   }
 });
 
-//not used in admin
-router.get('/details/:id', async(req, res) => {
-    try {
-        const data = await orderModel.findById(req.params.id).populate("categoryId")
-        return res.json({ error: false, status: 200, message: 'Details Fetch Successfully', data: data })
-    } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
-    }
-})
-
-//fixed
 router.post('/update_order_status', async (req, res) => {
   const { _id, status } = req.body;
 
@@ -581,7 +231,943 @@ router.post('/update_order_status', async (req, res) => {
   }
 });
 
-//not used in admin
+router.post('/acceptOrder', async (req, res) => {
+    const { requestdata } = req.body;
+
+    if (!req.body._id) {
+        return res.json({
+            error: true,
+            status: 422,
+            data: [
+                { path: '_id', message: 'Id is required.' }
+            ]
+        });
+    }
+
+    try {
+        // Mongoose 9: Use findOne instead of find for single document
+        const order = await orderModel.findOne({ _id: req.body._id, order_status: 0 });
+
+        if (order) {
+            const update = {
+                order_status: 1,
+                toId: req.body.userId,
+                // otp: otp,
+            };
+
+            // Mongoose 9: findById is still valid
+            const user = await userModel.findById(order.fromId);
+
+            console.log("user>>>>", user);
+            console.log("user>>>>Accept Order", user.device_token);
+
+            if (user.device_token) {
+                notificationFunction.sendNotifications(
+                    user.device_token,
+                    order.fromId,
+                    'Accept order',
+                    'Your order has been accepted !!',
+                    req.body._id,
+                    0
+                );
+            }
+
+            const result = await orderModel.findByIdAndUpdate(
+                order._id,
+                { $set: update },
+                { new: true } // To return the updated document
+            );
+
+            return res.json({
+                error: false,
+                status: 200,
+                message: 'Order accepted successfully',
+                data: result
+            });
+        } else {
+            return res.json({
+                error: true,
+                status: 503,
+                message: 'Order already accepted'
+            });
+        }
+    } catch (error) {
+        res.status(400).json({ message: error.message, error: true });
+    }
+});
+
+router.post('/startOrder', async (req, res) => {
+    const { requestdata } = req.body;
+
+    if (!req.body._id) {
+        return res.json({
+            error: true,
+            status: 422,
+            data: [{ path: '_id', message: 'Id is required.' }]
+        });
+    }
+
+    if (!req.body.otp) {
+        return res.json({
+            error: true,
+            status: 422,
+            data: [{ path: 'otp', message: 'otp is required.' }]
+        });
+    }
+
+    try {
+        // Mongoose 9: use findOne instead of find()
+        const order = await orderModel.findOne({ _id: req.body._id });
+
+        // OTP check directly with findOne instead of array check
+        const order_otp = await orderModel.findOne({
+            _id: req.body._id,
+            otp: req.body.otp
+        });
+
+        if (order) {
+            if (order_otp) {
+                const update = {
+                    order_status: 2,
+                    toId: req.body.userId,
+                    job_start_time: req.body.job_start_time
+                };
+
+                const result = await orderModel.findByIdAndUpdate(
+                    order._id,
+                    { $set: update },
+                    { new: true } // return updated order
+                );
+
+                return res.json({
+                    error: false,
+                    status: 200,
+                    message: 'Order started successfully',
+                    data: result
+                });
+
+            } else {
+                return res.json({
+                    error: true,
+                    status: 503,
+                    message: 'otp mismatched'
+                });
+            }
+        } else {
+            return res.json({
+                error: true,
+                status: 503,
+                message: 'Order already started'
+            });
+        }
+
+    } catch (error) {
+        res.status(400).json({ message: error.message, error: true });
+    }
+});
+
+router.post('/cancelOrder', async (req, res) => {
+    const { _id } = req.body;
+
+    if (!_id) {
+        return res.status(422).json({
+            error: true,
+            status: 422,
+            data: [
+                { path: '_id', message: 'Id is required.' }
+            ]
+        });
+    }
+
+    try {
+        const order = await orderModel.findById(_id);
+
+        if (!order) {
+            return res.status(404).json({
+                error: true,
+                status: 503,
+                message: 'No Order Found'
+            });
+        }
+
+        order.order_status = 4; // Cancelled
+        const result = await order.save(); // Save the updated document
+
+        return res.status(200).json({
+            error: false,
+            status: 200,
+            message: 'Order cancelled successfully',
+            data: result
+        });
+    } catch (error) {
+        return res.status(400).json({
+            error: true,
+            message: error.message
+        });
+    }
+});
+
+router.post('/user_order_list', async(req, res) => {
+    if (!req.body._id) {
+        return res.json({
+            error: true,
+            status: 422,
+            data: [
+                { path: '_id', message: 'User Id is required.' }
+            ]
+        });
+    }
+
+    let finder = {
+        status: 1
+    };
+
+    let finderMany = { };
+
+    finder['fromId'] = req.body._id;
+
+    if (!req.body.page) {
+        req.body.page = 1;
+    }
+
+    if (!req.body.per_page) {
+        req.body.per_page = 20;
+    }
+
+    try {
+
+        finderMany[`order_status`] = {
+            $in: [1, 2]
+        };
+
+        const order = await orderModel.find(finder)
+            .sort({ order_status: 1 })
+            .populate('fromId')
+            .populate('toId')
+            .populate('addressId')
+            .populate({
+                path: "selecteditems",
+                populate: {
+                   path: "cuisineId"
+                }
+            })
+            .populate({
+                path: "selecteditems",
+                populate: {
+                   path: "mealId"
+                }
+            })
+            .populate({
+                path: "selecteditems",
+                populate: {
+                   path: "special_appliance_id"
+                }
+            })
+            .populate({
+                path: "selecteditems",
+                populate: {
+                   path: "general_appliance_id"
+                }
+            })
+            .populate({
+                path: "selecteditems",
+                populate: {
+                   path: "serving_dish"
+                }
+            })
+            .populate({
+                path: "orderApplianceIds"
+            });
+
+        let OverallResult = order;
+
+        // ⭐ Mongoose 9 change: .count() → .countDocuments()
+        const totalorder = await orderModel.countDocuments(finder);
+
+        let paginate = {
+            "total_item": totalorder,
+            "showing": OverallResult.length,
+            "first_page": 1,
+            "previous_page": req.body.per_page,
+            "current_page": req.body.page,
+            "next_page": (parseInt(req.body.page) + 1),
+            "last_page": parseInt((totalorder) / parseInt(req.body.per_page))
+        }
+
+        if(order.length > 0){
+            return res.json({ 
+                error: false,
+                status: 200, 
+                message: 'Fetch Data Successfully', 
+                data: { order: OverallResult, paginate }
+            });
+        } else {
+            return res.json({ 
+                error: true, 
+                status: 503, 
+                message: 'No Record Found' 
+            });
+        }
+
+    } catch (error) {
+        res.status(400).json({ message: error.message, error: true })
+    }
+});
+  
+router.get('/order_details/v1/:id', async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const order = await orderModel.findById(id)
+            .populate('addressId')
+            .populate('fromId')
+            .populate({
+                path: 'selecteditems',
+                populate: [
+                    { path: 'cuisineId' },
+                    { path: 'mealId', model: 'meals' },
+                    { path: 'special_appliance_id' },
+                    { path: 'general_appliance_id' },
+                    { path: 'serving_dish' }
+                ]
+            })
+            .populate('orderApplianceIds')
+            .exec(); // Recommended in Mongoose 9
+
+        console.log("order>>>>>>>", order);
+
+        if (order) {
+            return res.status(200).json({
+                error: false,
+                status: 200,
+                message: 'Fetch Data Successfully',
+                data: order
+            });
+        } else {
+            return res.status(503).json({
+                error: true,
+                status: 503,
+                message: 'No Record Found'
+            });
+        }
+
+    } catch (error) {
+        return res.status(400).json({
+            error: true,
+            message: error?.message || "Something went wrong"
+        });
+    }
+});
+
+router.get('/order_details_food_delivery/:id', async (req, res) => {
+  try {
+    const order = await orderModel
+      .find({ order_id: req.params.id })
+      .populate('addressId')
+      .populate('fromId')
+      .populate({
+        path: 'selecteditems',
+        populate: [
+          { path: 'cuisineId' },
+          { path: 'mealId' }
+        ]
+      });
+
+    if (!order?.length) {
+      return res.json({ error: true, status: 503, message: 'No Record Found' });
+    }
+
+    const orderData = order[0];
+
+    const dishObject = Object.values(orderData.selecteditems).filter(x =>
+      x._id.toString() !== "641540d58c62c01319fcccae" &&
+      x._id.toString() !== "641540da8c62c01319fccef8"
+    );
+
+    const noOfPeople = orderData.no_of_people;
+    const noOfBurner = orderData.no_of_burner;
+
+    const itemCount = dishObject.filter(x =>
+      ["63f1b6b7ed240f7a09f7e2de", "63f1b39a4082ee76673a0a9f", "63edc4757e1b370928b149b3"]
+        .includes(x.mealId[0]._id.toString())
+    ).length;
+
+    let foodItems = [];
+
+    for (const x of Object.values(orderData.selecteditems)) {
+      let quantity = x.cuisineArray[1] * noOfPeople;
+      const allowedMeals = ["63f1b6b7ed240f7a09f7e2de", "63f1b39a4082ee76673a0a9f", "63edc4757e1b370928b149b3"];
+
+      if (
+        x._id.toString() !== "641540d58c62c01319fcccae" &&
+        x._id.toString() !== "641540da8c62c01319fccef8" &&
+        allowedMeals.includes(x.mealId[0]?._id.toString())
+      ) {
+        if (itemCount === 4) quantity *= 1.15;
+        else if ([6, 7].includes(itemCount)) quantity *= 0.85;
+        else if (itemCount === 8) quantity *= 0.75;
+        else if ([9, 10].includes(itemCount)) quantity *= 0.65;
+        else if (itemCount === 11) quantity *= 0.60;
+        else if ([12, 13].includes(itemCount)) quantity *= 0.50;
+        else if (itemCount === 14) quantity *= 0.47;
+        else if (itemCount === 15) quantity *= 0.45;
+      }
+
+      quantity = Math.round(quantity);
+      let unit = x.cuisineArray[2];
+
+      if (quantity >= 1000) {
+        quantity /= 1000;
+        if (unit === 'Gram') unit = 'KG';
+        else if (unit === 'ml') unit = 'L';
+      }
+
+      foodItems.push({
+        [x.name]: {
+          price: x.cuisineArray[0],
+          quantity,
+          unit
+        }
+      });
+    }
+
+    foodItems.push({
+      "water/disposal": {
+        quantity: noOfBurner * noOfPeople,
+        unit: null
+      }
+    });
+
+    orderData.userOrderDishImageArray = Object.assign({}, ...foodItems);
+
+    return res.json({
+      error: false,
+      status: 200,
+      message: 'Fetch Data Successfully',
+      data: orderData
+    });
+
+  } catch (error) {
+    return res.status(400).json({ message: error.message, error: true });
+  }
+});
+
+// Decoration Order Details
+router.get('/order_details_decoration/:id', async (req, res) => {
+  try {
+    const order = await orderModel
+      .findOne({ order_id: req.params.id })
+      .populate('addressId')
+      .populate('fromId')
+      .exec();
+
+    if (!order) {
+      return res.status(404).json({ error: true, status: 404, message: 'No Record Found' });
+    }
+
+    const decorationDocs = await Promise.all(
+      order.items.map(itemId => decorationModel.findById(itemId).exec())
+    );
+
+    const orderWithDecorations = {
+      ...order.toObject(),
+      items: order.items.map((itemId, idx) => ({
+        itemId,
+        decoration: decorationDocs[idx] ?? null
+      }))
+    };
+
+    console.log('%c [OrderWithDecorations]', 'font-size:13px; background:pink; color:#bf2c9f;', orderWithDecorations);
+
+    return res.json({
+      error: false,
+      status: 200,
+      message: 'Fetch Data Successfully',
+      data: orderWithDecorations
+    });
+
+  } catch (err) {
+    console.error('Error fetching order + decorations:', err);
+    return res.status(500).json({ error: true, status: 500, message: err.message });
+  }
+});
+
+router.get('/order_details_photography/:id', async (req, res) => {
+    try {
+        const order = await orderModel.find({ order_id: req.params.id })
+            .populate('addressId')
+            .populate('fromId')
+            .populate('addressId')
+            .exec(); // Recommended for Mongoose 9
+
+        let photography;
+        let orderWithPhotography;
+
+        if (order.length > 0) {
+            const photographyPromisesArray = order.map(async (orderItem) => {
+                const photographyPromises = orderItem.items.map(async (itemId) => {
+                    return await photographyModel.findById(itemId).exec(); // Mongoose 9 safe
+                });
+                return await Promise.all(photographyPromises);
+            });
+
+            // Resolve all promises
+            photography = await Promise.all(photographyPromisesArray);
+
+            orderWithPhotography = {
+                ...order[0]._doc, // Mongoose 9 returns document object safely
+                items: order[0].items.map((itemId, index) => ({
+                    itemId: itemId,
+                    photography: photography[0][index] // keep same structure
+                }))
+            };
+        }
+
+        if (order.length > 0) {
+            return res.json({
+                error: false,
+                status: 200,
+                message: 'Fetch Data Successfully',
+                data: orderWithPhotography
+            });
+        } else {
+            return res.json({
+                error: true,
+                status: 503,
+                message: 'No Record Found'
+            });
+        }
+
+    } catch (error) {
+        return res.status(400).json({
+            error: true,
+            message: error?.message || "Something went wrong"
+        });
+    }
+});
+
+router.post('/completeOrder', async (req, res) => {
+    const { _id, userId, job_end_time } = req.body;
+
+    if (!_id) {
+        return res.status(422).json({
+            error: true,
+            status: 422,
+            data: [
+                { path: '_id', message: 'Id is required.' }
+            ]
+        });
+    }
+
+    try {
+        // Use findById for single document
+        const order = await orderModel.findById(_id);
+
+        if (!order) {
+            return res.status(503).json({
+                error: true,
+                status: 503,
+                message: 'No Order Found'
+            });
+        }
+
+        // Prepare update
+        const update = {
+            order_status: 3,
+            toId: userId,
+            job_end_time,
+            order_complete_date: Date.now()
+        };
+
+        // Get user from fromId
+        const user = await userModel.findById(order.fromId);
+
+        // Send notification if device_token exists
+        if (user?.device_token) {
+            notificationFunction.sendNotifications(
+                user.device_token,
+                order.fromId,
+                'Complete order',
+                'Thanks!! Order is completed now !!',
+                _id,
+                0
+            );
+        }
+
+        // Update order
+        const result = await orderModel.findByIdAndUpdate(order._id, update, { new: true });
+
+        return res.status(200).json({
+            error: false,
+            status: 200,
+            message: 'Order completed successfully',
+            data: result
+        });
+
+    } catch (error) {
+        return res.status(400).json({
+            error: true,
+            message: error.message
+        });
+    }
+});
+
+
+//.........................not used api .............
+
+
+router.post('/add_backup1', async(req, res) => {
+    const otp = commonFunction.OTP();
+    const totalorder = await orderModel.find({});
+    const data = new orderModel({
+        order_date: req.body.order_date,
+        order_time: req.body.order_time,
+        no_of_people: req.body.no_of_people,
+        no_of_burner: req.body.no_of_burner,
+        type: req.body.type,
+        order_type: req.body.order_type,
+        items: req.body.items,
+        total_amount: req.body.total_amount,
+        is_gst: req.body.is_gst,
+        is_discount: req.body.is_discount,
+        payable_amount: req.body.payable_amount,
+        addressId: req.body.addressId,
+        fromId: req.body.fromId,
+        toId: req.body.toId,
+        orderApplianceIds: req.body.orderApplianceIds,
+        categoryIds: req.body.categoryIds,
+        otp: otp,
+        order_id: Number(totalorder.length)+1,
+    })
+    req.body.items.forEach(element => {
+        data.selecteditems.push(element.item_id)
+    });
+    try {
+        // var userArray=[];
+        // const userIds= await userModel.find({role:'supplier'});
+        // var i = 0;
+        // async.eachSeries(userIds, function (rec2, loop2){
+        //     userArray.push(rec2._id);
+        //     loop2();
+        //     i = i + 1;
+        // });
+        // data.supplierUserIds=userArray;
+        const dataToSave = await data.save();
+        return res.json({ error: false, status: 200, message: 'Order Created Successfully', data: dataToSave })
+    } catch (error) {
+        res.status(400).json({ message: error.message, error: true })
+    }
+})
+
+router.post('/add/v2', async(req, res) => {
+    const totalorder = await orderModel.find({});
+    const otp = commonFunction.OTP();
+    const data = new orderModel({
+        order_date: req.body.order_date,
+        order_time: req.body.order_time,
+        no_of_people: req.body.no_of_people,
+        no_of_burner: req.body.no_of_burner,
+        type: req.body.type,
+        order_type: req.body.order_type,
+        items: req.body.items,
+        total_amount: req.body.total_amount,
+        is_gst: req.body.is_gst,
+        is_discount: req.body.is_discount,
+        payable_amount: req.body.payable_amount,
+        addressId: req.body.addressId,
+        fromId: req.body.fromId,
+        toId: req.body.toId,
+        orderApplianceIds: req.body.orderApplianceIds,
+        categoryIds: req.body.categoryIds,
+        otp: otp,
+        order_id: Number(totalorder.length)+1,
+        order_locality: req.body.order_locality,
+    })
+    if(req.body.items.length>0){
+        let hasKey = req.body.items[0].hasOwnProperty('item_id');
+        if(hasKey){
+            req.body.items.forEach(element => {
+                data.selecteditems.push(element.item_id)
+            });
+        }else{
+            req.body.items.forEach(element => {
+                data.selecteditems.push(element)
+            });
+        }
+    }
+    try {
+        var userArray=[];
+        var userFinder = {  role:'supplier',device_token :{ "$nin": [ null, "" ] }  };
+        var localityFinder = { status : 1}
+        // localityFinder[`name`] = new RegExp((req.body.locality).trim(), 'i');
+        const localityData= await cityServedLocalityModel.find(localityFinder);
+        console.log("localityData>>>>>>",localityData);
+        console.log("req.body.locality>>>>>>",req.body.locality);
+        const localityIds= localityData.filter((x)=>String(x.name).toLowerCase() == String(req.body.order_locality).toLowerCase());
+        console.log("localityIds>>>>>",localityIds)
+        if(localityIds.length>0){
+            userFinder[`userServedLocalities`]={ '$in': [ String(localityIds[0]._id) ] }
+            const userIds= await userModel.find(userFinder);
+            console.log("userIds>>>>>",userIds);
+            var i = 0;
+            async.eachSeries(userIds, function (rec2, loop2){
+                userArray.push(rec2.device_token);
+                loop2();
+                i = i + 1;
+            });
+            if(userIds.length>0){
+                if(userArray.length>0){
+                    userArray.forEach(element => {
+                        notificationFunction.sendNotifications(element,req.body.fromId,'New order','You have a new order!!!','',0)
+                    });
+                }
+                let dishfinder = { status: 1 };
+                var index = 0;
+                let noOfChefHelper = 0;
+                async.eachSeries(data.selecteditems, function (dish_elements, loop4){
+                    let responseobject={};
+                    dishfinder[`_id`]={ '$in': [ String(dish_elements) ] }
+                    responseobject.mealObject=dish_elements;
+                    (async () => {
+                        await dishModel.find(dishfinder).exec(function(err, dishResponse) {
+                            if(dishResponse.length>0){
+                                noOfChefHelper=noOfChefHelper+Number(dishResponse[0].cooking_min);
+                            }
+                            loop4();
+                            index = index + 1;
+                        });
+                    })();
+                    
+                }, async(errSelPro) => {
+                    if(errSelPro){
+                        return res.json({ error: true, status: 503, message: errSelPro })  
+                    }else{
+                        data.chef=commonFunction.getCalcalutionOfChefAndHelper(noOfChefHelper).chef;
+                        data.helper=commonFunction.getCalcalutionOfChefAndHelper(noOfChefHelper).helper;
+                        // console.log("data>>>>>>>>",JSON.stringify(data));
+                        const dataToSave = await data.save();
+                        // const dataToSave = data;
+                        return res.json({ error: false, status: 200, message: 'Order Created Successfully', data: dataToSave })
+                    }
+                })
+            }else{
+                return res.json({ error: true, status: 503, message: 'No Supplier Are Available Right Now' })  
+            }
+        }else{
+            return res.json({ error: true, status: 503, message: 'Sorry, we are not in your city!! We will notify you as soon we enter into the city.' }) 
+        }
+    } catch (error) {
+        res.status(400).json({ message: error.message, error: true })
+    }
+})
+
+router.post('/add/v3', async(req, res) => {
+    const totalorder = await orderModel.find({});
+    const otp = commonFunction.OTP();
+    const data = new orderModel({
+        order_date: req.body.order_date,
+        order_time: req.body.order_time,
+        no_of_people: req.body.no_of_people,
+        no_of_burner: req.body.no_of_burner,
+        type: req.body.type,
+        order_type: req.body.order_type,
+        items: req.body.items,
+        total_amount: req.body.total_amount,
+        is_gst: req.body.is_gst,
+        is_discount: req.body.is_discount,
+        payable_amount: req.body.payable_amount,
+        addressId: req.body.addressId,
+        fromId: req.body.fromId,
+        toId: req.body.toId,
+        orderApplianceIds: req.body.orderApplianceIds,
+        categoryIds: req.body.categoryIds,
+        otp: otp,
+        order_id: Number(totalorder.length)+1,
+        order_locality: req.body.order_locality,
+    })
+    if(req.body.items.length>0){
+        let hasKey = req.body.items[0].hasOwnProperty('item_id');
+        if(hasKey){
+            req.body.items.forEach(element => {
+                data.selecteditems.push(element.item_id)
+            });
+        }else{
+            req.body.items.forEach(element => {
+                data.selecteditems.push(element)
+            });
+        }
+    }
+    try {
+        var userArray=[];
+        const orderAddress = await AddressModel.find({_id:req.body.addressId});
+        var userFinder = {  role:'supplier',device_token :{ "$nin": [ null, "" ] }  };
+        const userIds= await userModel.find(userFinder).populate('userServedLocalities');
+        if(orderAddress.length>0){
+            userIds.forEach(element => {
+                var obj=[];
+                obj.locationDistance=[]
+                if(element.userServedLocalities && element.userServedLocalities.length>0){
+                    element.userServedLocalities.forEach(location => {
+                        obj.push(Number(commonFunction.getDistanceFromLatLonInKm(orderAddress[0].lat,orderAddress[0].lng,location.lat,location.lng).toFixed(2)))
+                    });
+                    userArray.push({_id:element._id,locationDistance:obj,device_token:element.device_token})
+                }
+            });
+            if(userArray.length>0){
+                let filteredArray = userArray.filter((element_recp) => { return element_recp.locationDistance.some((subElement) => subElement <= 0) });
+                console.log("filteredArray>>>>>",filteredArray)
+                // console.log("userArray>>>>>11111",JSON.stringify(userArray));
+            }
+        }
+        let dishfinder = { status: 1 };
+        var index = 0;
+        let noOfChefHelper = 0;
+        async.eachSeries(data.selecteditems, function (dish_elements, loop4){
+            let responseobject={};
+            dishfinder[`_id`]={ '$in': [ String(dish_elements) ] }
+            responseobject.mealObject=dish_elements;
+            (async () => {
+                await dishModel.find(dishfinder).exec(function(err, dishResponse) {
+                    if(dishResponse.length>0){
+                        noOfChefHelper=noOfChefHelper+Number(dishResponse[0].cooking_min);
+                    }
+                    loop4();
+                    index = index + 1;
+                });
+            })();
+            
+        }, async(errSelPro) => {
+            if(errSelPro){
+                return res.json({ error: true, status: 503, message: errSelPro })  
+            }else{
+                data.chef=commonFunction.getCalcalutionOfChefAndHelper(noOfChefHelper).chef;
+                data.helper=commonFunction.getCalcalutionOfChefAndHelper(noOfChefHelper).helper;
+                // console.log("data>>>>>>>>",JSON.stringify(data));
+                const dataToSave = await data.save();
+                // const dataToSave = data;
+                return res.json({ error: false, status: 200, message: 'Order Created Successfully', data: dataToSave })
+            }
+        })
+
+    } catch (error) {
+        res.status(400).json({ message: error.message, error: true })
+    }
+})
+
+router.post('/add_backup', async(req, res) => {
+    const totalorder = await orderModel.find({});
+    const otp = commonFunction.OTP();
+    const data = new orderModel({
+        order_date: req.body.order_date,
+        order_time: req.body.order_time,
+        no_of_people: req.body.no_of_people,
+        no_of_burner: req.body.no_of_burner,
+        type: req.body.type,
+        order_type: req.body.order_type,
+        items: req.body.items,
+        total_amount: req.body.total_amount,
+        is_gst: req.body.is_gst,
+        is_discount: req.body.is_discount,
+        payable_amount: req.body.payable_amount,
+        addressId: req.body.addressId,
+        fromId: req.body.fromId,
+        toId: req.body.toId,
+        orderApplianceIds: req.body.orderApplianceIds,
+        categoryIds: req.body.categoryIds,
+        otp: otp,
+        order_id: Number(totalorder.length)+1,
+        order_locality: req.body.order_locality,
+    })
+    if(req.body.items.length>0){
+        let hasKey = req.body.items[0].hasOwnProperty('item_id');
+        if(hasKey){
+            req.body.items.forEach(element => {
+                data.selecteditems.push(element.item_id)
+            });
+        }else{
+            req.body.items.forEach(element => {
+                data.selecteditems.push(element)
+            });
+        }
+    }
+    try {
+        var userArray=[];
+        var userFinder = {  role:'supplier',device_token :{ "$nin": [ null, "" ] }  };
+        var localityFinder = { status : 1}
+        const localityData= await cityServedLocalityModel.find(localityFinder);
+        console.log("localityData>>>>>>",localityData);
+        console.log("req.body.locality>>>>>>",req.body.locality);
+        const localityIds= localityData.filter((x)=>String(x.name).toLowerCase() == String(req.body.order_locality).toLowerCase());
+        console.log("localityIds>>>>>",localityIds)
+        const userIds= await userModel.find(userFinder);
+        console.log("userIds>>>>>",userIds);
+        var i = 0;
+        async.eachSeries(userIds, function (rec2, loop2){
+            userArray.push(rec2.device_token);
+            loop2();
+            i = i + 1;
+        });
+        if(userIds.length>0){
+            if(userArray.length>0){
+                userArray.forEach(element => {
+                    notificationFunction.sendNotifications(element,req.body.fromId,'New order','You have a new order!!!','',0)
+                });
+            }
+        }
+        // if(localityIds.length>0){
+        //     userFinder[`userServedLocalities`]={ '$in': [ String(localityIds[0]._id) ] }
+        //     else{
+        //         return res.json({ error: true, status: 503, message: 'No Supplier Are Available Right Now' })  
+        //     }
+        // }else{
+        //     return res.json({ error: true, status: 503, message: 'Sorry, we are not in your city!! We will notify you as soon we enter into the city.' }) 
+        // }
+
+        let dishfinder = { status: 1 };
+        var index = 0;
+        let noOfChefHelper = 0;
+        async.eachSeries(data.selecteditems, function (dish_elements, loop4){
+            let responseobject={};
+            dishfinder[`_id`]={ '$in': [ String(dish_elements) ] }
+            responseobject.mealObject=dish_elements;
+            (async () => {
+                await dishModel.find(dishfinder).exec(function(err, dishResponse) {
+                    if(dishResponse.length>0){
+                        noOfChefHelper=noOfChefHelper+Number(dishResponse[0].cooking_min);
+                    }
+                    loop4();
+                    index = index + 1;
+                });
+            })();
+            
+        }, async(errSelPro) => {
+            if(errSelPro){
+                return res.json({ error: true, status: 503, message: errSelPro })  
+            }else{
+                data.chef=commonFunction.getCalcalutionOfChefAndHelper(noOfChefHelper).chef;
+                data.helper=commonFunction.getCalcalutionOfChefAndHelper(noOfChefHelper).helper;
+                // console.log("data>>>>>>>>",JSON.stringify(data));
+                const dataToSave = await data.save();
+                // const dataToSave = data;
+                return res.json({ error: false, status: 200, message: 'Order Created Successfully', data: dataToSave })
+            }
+        })
+    } catch (error) {
+        res.status(400).json({ message: error.message, error: true })
+    }
+})
+
+
+router.get('/details/:id', async(req, res) => {
+    try {
+        const data = await orderModel.findById(req.params.id).populate("categoryId")
+        return res.json({ error: false, status: 200, message: 'Details Fetch Successfully', data: data })
+    } catch (error) {
+        res.status(400).json({ message: error.message, error: true })
+    }
+})
+
+
 router.post('/order_list', async(req, res) => {
     let finder = {
         status: { $ne: 2 }
@@ -658,164 +1244,7 @@ router.get('/order_details/:id', async(req, res) => {
     }
 })
 
-//used in admin
-router.get('/order_details/v1/:id', async(req, res) => {
-    try {
-        const order = await orderModel.findById(req.params.id).populate('addressId').populate('fromId').populate('addressId').populate({
-            path: "selecteditems",
-            populate: {
-               path: "cuisineId"
-            }
-        }).populate({
-            path: "selecteditems",
-            populate: {
-               path: "mealId"
-            }
-        }).populate({
-            path: "orderApplianceIds"
-        }).populate({
-            path: "selecteditems",
-            populate: {
-               path: "special_appliance_id"
-            }
-        }).populate({
-            path: "selecteditems",
-            populate: {
-               path: "general_appliance_id"
-            }
-        }).populate({
-            path: "selecteditems",
-            populate: {
-               path: "serving_dish"
-            }
-        })
-        console.log("order>>>>>>>",order);
-        if (Object.keys(order).length > 0) {
-            return res.json({ error: false, status: 200, message: 'Fetch Data Successfully', data: order })
-        } else {
-            return res.json({ error: true, status: 503, message: 'No Record Found' })
-        }
-    } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
-    }
-})
-
-//used in admin
-router.post('/acceptOrder', async(req, res) => {
-    const { requestdata } = req.body;
-    if (!req.body._id) {
-        return res.json({
-            error: true,
-            status: 422,
-            data: [
-                { path: '_id', message: 'Id is required.' }
-            ]
-        });
-    }
-    try {
-        // const otp = commonFunction.OTP();
-        const order = await orderModel.find({ _id: req.body._id,order_status: 0 });
-        if (order.length > 0) {
-            const update = {
-                order_status: 1,
-                toId: req.body.userId,
-                // otp: otp,
-            };
-            const user = await userModel.find({ _id: order[0].fromId });
-            console.log("user>>>>",user);
-            console.log("user>>>>Accept Order",user[0].device_token);
-            if(user[0].device_token != ""){
-                notificationFunction.sendNotifications(user[0].device_token,order[0].fromId,'Accept order','Your order has been accepted !!',req.body._id,0)
-            }
-            const result = await orderModel.findByIdAndUpdate(order[0]._id, { $set: update })
-            return res.json({ error: false, status: 200, message: 'Order accepted successfully',data:result })  
-        } else {
-            return res.json({ error: true, status: 503, message: 'Order already accepted' })
-        }
-    } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
-    }
-})
-
-//not used in admin
-router.post('/startOrder', async(req, res) => {
-    const { requestdata } = req.body;
-    if (!req.body._id) {
-        return res.json({
-            error: true,
-            status: 422,
-            data: [
-                { path: '_id', message: 'Id is required.' }
-            ]
-        });
-    }
-    if (!req.body.otp) {
-        return res.json({
-            error: true,
-            status: 422,
-            data: [
-                { path: 'otp', message: 'otp is required.' }
-            ]
-        });
-    }
-    try {
-        const order = await orderModel.find({ _id: req.body._id });
-        const order_otp = await orderModel.find({ _id: req.body._id,otp: req.body.otp });
-        if (order.length > 0) {
-            if(order_otp.length>0){
-                const update = {
-                    order_status: 2,
-                    toId: req.body.userId,
-                    job_start_time: req.body.job_start_time
-                };
-                const result = await orderModel.findByIdAndUpdate(order[0]._id, { $set: update })
-                return res.json({ error: false, status: 200, message: 'Order started successfully',data:result })
-            }else{
-                return res.json({ error: true, status: 503, message: 'otp mismatched' })
-            }   
-        } else {
-            return res.json({ error: true, status: 503, message: 'Order already started' })
-        }
-    } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
-    }
-})
-//not used in admin
-router.post('/completeOrder', async(req, res) => {
-    const { requestdata } = req.body;
-    if (!req.body._id) {
-        return res.json({
-            error: true,
-            status: 422,
-            data: [
-                { path: '_id', message: 'Id is required.' }
-            ]
-        });
-    }
-    try {
-        const order = await orderModel.find({ _id: req.body._id });
-        if (order.length > 0) {
-            const update = {
-                order_status: 3,
-                toId: req.body.userId,
-                job_end_time: req.body.job_end_time,
-                order_complete_date: new Date().getTime()
-            };
-            const user = await userModel.find({ _id: order[0].fromId });
-            console.log("user>>>>Complete Order",user[0].device_token);
-            if(user[0].device_token != ""){
-                notificationFunction.sendNotifications(user[0].device_token,order[0].fromId,'Complete order','Thanks!! Older is completed now !!',req.body._id,0)
-            }
-            const result = await orderModel.findByIdAndUpdate(order[0]._id, { $set: update })
-            return res.json({ error: false, status: 200, message: 'Order completed successfully',data:result })   
-        } else {
-            return res.json({ error: true, status: 503, message: 'No Order Found' })
-        }
-    } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
-    }
-})
-//not used in admin
+//not used
 router.post('/publicOrderList/v2', async(req, res) => {
     let finder = { status: 1 };
     finder['toId'] = "";
@@ -876,7 +1305,7 @@ router.post('/publicOrderList/v2', async(req, res) => {
     }
 })
 
-//not used in admin
+
 router.get('/order_view_details/:id', async(req, res) => {
     let responseobject={};
     try {
@@ -1094,7 +1523,7 @@ router.post('/getInProgressOrderList', async(req, res) => {
     }
 })
 
-//not used in admin
+
 router.post('/add-order-feedback', async (req, res) => {
     const data = new orderFeedbackModel({
         slabPicture: req.body.slabPicture,
@@ -1125,7 +1554,7 @@ router.post('/add-order-feedback', async (req, res) => {
     }
 })
 
-//not used in admin
+
 router.post('/order_status_list', async(req, res) => {
     if (!req.body._id) {
         return res.json({
@@ -1201,7 +1630,7 @@ router.post('/order_status_list', async(req, res) => {
     }
 })
 
-// updateBookingDetails
+
 router.post('/updateBookingDetails', async(req, res) => {
     if (!req.body._id) {
         return res.json({
@@ -1229,7 +1658,7 @@ router.post('/updateBookingDetails', async(req, res) => {
     }
 })
 
-//not used in admin
+
 router.post('/createCustomerFeedback', async(req, res) => {
     if (!req.body._id) {
         return res.json({
@@ -1269,7 +1698,7 @@ router.post('/createCustomerFeedback', async(req, res) => {
     }
 })
 
-//not used in admin
+
 router.post('/user_review_list', async(req, res) => {
     if (!req.body._id) {
         return res.json({
@@ -1314,33 +1743,6 @@ router.post('/user_review_list', async(req, res) => {
     }
 })
 
-//used in admin
-router.post('/cancelOrder', async(req, res) => {
-    const { requestdata } = req.body;
-    if (!req.body._id) {
-        return res.json({
-            error: true,
-            status: 422,
-            data: [
-                { path: '_id', message: 'Id is required.' }
-            ]
-        });
-    }
-    try {
-        const order = await orderModel.find({ _id: req.body._id });
-        if (order.length > 0) {
-            const update = {
-                order_status: 4
-            };
-            const result = await orderModel.findByIdAndUpdate(order[0]._id, { $set: update })
-            return res.json({ error: false, status: 200, message: 'Order cancelled successfully',data:result })   
-        } else {
-            return res.json({ error: true, status: 503, message: 'No Order Found' })
-        }
-    } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
-    }
-})
 
 router.get('/booking_details/:id', async(req, res) => {
     let responseOrderObject={};
@@ -1464,115 +1866,8 @@ router.get('/booking_details/:id', async(req, res) => {
         res.status(400).json({ message: error.message, error: true })
     }
 })
-//fixed
-router.post('/user_order_list', async(req, res) => {
-    if (!req.body._id) {
-        return res.json({
-            error: true,
-            status: 422,
-            data: [
-                { path: '_id', message: 'User Id is required.' }
-            ]
-        });
-    }
 
-    let finder = {
-        status: 1
-    };
 
-    let finderMany = { };
-
-    finder['fromId'] = req.body._id;
-
-    if (!req.body.page) {
-        req.body.page = 1;
-    }
-
-    if (!req.body.per_page) {
-        req.body.per_page = 20;
-    }
-
-    try {
-
-        finderMany[`order_status`] = {
-            $in: [1, 2]
-        };
-
-        const order = await orderModel.find(finder)
-            .sort({ order_status: 1 })
-            .populate('fromId')
-            .populate('toId')
-            .populate('addressId')
-            .populate({
-                path: "selecteditems",
-                populate: {
-                   path: "cuisineId"
-                }
-            })
-            .populate({
-                path: "selecteditems",
-                populate: {
-                   path: "mealId"
-                }
-            })
-            .populate({
-                path: "selecteditems",
-                populate: {
-                   path: "special_appliance_id"
-                }
-            })
-            .populate({
-                path: "selecteditems",
-                populate: {
-                   path: "general_appliance_id"
-                }
-            })
-            .populate({
-                path: "selecteditems",
-                populate: {
-                   path: "serving_dish"
-                }
-            })
-            .populate({
-                path: "orderApplianceIds"
-            });
-
-        let OverallResult = order;
-
-        // ⭐ Mongoose 9 change: .count() → .countDocuments()
-        const totalorder = await orderModel.countDocuments(finder);
-
-        let paginate = {
-            "total_item": totalorder,
-            "showing": OverallResult.length,
-            "first_page": 1,
-            "previous_page": req.body.per_page,
-            "current_page": req.body.page,
-            "next_page": (parseInt(req.body.page) + 1),
-            "last_page": parseInt((totalorder) / parseInt(req.body.per_page))
-        }
-
-        if(order.length > 0){
-            return res.json({ 
-                error: false,
-                status: 200, 
-                message: 'Fetch Data Successfully', 
-                data: { order: OverallResult, paginate }
-            });
-        } else {
-            return res.json({ 
-                error: true, 
-                status: 503, 
-                message: 'No Record Found' 
-            });
-        }
-
-    } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
-    }
-});
-
-//not used in admin
 router.post('/publicOrderList/v1', async(req, res) => {
     const userId  = req.body.userId;
     if (!userId) {
@@ -1645,7 +1940,7 @@ router.post('/publicOrderList/v1', async(req, res) => {
     }
 })
 
-//not used in admin
+
 router.post('/publicOrderList/v2', async(req, res) => {
     const userId  = req.body.userId;
     if (!userId) {
@@ -1718,7 +2013,7 @@ router.post('/publicOrderList/v2', async(req, res) => {
     }
 })
 
-//not used in admin
+//not used
 router.post('/getOrderCityCheck', async(req, res) => {
     let finder ={ status: 1 };
     try {
@@ -1739,7 +2034,7 @@ router.post('/getOrderCityCheck', async(req, res) => {
         res.status(400).json({ message: error.message ,error: true })
     }
 })
-//not used in admin
+
 router.post('/publicOrderList', async(req, res) => {
     let finder = { status: 1 };
     finder['toId'] = "";
@@ -1778,7 +2073,7 @@ router.post('/publicOrderList', async(req, res) => {
     }
 })
 
-//not used in admin
+
 router.get('/getIngredientByOrder/:id', async(req, res) => {
 	
 	try {
@@ -1893,246 +2188,6 @@ router.get('/getIngredientByOrder/:id', async(req, res) => {
 	
 })
 
-// router.get('/order_details_decoration/:id', async (req, res) => {
-//     try {
-//         const order = await orderModel.find({ order_id: req.params.id })
-//             .populate('addressId')
-//             .populate('fromId')
-//             .populate('addressId');
-
-//         let decorations;
-//         let orderWithDecorations;
-
-//         if (order.length > 0) {
-//             const decorationPromisesArray = order.map(async (orderItem) => {
-//                 const decorationPromises = orderItem.items.map(async (itemId) => {
-//                     return await decorationModel.findById(itemId);
-//                 });
-//                 return await Promise.all(decorationPromises);
-//             });
-
-//             // Resolve all promises
-//             decorations = await Promise.all(decorationPromisesArray);
-
-//             orderWithDecorations = {
-//                 ...order[0], // Access the first element directly, as order is an array
-//                 items: order[0].items.map((itemId, index) => ({
-//                     itemId: itemId,
-//                     decoration: decorations[index]
-//                 }))
-//             };
-//         }
-
-//         if (order.length > 0) {
-//             return res.json({ error: false, status: 200, message: 'Fetch Data Successfully', data: orderWithDecorations });
-//         } else {
-//             return res.json({ error: true, status: 503, message: 'No Record Found' });
-//         }
-//     } catch (error) {
-//         res.status(400).json({ message: error.message, error: true });
-//     }
-// });
-
-router.get('/order_details_decoration/:id', async (req, res) => {
-  try {
-    const orderId = req.params.id;
-
-    // Fetch order by order_id
-    const order = await orderModel.findOne({ order_id: orderId })
-      .populate('addressId')
-      .populate('fromId')
-      .populate('addressId');
-
-    if (!order) {
-      return res.status(404).json({ error: true, status: 503, message: 'No Record Found' });
-    }
-
-    // Fetch decorations for each item
-    const decorations = await Promise.all(
-      order.items.map(async (itemId) => {
-        return await decorationModel.findById(itemId);
-      })
-    );
-
-    // Combine order + decoration data
-    const orderWithDecorations = {
-      ...order.toObject(),          // convert mongoose doc → plain object
-      items: order.items.map((itemId, index) => ({
-        itemId,
-        decoration: decorations[index] || null
-      }))
-    };
-
-    return res.json({
-      error: false,
-      status: 200,
-      message: 'Fetch Data Successfully',
-      data: orderWithDecorations
-    });
-
-  } catch (error) {
-    console.error("Decoration Fetch Error:", error);
-    return res.status(400).json({ message: error.message, error: true });
-  }
-});
-
-router.get('/order_details_food_delivery/:id', async(req, res) => {
-    try {
-        const order = await orderModel.find({ order_id: req.params.id }).populate('addressId').populate('fromId').populate('addressId').populate({
-            path: "selecteditems",
-            populate: {
-               path: "cuisineId"
-            }
-        }).populate({
-            path: "selecteditems",
-            populate: {
-               path: "mealId"
-            }
-        })
-
-        
-        const dishObject = Object.values(order[0].selecteditems).filter(x =>
-            x._id != "641540d58c62c01319fcccae" &&
-            x._id != "641540da8c62c01319fccef8"
-          )
-
-        
-
-        let noOfPeople = order[0].no_of_people
-        let noOfBurner = order[0].no_of_burner
-
-        const itemCount = dishObject.filter(x => x.mealId[0]._id.valueOf() == "63f1b6b7ed240f7a09f7e2de" || x.mealId[0]._id.valueOf() == "63f1b39a4082ee76673a0a9f" || x.mealId[0]._id.valueOf() == "63edc4757e1b370928b149b3").length
-
-        
-        const mainCourseItemCount = dishObject.filter(x => x.mealId[0]._id.valueOf() === "63f1b6b7ed240f7a09f7e2de").length
-        const appetizerItemCount = dishObject.filter(x => x.mealId[0]._id.valueOf() === "63f1b39a4082ee76673a0a9f").length
-        const breadItemCount = dishObject.filter(x => x.mealId[0]._id.valueOf() === "63edc4757e1b370928b149b3").length
-
-
-
-        let foodItems = []
-
-        Object.values(order[0].selecteditems).forEach(x => {
-            let quantity = x.cuisineArray[1] * noOfPeople
-
-            
-            if (x._id != "641540d58c62c01319fcccae" &&
-                x._id != "641540da8c62c01319fccef8" && (x.mealId[0]._id.valueOf() == "63f1b6b7ed240f7a09f7e2de" || x.mealId[0]._id.valueOf() == "63f1b39a4082ee76673a0a9f" || x.mealId[0]._id.valueOf() == "63edc4757e1b370928b149b3")) {
-                
-
-                
-                    if (itemCount == 4) {
-                    quantity = quantity * (1 + 0.15)
-                }
-                else if (itemCount == 6) {
-                    quantity = quantity * (1 - 0.15)
-                }
-                else if (itemCount == 7) {
-                    quantity = quantity * (1 - 0.15)
-                }
-                else if (itemCount == 8) {
-                    quantity = quantity * (1 - 0.25)
-                }
-                else if (itemCount == 9) {
-                    quantity = quantity * (1 - 0.35)
-                }
-                else if (itemCount == 10) {
-                    quantity = quantity * (1 - 0.35)
-                }
-                else if (itemCount == 11) {
-                    quantity = quantity * (1 - 0.40)
-                }
-                else if (itemCount == 12 || itemCount == 13) {
-                    quantity = quantity * (1 - 0.50)
-                }
-                else if (itemCount == 14) {
-                    quantity = quantity * (1 - 0.53)
-                }
-                else if (itemCount == 15) {
-                    quantity = quantity * (1 - 0.55)
-                }
-            }
-            quantity = Math.round(quantity)
-            let unit = x.cuisineArray[2];
-            if (quantity >= 1000) {
-                quantity = quantity / 1000;
-                if (unit === 'Gram')
-                    unit = 'KG'
-                else if (unit === 'ml')
-                    unit = 'L'
-            }
-            
-
-           foodItems.push({ 
-                [x.name]: { 
-                   price: x.cuisineArray[0], 
-                    quantity, 
-                    unit 
-                }
-            });
-        })
-
-        foodItems.push({ 
-            "water/disposal": { 
-                quantity: noOfBurner * noOfPeople, 
-                unit: null 
-            }
-        });
-
-        order[0].userOrderDishImageArray = Object.assign({}, ...foodItems);
-        
-        if (Object.keys(order).length > 0) {
-            return res.json({ error: false, status: 200, message: 'Fetch Data Successfully', data: order[0] })
-        } else {
-            return res.json({ error: true, status: 503, message: 'No Record Found' })
-        }
-    } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
-    }
-})
-
-router.get('/order_details_photography/:id', async (req, res) => {
-    try {
-        const order = await orderModel.find({ order_id: req.params.id })
-            .populate('addressId')
-            .populate('fromId')
-            .populate('addressId');
-
-        
-        let photography;
-        let orderWithPhotography;
-
-        if (order.length > 0) {
-            const photographyPromisesArray = order.map(async (orderItem) => {
-                const photographyPromises = orderItem.items.map(async (itemId) => {
-                    return await photographyModel.findById(itemId);
-                });
-                return await Promise.all(photographyPromises);
-            });
-
-            // Resolve all promises
-            photography = await Promise.all(photographyPromisesArray);
-
-            
-
-            orderWithPhotography = {
-                ...order[0], // Access the first element directly, as order is an array
-                items: order[0].items.map((itemId, index) => ({
-                    itemId: itemId,
-                    photography: photography[index]
-                }))
-            };
-        }
-
-        if (order.length > 0) {
-            return res.json({ error: false, status: 200, message: 'Fetch Data Successfully', data: orderWithPhotography});
-        } else {
-            return res.json({ error: true, status: 503, message: 'No Record Found' });
-        }
-    } catch (error) {
-        res.status(400).json({ message: error.message, error: true });
-    }
-});
 
 module.exports = router;
 

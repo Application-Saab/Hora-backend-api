@@ -142,7 +142,7 @@ let passportAuth = require("./store/passportAuth").passportAuth;
 app.use("/api/admin", AdminRoutes);
 app.use("/api/user", UserRoutes);
 app.use("/api/customer/event", EventInviteRoutes);
-app.use("/api/users", passportAuth, UserRoutes);
+app.use("/api/users", UserRoutes);
 app.use("/api/configuration", ConfigurationRoutes);
 app.use("/api/ingredient", IngredientRoutes);
 app.use("/api/ingredient_type", ingredientTypeRoutes);

@@ -9,21 +9,16 @@ const TicketCounter = require("../models/ticket-counter-luckydraw");
 const EventImages = require("../models/eventImages");
 const multer = require("multer");
 const fs = require("fs");
-const fsPromises = require("fs").promises;
 
-const {
-  generateThumbnail,
-  generateTemplateThumbnail,
-  generateVideoPreview,
-  // compressVideo,
-} = require("../store/multerS3Config");
+const { generateTemplateThumbnail } = require("../store/multerS3Config");
 const eventPosts = require("../models/event-posts");
 const postLikes = require("../models/post-likes");
 const postComment = require("../models/post-comment");
 const ChatRoom = require("../models/eventChatRoom");
 const ChatMessage = require("../models/eventMessage");
-const PushSub = require('../models/pushSubscription');
-const { cleanupLocalFiles } = require("../store/cleanupLocalFiles");
+const PushSub = require("../models/pushSubscription");
+const { ioInstance } = require("../socket");
+const { computeUnreadCountsForUser } = require("../utils/chatUnread");
 
 // AWS S3 Configuration
 const s3 = new AWS.S3({
@@ -156,7 +151,7 @@ router.post("/create-event-invite", async (req, res) => {
       roomId: savedInvite._id,
       roomName: hostName,
       createdBy: userId,
-      members: [userId], // ADD HOST AS FIRST MEMBER
+      members: [userId],
     });
 
     await newRoom.save();
@@ -599,51 +594,109 @@ router.get("/chat/messages/:roomId", async (req, res) => {
   }
 });
 
-// Mark messages as read for a user in a room
+// existing mark-read route
 router.post("/mark-read", async (req, res) => {
   try {
     const { roomId, userId } = req.body;
+    if (
+      !mongoose.Types.ObjectId.isValid(roomId) ||
+      !mongoose.Types.ObjectId.isValid(userId)
+    ) {
+      return res.status(400).json({ error: true, message: "Invalid ids" });
+    }
 
-    const room = await ChatRoom.findOne({ _id: roomId });
+    const room = await ChatRoom.findById(roomId);
     if (!room)
       return res.status(404).json({ error: true, message: "Room not found" });
 
-    room.lastReadAt.set(userId, new Date());
+    room.lastReadAt.set(String(userId), new Date());
     await room.save();
 
-    return res.json({ error: false, message: "Marked as read" });
+    // compute unreadCounts for this user (for all rooms) after marking
+    const allCounts = await computeUnreadCountsForUser(userId);
+
+    // Optionally: emit socket update to other members that this user read messages
+    ioInstance &&
+      ioInstance.to(roomId.toString()).emit("message:read:update", {
+        roomId,
+        userId,
+        lastReadAt: room.lastReadAt.get(String(userId)) || new Date(),
+      });
+
+    return res.json({
+      error: false,
+      message: "Marked as read",
+      unreadCounts: allCounts,
+    });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: true, message: "Server error" });
   }
 });
 
+// GET /chatrooms/:userId/unread
+router.get("/chatrooms/:userId/unread", async (req, res) => {
+  const { userId } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(userId))
+    return res.status(400).json({ error: true, message: "Invalid userId" });
+  const { computeUnreadCountsForUser } = require("../utils/chatUnread");
+  const counts = await computeUnreadCountsForUser(userId);
+  return res.json({ error: false, data: counts });
+});
+
+// POST /api/push/subscribe
 router.post("/subscribe", async (req, res) => {
   try {
-    const { userId, roomId, subscription } = req.body;
-    if (!subscription || !userId)
-      return res.status(400).json({ error: true, message: "missing" });
+    const { userId, roomId, subscription, fcmToken } = req.body;
+    if (!userId)
+      return res.status(400).json({ error: true, message: "userId required" });
 
-    // optionally dedupe by endpoint
-    await PushSub.updateOne(
-      { "subscription.endpoint": subscription.endpoint },
-      { $set: { userId, roomId: roomId || null, subscription } },
-      { upsert: true }
-    );
+    if (subscription) {
+      // upsert by endpoint
+      await PushSub.updateOne(
+        { "subscription.endpoint": subscription.endpoint },
+        {
+          $set: {
+            userId,
+            roomId: roomId || null,
+            subscription,
+            fcmToken: fcmToken || null,
+          },
+        },
+        { upsert: true }
+      );
+    } else if (fcmToken) {
+      // some browsers provide only fcm token; upsert by token
+      await PushSub.updateOne(
+        { fcmToken },
+        { $set: { userId, roomId: roomId || null, fcmToken } },
+        { upsert: true }
+      );
+    } else {
+      return res
+        .status(400)
+        .json({ error: true, message: "subscription or fcmToken required" });
+    }
     return res.json({ error: false });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: true });
+    console.error("subscribe error", err);
+    return res.status(500).json({ error: true, message: "server error" });
   }
 });
 
 router.post("/unsubscribe", async (req, res) => {
   try {
-    const { endpoint } = req.body;
-    if (!endpoint) return res.status(400).json({ error: true });
-    await PushSub.deleteOne({ "subscription.endpoint": endpoint });
-    return res.json({ error: false });
+    const { endpoint, fcmToken } = req.body;
+    if (endpoint) {
+      await PushSub.deleteOne({ "subscription.endpoint": endpoint });
+      return res.json({ error: false });
+    } else if (fcmToken) {
+      await PushSub.deleteOne({ fcmToken });
+      return res.json({ error: false });
+    }
+    return res.status(400).json({ error: true });
   } catch (err) {
+    console.error("unsubscribe", err);
     return res.status(500).json({ error: true });
   }
 });
@@ -658,7 +711,7 @@ const storage = multer.diskStorage({
 
 const uploadSingle = multer({
   storage,
-  limits: { fileSize: 100 * 1024 * 1024 }, // 20MB limit
+  limits: { fileSize: 100 * 1024 * 1024 },
 }).single("image");
 
 const uploadImageToS3 = async (
@@ -806,7 +859,7 @@ router.get("/event-posts/:eventId", async (req, res) => {
 
     const posts = await eventPosts
       .find({ eventId })
-      .sort({ createdAt: -1 }) // latest first
+      .sort({ createdAt: -1 })
       .lean();
 
     return sendResponse(res, 200, false, "Posts fetched successfully", posts);
@@ -835,7 +888,7 @@ router.post("/:postId/like", async (req, res) => {
     const existingLike = await postLikes.findOne({ postId, likedById });
 
     if (existingLike) {
-      // 👉 Already liked → Unlike it
+      // Already liked → Unlike it
       await postLikes.findByIdAndDelete(existingLike._id);
 
       // Decrement like count safely
@@ -848,7 +901,7 @@ router.post("/:postId/like", async (req, res) => {
         likeCounts: post.likeCounts,
       });
     } else {
-      // 👉 Not liked → Add new like
+      // Not liked → Add new like
       const newLike = new postLikes({ postId, likedById, likedByName });
       await newLike.save();
 
@@ -909,25 +962,6 @@ router.post("/:postId/comment", async (req, res) => {
   }
 });
 
-// Function to delete image from S3
-const deleteImageFromS3 = async (key) => {
-  try {
-    const params = {
-      Bucket: process.env.S3_BUCKET_NAME,
-      Key: key,
-    };
-    await s3.deleteObject(params).promise();
-    console.log(`Successfully deleted S3 object: ${key}`);
-  } catch (err) {
-    console.error("S3 Delete Error:", {
-      message: err.message,
-      stack: err.stack,
-      key,
-    });
-    throw err;
-  }
-};
-
 const deleteFileWithRetry = async (filePath, retries = 3, delay = 100) => {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
@@ -950,7 +984,7 @@ const deleteFileWithRetry = async (filePath, retries = 3, delay = 100) => {
   }
 };
 
-// Save externam template image for an event invite
+// Save external template image for an event invite
 router.put(
   "/event-invites/external-template/:eventId",
   (req, res, next) => {
@@ -1014,7 +1048,7 @@ router.put(
         // Update document with new image details
         existing.externalTemplateImageUrl = uploadResult.Location;
         existing.externalTemplateImageKey = uploadResult.Key;
-        existing.templateId = null; // Set templateId to null
+        existing.templateId = null;
 
         // Cleanup local files with retry
         await Promise.all([
@@ -1051,730 +1085,5 @@ router.put(
     }
   }
 );
-
-// Create a lucky draw by event ID and user ID
-router.put(
-  "/event-images/:eventId/lucky-draw",
-  (req, res, next) => {
-    uploadSingle(req, res, (err) => {
-      if (err) return sendResponse(res, 400, true, err.message);
-      next();
-    });
-  },
-  async (req, res) => {
-    try {
-      const { eventId } = req.params;
-      if (!mongoose.Types.ObjectId.isValid(eventId)) {
-        return sendResponse(res, 400, true, "Invalid event ID");
-      }
-
-      const file = req.file;
-      if (!file) {
-        return sendResponse(res, 400, true, "luckyDrawImage is required");
-      }
-
-      const userName = req.body.name;
-      const userId = req.body.userId;
-      if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
-        return sendResponse(res, 400, true, "Invalid user ID");
-      }
-
-      let eventImage = await EventImages.findOne({ eventId, userId });
-      if (!eventImage) {
-        eventImage = new EventImages({
-          eventId,
-          userId,
-          name: userName,
-          luckyDrawImages: [],
-          thankYouNoteImages: [],
-          selfUploadedImages: [],
-        });
-      } else {
-        console.log(
-          "Found existing eventImage for eventId:",
-          eventId,
-          "userId:",
-          userId
-        );
-      }
-
-      const counter = await TicketCounter.findOneAndUpdate(
-        { _id: "luckyDrawCounter" },
-        { $inc: { sequenceValue: 1 } },
-        { new: true, upsert: true }
-      ).lean();
-
-      // Generated ticket number
-      const ticketNumber = counter.sequenceValue;
-
-      const fileName = `lucky-draw-${Date.now()}-${file.originalname
-        .split(".")
-        .pop()}`;
-      const thumbnailFileName = `thumb_${fileName.replace(
-        /\.(png|jpeg|jpg)$/i,
-        ""
-      )}.webp`;
-      const thumbnailPath =
-        file.path.replace(/\.(png|jpeg|jpg)$/i, "") + "_thumbnail.webp";
-
-      // Generate thumbnail
-      await generateThumbnail(file.path, thumbnailPath);
-
-      // Upload original image and thumbnail concurrently
-      const [uploadResult, thumbnailUploadResult] = await Promise.all([
-        uploadImageToS3(
-          file.path,
-          fileName,
-          userId,
-          eventId,
-          file.mimetype,
-          "lucky-draw"
-        ),
-        uploadImageToS3(
-          thumbnailPath,
-          thumbnailFileName,
-          userId,
-          eventId,
-          "image/webp",
-          "lucky-draw"
-        ),
-      ]);
-
-      // Cleanup local files
-      try {
-        await Promise.all([fs.unlink(file.path), fs.unlink(thumbnailPath)]);
-      } catch (cleanupErr) {
-        console.error("Error cleaning up local files:", cleanupErr.message);
-      }
-
-      const newImage = {
-        _id: new mongoose.Types.ObjectId(),
-        name: userName,
-        userId: userId,
-        ticketNumber,
-        luckyDrawImageUrl: uploadResult.Location,
-        luckyDrawImageKey: uploadResult.Key,
-        luckyDrawThumbnailUrl: thumbnailUploadResult.Location,
-        luckyDrawThumbnailKey: thumbnailUploadResult.Key,
-        imageType: "luckyDraw",
-      };
-
-      eventImage.luckyDrawImages.push(newImage);
-      await eventImage.save();
-
-      // Construct response with only the newly uploaded image
-      const responseImage = {
-        _id: newImage._id,
-        userId: eventImage.userId,
-        name: userName,
-        imageUrl: newImage.luckyDrawImageUrl,
-        imageKey: newImage.luckyDrawImageKey,
-        webpUrl: newImage.luckyDrawThumbnailUrl,
-        webpKey: newImage.luckyDrawThumbnailKey,
-        imageType: newImage.imageType,
-        createdAt: newImage.createdAt,
-      };
-
-      return sendResponse(
-        res,
-        200,
-        false,
-        "Lucky draw image uploaded successfully",
-        [responseImage]
-      );
-    } catch (err) {
-      console.error("Upload Lucky Draw Image Error:", {
-        message: err.message,
-        stack: err.stack,
-        eventId: req.params.eventId,
-      });
-      return sendResponse(res, 500, true, "Server error");
-    }
-  }
-);
-
-// Create a thank you note image by event ID and user ID
-router.put(
-  "/event-images/:eventId/thankyou-note",
-  (req, res, next) => {
-    uploadSingle(req, res, (err) => {
-      if (err) return sendResponse(res, 400, true, err.message);
-      next();
-    });
-  },
-  async (req, res) => {
-    try {
-      const { eventId } = req.params;
-      if (!mongoose.Types.ObjectId.isValid(eventId)) {
-        return sendResponse(res, 400, true, "Invalid event ID");
-      }
-
-      const file = req.file;
-      if (!file) {
-        return sendResponse(res, 400, true, "thankYouNoteImage is required");
-      }
-
-      const userName = req.body.name;
-      const userId = req.body.userId;
-      if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
-        return sendResponse(res, 400, true, "Invalid user ID");
-      }
-
-      let eventImage = await EventImages.findOne({ eventId, userId });
-      if (!eventImage) {
-        eventImage = new EventImages({
-          eventId,
-          userId,
-          name: userName,
-          luckyDrawImages: [],
-          thankYouNoteImages: [],
-          selfUploadedImages: [],
-        });
-        console.log(
-          "Created new eventImage for eventId:",
-          eventId,
-          "userId:",
-          userId
-        );
-      } else {
-        console.log(
-          "Found existing eventImage for eventId:",
-          eventId,
-          "userId:",
-          userId
-        );
-      }
-
-      const fileName = `thankyou-note-${Date.now()}-${file.originalname
-        .split(".")
-        .pop()}`;
-      const thumbnailFileName = `thumb_${fileName.replace(
-        /\.(png|jpeg|jpg)$/i,
-        ""
-      )}.webp`;
-      const thumbnailPath =
-        file.path.replace(/\.(png|jpeg|jpg)$/i, "") + "_thumbnail.webp";
-
-      // Generate thumbnail
-      await generateThumbnail(file.path, thumbnailPath);
-
-      // Upload original image and thumbnail concurrently
-      const [uploadResult, thumbnailUploadResult] = await Promise.all([
-        uploadImageToS3(
-          file.path,
-          fileName,
-          userId,
-          eventId,
-          file.mimetype,
-          "thankyou-note"
-        ),
-        uploadImageToS3(
-          thumbnailPath,
-          thumbnailFileName,
-          userId,
-          eventId,
-          "image/webp",
-          "thankyou-note"
-        ),
-      ]);
-
-      // ✅ Cleanup local files
-      try {
-        const deleteFiles = [];
-
-        // Delete main uploaded file
-        if (file.path) deleteFiles.push(fsPromises.unlink(file.path));
-
-        // Delete generated thumbnail if exists
-        if (thumbnailPath) {
-          try {
-            await fsPromises.access(thumbnailPath); // check if exists
-            deleteFiles.push(fsPromises.unlink(thumbnailPath));
-          } catch {}
-        }
-        await Promise.all(deleteFiles);
-        console.log("Local temp files deleted successfully");
-      } catch (cleanupErr) {
-        console.error("Cleanup error:", cleanupErr.message);
-      }
-
-      const newImage = {
-        _id: new mongoose.Types.ObjectId(),
-        name: userName,
-        userId: userId,
-        thankYouNoteImageUrl: uploadResult.Location,
-        thankYouNoteImageKey: uploadResult.Key,
-        thankYouNoteThumbnailUrl: thumbnailUploadResult.Location,
-        thankYouNoteThumbnailKey: thumbnailUploadResult.Key,
-      };
-
-      eventImage.thankYouNoteImages.push(newImage);
-      await eventImage.save();
-
-      // Construct response with only the newly uploaded image
-      const responseImage = {
-        _id: newImage._id,
-        userId: eventImage.userId,
-        name: userName,
-        imageUrl: newImage.thankYouNoteImageUrl,
-        imageKey: newImage.thankYouNoteImageKey,
-        webpUrl: newImage.thankYouNoteThumbnailUrl,
-        webpKey: newImage.thankYouNoteThumbnailKey,
-        imageType: newImage.imageType,
-        createdAt: newImage.createdAt,
-      };
-
-      return sendResponse(
-        res,
-        200,
-        false,
-        "Thank you note image uploaded successfully",
-        [responseImage]
-      );
-    } catch (err) {
-      console.error("Upload Thank You Note Image Error:", {
-        message: err.message,
-        stack: err.stack,
-        eventId: req.params.eventId,
-      });
-      return sendResponse(res, 500, true, "Server error");
-    }
-  }
-);
-
-// Upload self-uploaded images/videos for an event by eventId and userId
-router.put(
-  "/event-images/:eventId/self-uploaded",
-  (req, res, next) => {
-    uploadSingle(req, res, (err) => {
-      if (err) return sendResponse(res, 400, true, err.message);
-      next();
-    });
-  },
-  async (req, res) => {
-    try {
-      const { eventId } = req.params;
-      if (!mongoose.Types.ObjectId.isValid(eventId)) {
-        return sendResponse(res, 400, true, "Invalid event ID");
-      }
-
-      const file = req.file;
-      if (!file) {
-        return sendResponse(res, 400, true, "selfUploadedImage is required");
-      }
-
-      const userName = req.body.name;
-      const userId = req.body.userId;
-      if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
-        return sendResponse(res, 400, true, "Invalid user ID");
-      }
-
-      let eventImage = await EventImages.findOne({ eventId, userId });
-      if (!eventImage) {
-        eventImage = new EventImages({
-          eventId,
-          userId,
-          name: userName,
-          luckyDrawImages: [],
-          thankYouNoteImages: [],
-          selfUploadedImages: [],
-        });
-      }
-
-      const fileExt = file.originalname.split(".").pop();
-      const fileName = `self-uploaded-${Date.now()}-${Math.round(
-        Math.random() * 1e9
-      )}.${fileExt}`;
-
-      let thumbnailFileName = null;
-      let thumbnailPath = null;
-      let thumbnailUploadResult = null;
-
-      // ✅ Image thumbnail
-      if (file.mimetype.startsWith("image/")) {
-        thumbnailFileName = `thumb_${fileName.replace(/\.[^.]+$/, "")}.webp`;
-        thumbnailPath = file.path.replace(/\.[^.]+$/, "") + "_thumbnail.webp";
-
-        await generateThumbnail(file.path, thumbnailPath);
-      }
-
-      // ✅ Video preview (3-4 sec) + compressed version
-      if (file.mimetype.startsWith("video/")) {
-        thumbnailFileName = `thumb_${fileName.replace(/\.[^.]+$/, ".mp4")}`;
-        thumbnailPath = file.path.replace(/\.[^.]+$/, "_thumbnail.mp4");
-
-        try {
-          await generateVideoPreview(file.path, thumbnailPath, 4, 0);
-        } catch (videoErr) {
-          console.error("Video preview generation failed:", videoErr);
-        }
-
-        // // ✅ Generate compressed version
-        // try {
-        //   const compressedFileName = `compressed_${fileName}`;
-        //   const compressedPath = file.path.replace(
-        //     /\.[^.]+$/,
-        //     "_compressed.mp4"
-        //   );
-
-        //   console.log("Compressing video...");
-        //   await compressVideo(file.path, compressedPath, 28); // lower CRF = better quality, higher = smaller
-
-        //   // Upload compressed file
-        //   const compressedUploadResult = await uploadImageToS3(
-        //     compressedPath,
-        //     compressedFileName,
-        //     userId,
-        //     eventId,
-        //     "video/mp4",
-        //     "self-uploaded"
-        //   );
-
-        //   // Attach compressed video info for saving later
-        //   req.compressedUploadResult = compressedUploadResult;
-        //   req.compressedPath = compressedPath;
-        // } catch (compErr) {
-        //   console.error("❌ Video compression failed:", compErr);
-        // }
-      }
-
-      // ✅ Upload main file (image/video)
-      const uploadResult = await uploadImageToS3(
-        file.path,
-        fileName,
-        userId,
-        eventId,
-        file.mimetype,
-        "self-uploaded"
-      );
-
-      // ✅ Upload thumbnail if exists
-      if (thumbnailPath && fs.existsSync(thumbnailPath)) {
-        thumbnailUploadResult = await uploadImageToS3(
-          thumbnailPath,
-          thumbnailFileName,
-          userId,
-          eventId,
-          file.mimetype.startsWith("video/") ? "video/mp4" : "image/webp",
-          "self-uploaded"
-        );
-      }
-
-      // ✅ Cleanup local files
-      try {
-        const deleteFiles = [];
-
-        // Delete main uploaded file
-        if (file.path) deleteFiles.push(fsPromises.unlink(file.path));
-
-        // Delete generated thumbnail if exists
-        if (thumbnailPath) {
-          try {
-            await fsPromises.access(thumbnailPath); // check if exists
-            deleteFiles.push(fsPromises.unlink(thumbnailPath));
-          } catch {}
-        }
-
-        // if (req.compressedPath) {
-        //   try {
-        //     await fsPromises.access(req.compressedPath);
-        //     deleteFiles.push(fsPromises.unlink(req.compressedPath));
-        //   } catch {}
-        // }
-
-        await Promise.all(deleteFiles);
-        console.log("Local temp files deleted successfully");
-      } catch (cleanupErr) {
-        console.error("Cleanup error:", cleanupErr.message);
-      }
-
-      // ✅ Build new image/video object
-      const newImage = {
-        _id: new mongoose.Types.ObjectId(),
-        name: userName,
-        userId: userId,
-        selfUploadedImageUrl: uploadResult.Location,
-        selfUploadedImageKey: uploadResult.Key,
-        selfUploadedThumbnailUrl: thumbnailUploadResult
-          ? thumbnailUploadResult.Location
-          : null,
-        selfUploadedThumbnailKey: thumbnailUploadResult
-          ? thumbnailUploadResult.Key
-          : null,
-        // selfUploadedCompressedUrl: req.compressedUploadResult
-        //   ? req.compressedUploadResult.Location
-        //   : null,
-        // selfUploadedCompressedKey: req.compressedUploadResult
-        //   ? req.compressedUploadResult.Key
-        //   : null,
-      };
-
-      // Add to the document's selfUploadedImages array
-      eventImage.selfUploadedImages.push(newImage);
-      await eventImage.save();
-
-      // Construct response with only the newly uploaded image
-      const responseImage = {
-        _id: newImage._id,
-        userId: eventImage.userId,
-        name: userName,
-        imageUrl: newImage.selfUploadedImageUrl,
-        imageKey: newImage.selfUploadedImageKey,
-        webpUrl: newImage.selfUploadedThumbnailUrl,
-        webpKey: newImage.selfUploadedThumbnailKey,
-        imageType: "selfUploaded",
-        createdAt: newImage.createdAt,
-      };
-
-      // Return only the new image in an array
-      return sendResponse(
-        res,
-        200,
-        false,
-        "Self-uploaded file uploaded successfully",
-        [responseImage] // Return as an array
-      );
-    } catch (err) {
-      console.error("Upload Error:", err);
-      return sendResponse(res, 500, true, "Server error");
-    }
-  }
-);
-
-// Delete an image by eventId, userId, imageId, and imageType
-router.post("/event-images/:eventId/delete", async (req, res) => {
-  try {
-    const { eventId } = req.params;
-    const { userId, imageId, imageType } = req.body;
-
-    // Validate eventId
-    if (!mongoose.Types.ObjectId.isValid(eventId)) {
-      return sendResponse(res, 400, true, "Invalid event ID");
-    }
-
-    // Validate userId
-    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
-      return sendResponse(res, 400, true, "Invalid user ID");
-    }
-
-    // Validate imageId
-    if (!imageId || !mongoose.Types.ObjectId.isValid(imageId)) {
-      return sendResponse(res, 400, true, "Invalid image ID");
-    }
-
-    // Validate imageType
-    const validTypes = ["luckyDraw", "thankYouNote", "selfUploaded"];
-    if (!imageType || !validTypes.includes(imageType)) {
-      return sendResponse(res, 400, true, "Invalid image type");
-    }
-
-    // Find the eventImage document
-    const eventImage = await EventImages.findOne({ eventId, userId });
-    if (!eventImage) {
-      return sendResponse(
-        res,
-        404,
-        true,
-        "Event images not found for this user"
-      );
-    }
-
-    let arrayField;
-    let keyField;
-    let thumbnailKeyField;
-    switch (imageType) {
-      case "luckyDraw":
-        arrayField = "luckyDrawImages";
-        keyField = "luckyDrawImageKey";
-        thumbnailKeyField = "luckyDrawThumbnailKey";
-        break;
-      case "thankYouNote":
-        arrayField = "thankYouNoteImages";
-        keyField = "thankYouNoteImageKey";
-        thumbnailKeyField = "thankYouNoteThumbnailKey";
-        break;
-      case "selfUploaded":
-        arrayField = "selfUploadedImages";
-        keyField = "selfUploadedImageKey";
-        thumbnailKeyField = "selfUploadedThumbnailKey";
-        break;
-    }
-
-    // Find the index of the image in the array
-    const index = eventImage[arrayField].findIndex(
-      (img) => img._id.toString() === imageId
-    );
-    if (index === -1) {
-      return sendResponse(res, 404, true, "Image not found");
-    }
-
-    // Get the image details for S3 deletion
-    const imageToDelete = eventImage[arrayField][index];
-    const imageKey = imageToDelete[keyField];
-    const thumbnailKey = imageToDelete[thumbnailKeyField];
-
-    // Delete both original image and thumbnail from S3
-    await Promise.all([
-      deleteImageFromS3(imageKey),
-      deleteImageFromS3(thumbnailKey),
-    ]);
-
-    // Remove the image object from the array
-    eventImage[arrayField].splice(index, 1);
-
-    // Save the updated document
-    const updatedEventImage = await eventImage.save();
-
-    // Delete document if all arrays are empty
-    if (
-      eventImage.luckyDrawImages.length === 0 &&
-      eventImage.thankYouNoteImages.length === 0 &&
-      eventImage.selfUploadedImages.length === 0
-    ) {
-      await eventImage.deleteOne();
-    }
-
-    return sendResponse(
-      res,
-      200,
-      false,
-      "Image deleted successfully",
-      updatedEventImage
-    );
-  } catch (err) {
-    console.error("Delete Image Error:", {
-      message: err.message,
-      stack: err.stack,
-      eventId: req.params.eventId,
-      userId: req.body.userId,
-      imageId: req.body.imageId,
-      imageType: req.body.imageType,
-    });
-    return sendResponse(res, 500, true, "Server error");
-  }
-});
-
-// Fetch all images for an event by eventId
-router.get("/event-images/:eventId", async (req, res) => {
-  try {
-    const { eventId } = req.params;
-
-    // Validate eventId
-    if (!mongoose.Types.ObjectId.isValid(eventId)) {
-      return sendResponse(res, 400, true, "Invalid event ID");
-    }
-
-    // Fetch the EventInvite for the eventId to get host details
-    const eventInvite = await EventInvite.findById(eventId).lean();
-    let hostUserId = null;
-    let hostName = null;
-    if (eventInvite) {
-      hostUserId = eventInvite.userId;
-      hostName = eventInvite.hostName; // Assuming hostName field exists
-    }
-
-    // Fetch all EventGuest for the eventId and create a map of userId to name
-    const eventGuests = await EventGuest.find({ eventId }).lean();
-    const guestMap = new Map();
-    for (const guest of eventGuests) {
-      guestMap.set(guest.userId.toString(), guest.name); // Assuming name field exists
-    }
-
-    // Fetch all documents for the given eventId with optimized query
-    const eventImagesList = await EventImages.find({ eventId }).lean();
-
-    if (!eventImagesList || eventImagesList.length === 0) {
-      return sendResponse(res, 404, true, "No images found for this event");
-    }
-
-    // Combine all images into a single array with userId and name
-    const allImages = [];
-    for (const doc of eventImagesList) {
-      const currentUserId = doc.userId.toString();
-      let userName = ""; // Default
-
-      // Determine userName
-      if (hostUserId && currentUserId === hostUserId.toString()) {
-        userName = hostName || "";
-      } else if (guestMap.has(currentUserId)) {
-        userName = guestMap.get(currentUserId);
-      }
-
-      // Add luckyDrawImages
-      if (doc.luckyDrawImages && Array.isArray(doc.luckyDrawImages)) {
-        for (const image of doc.luckyDrawImages) {
-          allImages.push({
-            _id: image._id,
-            userId: doc.userId,
-            name: userName,
-            imageUrl: image.luckyDrawImageUrl,
-            imageKey: image.luckyDrawImageKey,
-            webpUrl: image.luckyDrawThumbnailUrl,
-            webpKey: image.luckyDrawThumbnailKey,
-            imageType: image.imageType || "luckyDraw",
-            createdAt: image.createdAt,
-          });
-        }
-      }
-
-      // Add thankYouNoteImages
-      if (doc.thankYouNoteImages && Array.isArray(doc.thankYouNoteImages)) {
-        for (const image of doc.thankYouNoteImages) {
-          allImages.push({
-            _id: image._id,
-            userId: doc.userId,
-            name: userName,
-            imageUrl: image.thankYouNoteImageUrl,
-            imageKey: image.thankYouNoteImageKey,
-            webpUrl: image.thankYouNoteThumbnailUrl,
-            webpKey: image.thankYouNoteThumbnailKey,
-            imageType: image.imageType || "thankYouNote",
-            createdAt: image.createdAt,
-          });
-        }
-      }
-
-      // Add selfUploadedImages
-      if (doc.selfUploadedImages && Array.isArray(doc.selfUploadedImages)) {
-        for (const image of doc.selfUploadedImages) {
-          allImages.push({
-            _id: image._id,
-            userId: doc.userId,
-            name: userName,
-            imageUrl: image.selfUploadedImageUrl,
-            imageKey: image.selfUploadedImageKey,
-            webpUrl: image.selfUploadedThumbnailUrl,
-            webpKey: image.selfUploadedThumbnailKey,
-            // selfUploadedCompressedUrl: image.selfUploadedCompressedUrl,
-            // selfUploadedCompressedKey: image.selfUploadedCompressedKey,
-            imageType: image.imageType || "selfUploaded",
-            createdAt: image.createdAt,
-          });
-        }
-      }
-    }
-
-    allImages.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-    if (allImages.length === 0) {
-      return sendResponse(res, 404, true, "No images found for this event");
-    }
-
-    return sendResponse(
-      res,
-      200,
-      false,
-      "Event images fetched successfully",
-      allImages
-    );
-  } catch (err) {
-    console.error("Fetch Event Images Error:", {
-      message: err.message,
-      stack: err.stack,
-      eventId: req.params.eventId,
-    });
-    return sendResponse(res, 500, true, "Server error");
-  }
-});
 
 module.exports = router;

@@ -62,10 +62,11 @@ router.post('/otp_generate_backup', async(req, res) => {
     }
 })
 
-router.post('/otp_generate', async(req, res) => {
-    const { phone } = req.body;
+router.post('/otp_generate', async (req, res) => { 
+    const { phone, device_token, name, role, os } = req.body;
+
     if (!phone) {
-        return res.json({
+        return res.status(422).json({
             error: true,
             status: 422,
             data: [
@@ -73,35 +74,46 @@ router.post('/otp_generate', async(req, res) => {
             ]
         });
     }
+
     try {
-        const user = await UserModel.find({ phone: req.body.phone });
-        const otp = commonFunction.OTP();
-        if (user.length > 0) {
-            if (otp) {
-                const update = {
-                    otp: otp,
-                    device_token: req.body.device_token,
-                    name: req.body.name && req.body.name || user[0].name
-                };
-                const result = await UserModel.findByIdAndUpdate(user[0]._id, { $set: update });
-                request({
-                    url: 'https://www.fast2sms.com/dev/bulkV2?authorization=' + process.env.FAST2SMS_API_KEY + '&message=182194&variables_values=' + otp + '&route=dlt&numbers=' + req.body.phone + '&sender_id=HORASR',
-                    method: 'GET',
-                }, async(response, error) => {
-                    console.log("error>>>>>>>>>>>111111111", error);
-                })
-                return res.json({ error: false, status: 200, otp: otp, message: 'Otp Send Successfully' })
+        const user = await UserModel.findOne({ phone }); // Changed to `findOne` for efficiency
+
+        const otp = commonFunction.OTP(); // Generate OTP
+
+        if (user) { // If user exists, update their OTP and info
+            const update = {
+                otp,
+                device_token,
+                name: req.body.name && req.body.name || user[0].name
+            };
+
+            await UserModel.findByIdAndUpdate(user._id, { $set: update });
+
+            // Send OTP via SMS using Fast2SMS API (with Axios)
+            const smsUrl = `https://www.fast2sms.com/dev/bulkV2?authorization=${process.env.FAST2SMS_API_KEY}&message=182194&variables_values=${otp}&route=dlt&numbers=${phone}&sender_id=HORASR`;
+
+            try {
+                await axios.get(smsUrl); // Send OTP SMS
+            } catch (smsError) {
+                console.error("Error sending OTP SMS:", smsError);
             }
-        } else {
-            const data = new UserModel({
+
+            return res.json({
+                error: false,
+                status: 200,
+                otp,
+                message: 'OTP sent successfully'
+            });
+        } else { // If user doesn't exist, create a new user
+            const newUser = new UserModel({
                 email: '',
-                name: req.body.name && req.body.name,
-                role: req.body.role,
+                name,
+                role,
                 password: '',
-                phone: req.body.phone,
-                os: req.body.os,
+                phone,
+                os,
                 address: '',
-                otp: otp,
+                otp,
                 avatar: '',
                 referralCode: '',
                 vechicle_type: '',
@@ -122,160 +134,200 @@ router.post('/otp_generate', async(req, res) => {
                 userCuisioness: [],
                 userAppliance: [],
                 description: '',
-                is_veg:true,
-                isPersonalStatus : 0,
-                isProfessionStatus  : 0,
-            })
-            request({
-                url: 'https://www.fast2sms.com/dev/bulkV2?authorization=' + process.env.FAST2SMS_API_KEY + '&variables_values=' + otp + '&route=otp&numbers=' + req.body.phone,
-                method: 'GET',
-            }, async(response, error) => {
-                console.log("error>>>>>>>>>>>22222222222222", error);
-            })
-            const dataToSave = await data.save();
-            return res.json({ error: false, status: 200, otp: otp, message: 'Otp Send Successfully' })
+                is_veg: true,
+                isPersonalStatus: 0,
+                isProfessionStatus: 0,
+            });
+
+            // Send OTP via SMS for new user
+            const newSmsUrl = `https://www.fast2sms.com/dev/bulkV2?authorization=${process.env.FAST2SMS_API_KEY}&variables_values=${otp}&route=otp&numbers=${phone}`;
+
+            try {
+                await axios.get(newSmsUrl); // Send OTP SMS
+            } catch (smsError) {
+               console.log("error>>>>>>>>>>>22222222222222", smsError);
+            }
+
+            // Save new user to the database
+            await newUser.save();
+
+            return res.json({
+                error: false,
+                status: 200,
+                otp,
+                message: 'OTP sent successfully'
+            });
         }
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        return res.status(400).json({
+            message: error.message,
+            error: true
+        });
     }
-})
+});
 
-router.post('/otp_verify', async(req, res) => {
+router.post('/otp_verify', async (req, res) => {
     const { phone, otp, role } = req.body;
     if (!phone) {
-        return res.json({
+        return res.status(422).json({
             error: true,
             status: 422,
-            data: [
-                { path: 'phone', message: 'Phone is required.' }
-            ]
+            data: [{ path: 'phone', message: 'Phone is required.' }]
         });
     }
     if (!otp) {
-        return res.json({
+        return res.status(422).json({
             error: true,
             status: 422,
-            data: [
-                { path: 'otp', message: 'Otp is required.' }
-            ]
+            data: [{ path: 'otp', message: 'OTP is required.' }]
         });
     }
     if (!role) {
-        return res.json({
+        return res.status(422).json({
             error: true,
             status: 422,
-            data: [
-                { path: 'role', message: 'Role is required.' }
-            ]
+            data: [{ path: 'role', message: 'Role is required.' }]
         });
     }
-    try {
-       const user= await UserModel.find({ phone: req.body.phone });
-       if(req.body.otp == 1234){
-        if(req.body.role != user[0].role){
-            return res.json({ error: true, status: 503, message: 'The number is used already for '+`${commonFunction.capitalizeFirstLetter(user[0].role)}` +' login . Please use different number' })
-        }else if(user[0].status == 0){
-            return res.json({ error: true, status: 503, message: 'Account Blocked' })
-        }else if(user[0].status == 2){
-            return res.json({ error: true, status: 503, message: 'Account Deleted' })
-        }else{
-            return res.json({ error: false, status: 200, data: user[0], token: passportAuth.signToken(user[0]) })
-        }
-       }else{
-        if(req.body.otp != user[0].otp){
-            return res.json({ error: true, status: 503, message: 'Otp Mismatch' })
-        }else if(req.body.role != user[0].role){
-            return res.json({ error: true, status: 503, message: 'The number is used already for '+`${commonFunction.capitalizeFirstLetter(user[0].role)}` +' login . Please use different number' })
-        }else if(user[0].status == 0){
-            return res.json({ error: true, status: 503, message: 'Account Blocked' })
-        }else if(user[0].status == 2){
-            return res.json({ error: true, status: 503, message: 'Account Deleted' })
-        }else{
-            return res.json({ error: false, status: 200, data: user[0], token: passportAuth.signToken(user[0]) })
-        }
-       }
-    } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
-    }
-})
 
-router.get('/user_details', async(req, res) => {
     try {
-        const totalPersonalField = 9;const totalProfessionalField = 6;
-        var donePersonalField = 0; var doneProfessionalField = 0;
-        var userResponse={};
+        const user = await UserModel.findOne({ phone });
+
+        if (!user) {
+            return res.status(404).json({ error: true, status: 404, message: 'User not found' });
+        }
+
+        if (otp === '1234') { 
+            if (role !== user.role) {
+                return res.status(503).json({
+                    error: true,
+                    status: 503,
+                    message: `The number is already used for ${commonFunction.capitalizeFirstLetter(user.role)} login. Please use a different number.`
+                });
+            }
+
+            // Check account status
+            if (user.status === 0) {
+                return res.status(503).json({ error: true, status: 503, message: 'Account Blocked' });
+            }
+            if (user.status === 2) {
+                return res.status(503).json({ error: true, status: 503, message: 'Account Deleted' });
+            }
+
+            return res.status(200).json({
+                error: false,
+                status: 200,
+                data: user,
+                token: passportAuth.signToken(user) // Generate token for the user
+            });
+        } else {
+            if (otp !== user.otp) {
+                return res.status(503).json({ error: true, status: 503, message: 'OTP Mismatch' });
+            }
+
+            // Check role again after OTP verification
+            if (role !== user.role) {
+                return res.status(503).json({
+                    error: true,
+                    status: 503,
+                    message: `The number is already used for ${commonFunction.capitalizeFirstLetter(user.role)} login. Please use a different number.`
+                });
+            }
+
+            if (user.status === 0) {
+                return res.status(503).json({ error: true, status: 503, message: 'Account Blocked' });
+            }
+            if (user.status === 2) {
+                return res.status(503).json({ error: true, status: 503, message: 'Account Deleted' });
+            }
+
+            return res.status(200).json({
+                error: false,
+                status: 200,
+                data: user,
+                token: passportAuth.signToken(user) // Generate token for the user
+            });
+        }
+
+    } catch (error) {
+        return res.status(400).json({
+            message: error.message,
+            error: true
+        });
+    }
+});
+
+router.get('/user_details', async (req, res) => {
+    try {
+        const totalPersonalField = 9;
+        const totalProfessionalField = 6;
+
+        let donePersonalField = 0;
+        let doneProfessionalField = 0;
+
+        // Fetch user
         const data = await UserModel.findById(req.user._id).populate({
             path: "userServedLocalities",
-            populate: {
-               path: "cityId"
+            populate: { path: "cityId" }
+        });
+
+        let userResponse = data;
+
+        // Personal fields check
+        const personalFields = [
+            data?.name,
+            data?.avatar,
+            data?.age,
+            data?.vechicle_type,
+            data?.aadhar_no,
+            data?.aadhar_front_img,
+            data?.aadhar_back_img,
+            data?.userServedLocalities?.length > 0 ? true : null,
+            data?.city
+        ];
+
+        personalFields.forEach(field => {
+            if (field !== '' && field !== undefined && field !== null) {
+                donePersonalField++;
             }
-        })
-        console.log(data)
-        userResponse=data;
-        // for personal
-        if(data.name != '' && data.name != undefined){
-            donePersonalField=donePersonalField+1;
-        }
-        if(data.avatar != '' && data.avatar != undefined){
-            donePersonalField=donePersonalField+1;
-        }
-        if(data.age != '' && data.age != undefined){
-            donePersonalField=donePersonalField+1;
-        }
-        if(data.vechicle_type != '' && data.vechicle_type != undefined){
-            donePersonalField=donePersonalField+1;
-        }
-        if(data.aadhar_no != '' && data.aadhar_no != undefined){
-            donePersonalField=donePersonalField+1;
-        }
-        if(data.aadhar_front_img != '' && data.aadhar_front_img != undefined){
-            donePersonalField=donePersonalField+1;
-        }
-        if(data.aadhar_back_img != '' && data.aadhar_back_img != undefined){
-            donePersonalField=donePersonalField+1;
-        }
-        if(data.userServedLocalities != undefined && data.userServedLocalities.length >0  ){
-            donePersonalField=donePersonalField+1;
-        }
-        if(data.city != '' && data.city != undefined){
-            donePersonalField=donePersonalField+1;
-        }
-        if(totalPersonalField == donePersonalField){
-            userResponse.isPersonalStatus=1;
-        }else{
-            userResponse.isPersonalStatus=0;
-        }
-        // for professional
-        if(data.resume != '' && data.resume != undefined){
-            doneProfessionalField=doneProfessionalField+1;
-        }
-        if(data.experience != '' && data.experience != undefined){
-            doneProfessionalField=doneProfessionalField+1;
-        }
-        if(data.job_type != '' && data.job_type != undefined){
-            doneProfessionalField=doneProfessionalField+1;
-        }
-        if(data.is_veg != '' && data.is_veg != undefined){
-            doneProfessionalField=doneProfessionalField+1;
-        }
-        if(data.userAppliance != undefined && data.userAppliance.length >0 ){
-            doneProfessionalField=doneProfessionalField+1;
-        }
-        if(data.userCuisioness != undefined && data.userCuisioness.length >0 ){
-            doneProfessionalField=doneProfessionalField+1;
-        }
-        if(totalProfessionalField == doneProfessionalField){
-            userResponse.isProfessionStatus=1;
-        }else{
-            userResponse.isProfessionStatus=0;
-        }
+        });
+
+        userResponse.isPersonalStatus =
+            donePersonalField === totalPersonalField ? 1 : 0;
+
+        // Professional fields check
+        const professionalFields = [
+            data?.resume,
+            data?.experience,
+            data?.job_type,
+            data?.is_veg,
+            data?.userAppliance?.length > 0 ? true : null,
+            data?.userCuisioness?.length > 0 ? true : null
+        ];
+
+        professionalFields.forEach(field => {
+            if (field !== '' && field !== undefined && field !== null) {
+                doneProfessionalField++;
+            }
+        });
+
+        userResponse.isProfessionStatus =
+            doneProfessionalField === totalProfessionalField ? 1 : 0;
+
+        // Keep your existing timeout
         setTimeout(() => {
-            return res.json({ error: false, status: 200, message: 'Details Fetch Successfully', data: data })
+            return res.json({
+                error: false,
+                status: 200,
+                message: 'Details Fetch Successfully',
+                data: data
+            });
         }, 1000);
+
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        res.status(400).json({ message: error.message, error: true });
     }
-})
+});
 
 const sendResponse = (res, status, error, message, data = null) =>
   res.status(status).json({ error, status, message, data });
@@ -286,21 +338,23 @@ router.get("/user-details/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
+    // Validate ObjectId
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return sendResponse(res, 400, true, "Invalid user id");
     }
 
+    // Fetch user
     const user = await UserModel.findById(id).lean();
     if (!user) {
       return sendResponse(res, 404, true, "User not found");
     }
 
-    let respData = {
-        name : user.name,
-        _id: user._id,
-        phone: user.phone,
-        avatar: user.avatar
-    }
+    const respData = {
+      _id: user._id,
+      name: user.name ?? "",
+      phone: user.phone ?? "",
+      avatar: user.avatar ?? "",
+    };
 
     return sendResponse(
       res,
@@ -315,7 +369,8 @@ router.get("/user-details/:id", async (req, res) => {
       stack: err.stack,
       eventId: req.params.id,
     });
-    return sendResponse(res, 500, true, `Server error ${err.message}`);
+
+    return sendResponse(res, 500, true, `Server error: ${err.message}`);
   }
 });
 
@@ -373,7 +428,8 @@ async function deleteFromS3(key) {
 const deleteFileWithRetry = async (filePath, retries = 3, delay = 100) => {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      await fs.unlink(filePath);
+      // await fs.unlink(filePath);
+      await fs.promises.unlink(filePath);
       console.log(`Successfully deleted file: ${filePath}`);
       return;
     } catch (err) {
@@ -470,9 +526,9 @@ router.put("/user-details/:id", async (req, res) => {
 
     // Update object prepare karo
     let updateData = {};
-    if (name) updateData.name = name;
-    if (phone) updateData.phone = phone;
-    if (avatar) updateData.avatar = avatar;
+    if (name !== undefined) updateData.name = name;
+    if (phone !== undefined) updateData.phone = phone;
+    if (avatar !== undefined) updateData.avatar = avatar;
 
     const updatedUser = await UserModel.findByIdAndUpdate(
       id,
@@ -485,12 +541,12 @@ router.put("/user-details/:id", async (req, res) => {
     }
 
     // 🔥 EXTRA FEATURE: Update name in all EventGuest entries for this user
-    if (name) {
+    if (name !== undefined) {
       const EventGuest = require("../models/event-guest"); // Import lazily to avoid circular deps
 
       await EventGuest.updateMany(
-        { userId: id },        // Find all entries with this userId
-        { $set: { name: name } } // Update the name field
+        { userId: id },        
+        { $set: { name: name } }
       );
 
       console.log(`✅ Updated guest names for user ${id} in all event records`);
@@ -504,12 +560,14 @@ router.put("/user-details/:id", async (req, res) => {
     };
 
     return sendResponse(res, 200, false, "User updated successfully", respData);
+
   } catch (err) {
     console.error("Update user error:", {
       message: err.message,
       stack: err.stack,
       userId: req.params.id,
     });
+
     return sendResponse(res, 500, true, `Server error ${err.message}`);
   }
 });
@@ -517,79 +575,80 @@ router.put("/user-details/:id", async (req, res) => {
 // Update user image avatar by id
 router.put(
   "/user-avatar/:id",
-  (req, res, next) => {
-    uploadSingle(req, res, (err) => {
-      if (err) return sendResponse(res, 400, true, err.message);
-      next();
+  async (req, res, next) => {
+    await new Promise((resolve) => {
+      uploadSingle(req, res, (err) => {
+        if (err) {
+          return sendResponse(res, 400, true, err.message); 
+        }
+        resolve();
+      });
     });
+    next();
   },
+
   async (req, res) => {
     try {
       const { id } = req.params;
+
       if (!mongoose.Types.ObjectId.isValid(id)) {
-        return sendResponse(res, 400, true, "Invalid user ID");
+        return sendResponse(res, 400, true, "Invalid user ID"); // SAME
       }
 
       const file = req.file;
       const { avatar, clearAvatar } = req.body;
 
-      // Find the existing user
       const user = await UserModel.findById(id);
       if (!user) return sendResponse(res, 404, true, "User not found");
 
-      // Handle clearAvatar
       if (clearAvatar === "true") {
         if (user.avatar) {
-          // Extract key from URL if it's S3 URL
           const key = user.avatar.split(`${process.env.S3_BUCKET_NAME}/`)[1];
           if (key) await deleteFromS3(key);
         }
         user.avatar = null;
-      } else if (file) {
-        // Delete existing avatar from S3 if it exists
+      }
+
+      else if (file) {
         if (user.avatar) {
           const key = user.avatar.split(`${process.env.S3_BUCKET_NAME}/`)[1];
           if (key) await deleteFromS3(key);
         }
 
-        // Generate unique filename for WebP, but fixed structure
         const webpFileName = `avatar.webp`;
         const webpPath = file.path.replace(/\.(png|jpeg|jpg)$/i, "") + ".webp";
 
-        // Generate WebP image
         await generateThumbnail(file.path, webpPath);
 
-        // Upload WebP image to S3 with fixed key
         const uploadResult = await uploadImageToS3(
           webpPath,
           webpFileName,
           id,
-          id, // Using id as eventId equivalent
+          id,
           "image/webp",
           "user-profile"
         );
 
-        // Update user with new avatar URL
         user.avatar = uploadResult.Location;
 
-        // Cleanup local files with retry
         await Promise.all([
           deleteFileWithRetry(file.path),
-          deleteFileWithRetry(webpPath),
+          deleteFileWithRetry(webpPath)
         ]);
-      } else if (avatar) {
-        // If avatar is provided as URL, save as is
-        if (isS3Url(avatar)) {
-          user.avatar = avatar;
-        } else {
+      }
+
+      else if (avatar) {
+        if (isS3Url(avatar)) user.avatar = avatar;
+        else
           return sendResponse(
             res,
             400,
             true,
             "Invalid avatar format. Must be a valid S3 URL"
           );
-        }
-      } else {
+      }
+
+      else {
         return sendResponse(
           res,
           400,
@@ -598,18 +657,11 @@ router.put(
         );
       }
 
-      // Save updated user
       const updated = await user.save();
-      return sendResponse(
-        res,
-        200,
-        false,
-        "User avatar updated successfully",
-        {
-          _id: updated._id,
-          avatar: updated.avatar,
-        }
-      );
+      return sendResponse(res, 200, false, "User avatar updated successfully", {
+        _id: updated._id,
+        avatar: updated.avatar
+      });
     } catch (err) {
       console.error("Update User Avatar Error:", {
         message: err.message,
@@ -617,7 +669,7 @@ router.put(
         userId: req.params.id,
         requestBody: req.body,
       });
-      return sendResponse(res, 500, true, "Server error");
+      return sendResponse(res, 500, true, "Server error"); // SAME
     }
   }
 );
@@ -639,31 +691,44 @@ router.post('/user_update', async(req, res) => {
     }
 })
 
-router.post('/supplier_personal_details_update', async(req, res) => {
+router.post('/supplier_personal_details_update', async (req, res) => {
     const id = req.user._id;
-    const updatedData = {};
-    updatedData.name = req.body.name;
-    updatedData.age = req.body.age;
-    updatedData.vechicle_type = req.body.vechicle_type;
-    updatedData.city = req.body.city;
-    updatedData.lat = req.body.lat;
-    updatedData.lng = req.body.lng;
-    updatedData.aadhar_no = req.body.aadhar_no;
-    updatedData.aadhar_front_img = req.body.aadhar_front_img;
-    updatedData.aadhar_back_img = req.body.aadhar_back_img;
-    updatedData.avatar = req.body.avatar;
-    updatedData.userServedLocalities = req.body.userServedLocalities;
-    updatedData.order_type = req.body.order_type;
+
+    // Prepare updated data cleanly (only keys that exist in req.body)
+    const updatedData = {
+        name: req.body.name,
+        age: req.body.age,
+        vechicle_type: req.body.vechicle_type,
+        city: req.body.city,
+        lat: req.body.lat,
+        lng: req.body.lng,
+        aadhar_no: req.body.aadhar_no,
+        aadhar_front_img: req.body.aadhar_front_img,
+        aadhar_back_img: req.body.aadhar_back_img,
+        avatar: req.body.avatar,
+        userServedLocalities: req.body.userServedLocalities,
+        order_type: req.body.order_type
+    };
+
     const options = { new: true };
+
     try {
-        const result = await UserModel.findByIdAndUpdate(
-            id, updatedData, options
-        )
-        return res.json({ error: false, status: 200, message: 'Personal Details Updated Successfully', data: result })
+        const result = await UserModel.findByIdAndUpdate(id, updatedData, options);
+
+        return res.json({
+            error: false,
+            status: 200,
+            message: 'Personal Details Updated Successfully',
+            data: result
+        });
+
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        return res.status(400).json({
+            message: error.message,
+            error: true
+        });
     }
-})
+});
 
 router.post('/supplier_professional_details_update', async(req, res) => {
     const id = req.user._id;
@@ -784,25 +849,49 @@ router.get('/my_account', async(req, res) => {
     }
 })
 
-router.post('/update_resume_profile', async(req, res) => {
-    const id = req.user._id;
-    const updatedData = {};
-    updatedData.resume = req.body.resume;
-    updatedData.experience = req.body.experience;
-    updatedData.job_profile = req.body.job_profile;
-    if(req.body.order_type){
-	updatedData.order_type = req.body.order_type;
-	}
-    const options = { new: true };
+router.post('/update_resume_profile', async (req, res) => {
     try {
+        const id = req.user._id;
+
+        const {
+            resume,
+            experience,
+            job_profile,
+            order_type
+        } = req.body;
+
+        const updatedData = {
+            resume,
+            experience,
+            job_profile
+        };
+
+        if (order_type) {
+            updatedData.order_type = order_type;
+        }
+
+        const options = { new: true };
+
         const result = await UserModel.findByIdAndUpdate(
-            id, updatedData, options
-        )
-        return res.json({ error: false, status: 200, message: 'Resume & Profile Details Updated Successfully', data: result })
+            id,
+            updatedData,
+            options
+        );
+
+        return res.json({
+            error: false,
+            status: 200,
+            message: 'Resume & Profile Details Updated Successfully',
+            data: result
+        });
+
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        return res.status(400).json({
+            error: true,
+            message: error.message
+        });
     }
-})
+});
 
 router.post('/update_work_details', async(req, res) => {
     const id = req.user._id;
@@ -853,69 +942,57 @@ router.post('/update_special_appliance', async(req, res) => {
 })
 
 router.post('/getMealDish', async (req, res) => {
-    try {
-        
-        
-        let finder = { status: 1 };
-        let dishfinder = { status: 1 };
-        
-        if (req.body.cuisineId.length > 0) {
-            console.log(req.body.cuisineId)
-            req.body.cuisineId = req.body.cuisineId.sort();
-            console.log(req.body.cuisineId)
-            dishfinder.cuisineId = { $in: req.body.cuisineId };
-        }
-  
-        if (req.body.is_dish === 1) {
-            dishfinder.is_dish = 1;
-        } else if (req.body.is_dish === 2) {
-            dishfinder.is_dish = { $in: [1, 2] };
-        } else {
-            delete dishfinder.is_dish;
-        }
-        
-        // Generate a unique cache key based on request body
-        const cacheKey = `mealDish_${JSON.stringify(req.body)}`;
-       // Try to get cached result
-       const cachedData = cache.get(cacheKey);
-       if (cachedData) {
-         console.log("return cache data"+ cacheKey);
-         
-         return res.json({ ...cachedData, cached: true });
-       }
-   
-      const meals = await mealModel.find(finder).exec();
-  
-      const newArray = await Promise.all(
-        meals.map(async (rec2) => {
-          dishfinder.mealId = { $in: [String(rec2._id)] };
-  
-          const dishResponse = await dishModel
-            .find(dishfinder)
-            .populate('special_appliance_id', '_id name image')
-            .populate('general_appliance_id', '_id name image')
-            .populate('serving_dish', '_id name image')
-            .exec();
-  
-          return { mealObject: rec2, dish: dishResponse };
-        })
-      );
-  
-      const responseData = {
-        error: false,
-        status: 200,
-        message: 'Fetch Data Successfully',
-        data: newArray
+  try {
+    const { cuisineId = [], is_dish } = req.body;
+
+    let finder = { status: 1 };
+    let dishfinder = { status: 1 };
+
+    if (Array.isArray(cuisineId) && cuisineId.length > 0) {
+      dishfinder.cuisineId = { 
+        $in: cuisineId.map(id => new mongoose.Types.ObjectId(id)) 
       };
-  
-      // Save response in cache
-      cache.set(cacheKey, responseData);
-  
-      return res.json(responseData);
-    } catch (error) {
-      return res.status(500).json({ message: error.message, error: true });
     }
-  });
+
+    if (is_dish === 1) {
+      dishfinder.is_dish = 1;
+    } else if (is_dish === 2) {
+      dishfinder.is_dish = { $in: [1, 2] };
+    } else {
+          delete dishfinder.is_dish;
+      }
+
+    const meals = await mealModel.find(finder).exec();
+
+    const newArray = await Promise.all(
+      meals.map(async (meal) => {
+        dishfinder.mealId = { $in: [new mongoose.Types.ObjectId(meal._id)] };
+
+        let query = dishModel.find(dishfinder);
+
+        ['special_appliance_id', 'general_appliance_id', 'serving_dish']
+          .forEach(field => {
+            if (dishModel.schema.path(field)) {
+              query = query.populate(field, '_id name image');
+            }
+          });
+
+        const dishResponse = await query.exec();
+        return { mealObject: meal, dish: dishResponse };
+      })
+    );
+
+    return res.json({
+      error: false,
+      status: 200,
+      message: "Fetch Data Successfully",
+      data: newArray
+    });
+
+  } catch (error) {
+    return res.status(500).json({ message: error.message, error: true });
+  }
+});
   
 
 router.get('/getCityServedLocalityList', async(req, res) => {

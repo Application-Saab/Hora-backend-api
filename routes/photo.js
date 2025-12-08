@@ -32,18 +32,19 @@ router.post("/CreateFolder", async (req, res) => {
         .json({ message: "Folder Name and Customer ID are required" });
     }
 
-    // Check if a folder with the same name already exists for the same customer
+    // Check for duplicate folder
     const existingFolder = await FolderModel.findOne({
       folderName,
       customerId,
     });
+
     if (existingFolder) {
       return res.status(400).json({
         message: `Folder with the name '${folderName}' already exists for this customer.`,
       });
     }
 
-    // Create and save the folder
+    // Create and save folder
     const folder = new FolderModel({ folderName, customerId, vendorId });
     await folder.save();
 
@@ -220,6 +221,7 @@ router.get("/GetFoldersByCustomerId/:customerId", async (req, res) => {
 router.post("/upload", upload.array("files", 300), async (req, res) => {
   try {
     const { folderName, customerId, vendorId, phoneNo } = req.body;
+
     if (!folderName || !customerId) {
       return res
         .status(400)
@@ -234,11 +236,11 @@ router.post("/upload", upload.array("files", 300), async (req, res) => {
       ? `${folderName}_${customerId}_${vendorId}`
       : `${folderName}_${customerId}`;
 
-    // Process all files concurrently
     const uploadPromises = req.files.map(async (file) => {
       try {
         const filePath = file.path;
         const fileName = file.filename;
+
         const thumbnailPath = `${filePath.replace(
           /\.(png|jpeg|jpg)$/i,
           ""
@@ -248,10 +250,10 @@ router.post("/upload", upload.array("files", 300), async (req, res) => {
           `Processing file: ${fileName} at ${new Date().toLocaleTimeString()}`
         );
 
-        // Generate Thumbnail (Parallel)
+        // Generate thumbnail
         const thumbnailPromise = generateThumbnail(filePath, thumbnailPath);
 
-        // Upload Original Image (Parallel)
+        // Upload original file
         const s3UploadPromise = uploadFileToS3(
           filePath,
           fileName,
@@ -259,27 +261,27 @@ router.post("/upload", upload.array("files", 300), async (req, res) => {
           phoneNo
         );
 
-        await thumbnailPromise; // Ensure thumbnail is generated before uploading
+        await thumbnailPromise;
 
-        // Upload Thumbnail (Parallel)
-        const thumbnailFileName = `thumb_${fileName.replace(
+        // Upload thumbnail
+        const thumbFileName = `thumb_${fileName.replace(
           /\.(png|jpeg|jpg)$/i,
           ""
         )}.webp`;
+
         const s3ThumbPromise = uploadFileToS3(
           thumbnailPath,
-          thumbnailFileName,
+          thumbFileName,
           folderPath,
           phoneNo
         );
 
-        // Wait for both uploads to complete
         const [s3Response, s3ThumbResponse] = await Promise.all([
           s3UploadPromise,
           s3ThumbPromise,
         ]);
 
-        // Cleanup local files
+        // Remove local temp files
         fs.unlinkSync(filePath);
         fs.unlinkSync(thumbnailPath);
 
@@ -329,12 +331,11 @@ router.get("/thumbnailsWithinProject", async (req, res) => {
 
     const s3Response = await s3.listObjectsV2(params).promise();
 
-    // Filter only thumbnails
-    const thumbFiles = s3Response.Contents.filter((file) =>
-      file.Key.includes("/thumb_")
-    );
+    const thumbFiles =
+      (s3Response.Contents || []).filter((file) =>
+        file.Key.includes("/thumb_")
+      );
 
-    // Parallel metadata fetching using Promise.all
     const metadataPromises = thumbFiles.map(async (file) => {
       try {
         const metadata = await s3
@@ -344,7 +345,8 @@ router.get("/thumbnailsWithinProject", async (req, res) => {
           })
           .promise();
 
-        const filePhoneNo = metadata.Metadata && metadata.Metadata.phoneno;
+        const filePhoneNo =
+          metadata.Metadata && metadata.Metadata.phoneno;
 
         if (!phoneNo || filePhoneNo === phoneNo) {
           return {
@@ -360,7 +362,7 @@ router.get("/thumbnailsWithinProject", async (req, res) => {
     });
 
     const allResults = await Promise.all(metadataPromises);
-    const filteredThumbnails = allResults.filter(Boolean); // remove nulls
+    const filteredThumbnails = allResults.filter(Boolean);
 
     res.status(200).json({ thumbnails: filteredThumbnails });
   } catch (error) {
@@ -383,16 +385,17 @@ router.get("/originalImage", async (req, res) => {
     // List objects in the same folder
     const params = {
       Bucket: process.env.S3_BUCKET_NAME,
-      Prefix: baseKey, // This will list all variations of the image
+      Prefix: baseKey, // list all variations of the image
     };
 
-    const { Contents } = await s3.listObjectsV2(params).promise();
+    const data = await s3.listObjectsV2(params).promise();
+    const Contents = data.Contents || [];
 
     if (!Contents.length) {
       return res.status(404).json({ message: "Original image not found" });
     }
 
-    // Find the correct image (skip the .webp one)
+    // Find the original image (skip the .webp one)
     const originalFile = Contents.find((file) => !file.Key.endsWith(".webp"));
 
     if (!originalFile) {
@@ -402,10 +405,10 @@ router.get("/originalImage", async (req, res) => {
     // Construct the original image URL
     const originalImageUrl = `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${originalFile.Key}`;
 
-    res.status(200).json({ originalImageUrl });
+    return res.status(200).json({ originalImageUrl });
   } catch (error) {
     console.error("Error fetching original image:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    return res.status(500).json({ message: "Server error", error: error.message });
   }
 });
 
@@ -621,13 +624,15 @@ router.get("/templates", async (req, res) => {
 router.get("/templates/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+
+    if (!mongoose.isValidObjectId(id)) {
       return res
         .status(400)
         .json({ success: false, message: "Invalid template ID" });
     }
 
     const template = await TemplateMaster.findById(id);
+
     if (!template) {
       return res
         .status(404)
@@ -637,9 +642,11 @@ router.get("/templates/:id", async (req, res) => {
     return res.status(200).json({ success: true, template });
   } catch (error) {
     console.error("Error fetching template by ID:", error);
-    return res
-      .status(500)
-      .json({ success: false, message: "Server error", error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message
+    });
   }
 });
 

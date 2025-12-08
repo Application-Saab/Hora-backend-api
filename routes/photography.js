@@ -31,54 +31,80 @@ router.post('/add', async (req, res) => {
     } = req.body;
 
     const data = new photographyModel({
-        name: name,
-        short_link: short_link,
-        featured_image: featured_image,
-        caption: caption,
-        featured_images: featured_images,
-        badge: badge,
-        price: price,
-        cost_price: cost_price,
-        type: type,
-        is_wishlisted: is_wishlisted,
-        ratings: ratings,
-        attributes: attributes,
-        inclusion: inclusion,
-        tag: tag,
-        duration: duration,
-        advance_amount: advance_amount
+        name,
+        short_link,
+        featured_image,
+        caption,
+        featured_images,
+        badge,
+        price,
+        cost_price,
+        type,
+        is_wishlisted,
+        ratings,
+        attributes,
+        inclusion,
+        tag,
+        duration,
+        advance_amount
     });
 
     try {
-        // Check if a photograh with the same name and type already exists
+        // Check if a photograph with the same name and type already exists
         const existingPhotograph = await photographyModel.findOne({ name: data.name, type: data.type });
 
         if (existingPhotograph) {
-            return res.json({ error: true, status: 503, message: 'Photograph already added.' });
-        } else {
-            const savedData = await data.save();
-            return res.json({ error: false, status: 200, message: 'Photograph added successfully.', data: savedData });
+            return res.json({
+                error: true,
+                status: 503,
+                message: 'Photograph already added.'
+            });
         }
+
+        const savedData = await data.save();
+        return res.json({
+            error: false,
+            status: 200,
+            message: 'Photograph added successfully.',
+            data: savedData
+        });
+
     } catch (error) {
-        res.status(400).json({ error: true, message: error.message });
+        return res.status(400).json({
+            error: true,
+            message: error.message
+        });
     }
 });
 
 router.post('/edit', async (req, res) => {
     const id = req.body._id;
     const updatedData = req.body;
-    const options = { new: true };
+    const options = { new: true }; // return updated doc
 
     try {
         const result = await photographyModel.findByIdAndUpdate(id, updatedData, options);
 
         if (result) {
-            return res.json({ error: false, status: 200, message: 'Updated Successfully', data: result });
+            return res.json({
+                error: false,
+                status: 200,
+                message: 'Updated Successfully',
+                data: result
+            });
         } else {
-            return res.json({ error: true, status: 404, message: 'Photograph not found.' });
+            return res.json({
+                error: true,
+                status: 404,
+                message: 'Photograph not found.'
+            });
         }
+
     } catch (error) {
-        res.status(400).json({ error: true, message: error.message });
+        return res.status(400).json({
+            error: true,
+            message: error.message
+        });
     }
 });
 
@@ -134,15 +160,29 @@ router.get('/searchByTag/:tag', async (req, res) => {
     const { tag } = req.params;
 
     try {
-        const photograph = await photographyModel.find({ tag: { $in: [tag] } });
+        const photograph = await photographyModel.find({
+            tag: { $in: [tag] }
+        });
 
         if (photograph.length > 0) {
-            return res.json({ error: false, status: 200, message: 'Search Successful', data: photograph });
+            return res.json({
+                error: false,
+                status: 200,
+                message: 'Search Successful',
+                data: photograph
+            });
         } else {
-            return res.json({ error: true, status: 404, message: 'No matching photograph found.' });
+            return res.json({
+                error: true,
+                status: 404,
+                message: 'No matching photograph found.'
+            });
         }
     } catch (error) {
-        res.status(400).json({ error: true, message: error.message });
+        return res.status(400).json({
+            error: true,
+            message: error.message
+        });
     }
 });
 

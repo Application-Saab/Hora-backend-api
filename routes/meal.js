@@ -48,16 +48,25 @@ router.get('/details/:id', async (req, res) => {
 })
 
 router.get('/idByTag', async (req, res) => {
-    const {tag} = req.query;
-    
+    const tag = req.query?.tag;  // modern optional chaining
+
     try {
-        const data = await mealModel.findOne({name:tag});
-        return res.json({ error: false,status:200, message: 'Details Fetch Successfully', data:data})
+        const data = await mealModel.findOne({ name: tag });
+
+        return res.json({
+            error: false,
+            status: 200,
+            message: 'Details Fetch Successfully',
+            data: data
+        });
+
+    } catch (error) {
+        return res.status(400).json({
+            message: error.message,
+            error: true
+        });
     }
-    catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
-    }
-})
+});
 
 
 router.post('/update_meals_status', async (req, res) => {
@@ -89,55 +98,79 @@ router.post('/update_meals_status', async (req, res) => {
 })
 
 router.post('/admin_meals_list', async (req, res) => {
-    let finder ={
-        status: { $ne: 2 }
-    };
-    const { type } = req.body;
-    if(type){
-        finder['type']= Number(req.body.type);
-    }
-    if (!req.body.page) {
-        req.body.page = 1;
-    }
-    if (!req.body.per_page) {
-        req.body.per_page = 20;
-    }
-    if (req.body.name) {
-        finder[`name`] = new RegExp((req.body.name).trim(), 'i') 
-    }
     try {
-        const meal = await mealModel.aggregate(
-            [
-                {$match: finder},
-                { $lookup : { from: 'configurations',localField: 'configurationId', foreignField: '_id',pipeline: [
-                    { $project: { name: 1,_id:0 } },
-                 ], as: 'configurationId'}},
-                {$sort: { name: 1 }},
-                { $match: { "_id": { '$nin': [] } } },
-                {$skip: Number(req.body.page - 1) * Number(req.body.per_page)},
-                {$limit: Number(req.body.per_page)}
-            ]
-        );
-        let OverallResult = meal;
-        const totalmeal = await mealModel.count(finder);
-        let paginate = {
-            "total_item": totalmeal,
-            "showing": OverallResult.length,
-            "first_page": 1,
-            "previous_page": req.body.per_page,
-            "current_page": req.body.page,
-            "next_page": (parseInt(req.body.page) + 1),
-            "last_page": parseInt((totalmeal) / parseInt(req.body.per_page))
+        // Build filter
+        let finder = {
+            status: { $ne: 2 }
+        };
+
+        const type = req.body?.type;
+        if (type) {
+            finder.type = Number(type);
         }
-        if(meal.length>0){
-            return res.json({ error: false,status:200, message: 'Fetch Data Successfully', data: { meal: OverallResult, paginate }})
-        }else{
-            return res.json({ error: true,status:503, message: 'No Record Found'})
+
+        // Pagination defaults
+        const page = Number(req.body?.page) || 1;
+        const perPage = Number(req.body?.per_page) || 20;
+
+        // Search by name
+        if (req.body?.name) {
+            finder.name = new RegExp(req.body.name.trim(), 'i');
         }
+
+        // Query
+        const meal = await mealModel.aggregate([
+            { $match: finder },
+            {
+                $lookup: {
+                    from: 'configurations',
+                    localField: 'configurationId',
+                    foreignField: '_id',
+                    pipeline: [
+                        { $project: { name: 1, _id: 0 } }
+                    ],
+                    as: 'configurationId'
+                }
+            },
+            { $sort: { name: 1 } },
+            { $match: { _id: { $nin: [] } } },
+            { $skip: (page - 1) * perPage },
+            { $limit: perPage }
+        ]);
+
+        const totalmeal = await mealModel.countDocuments(finder);
+
+        const paginate = {
+            total_item: totalmeal,
+            showing: meal.length,
+            first_page: 1,
+            previous_page: perPage,
+            current_page: page,
+            next_page: page + 1,
+            last_page: Math.ceil(totalmeal / perPage)
+        };
+
+        if (meal.length > 0) {
+            return res.json({
+                error: false,
+                status: 200,
+                message: 'Fetch Data Successfully',
+                data: { meal, paginate }
+            });
+        } else {
+            return res.json({
+                error: true,
+                status: 503,
+                message: 'No Record Found'
+            });
+        }
+
+    } catch (error) {
+        return res.status(400).json({
+            message: error.message,
+            error: true
+        });
     }
-    catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
-    }
-})
+});
 
 module.exports = router;

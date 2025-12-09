@@ -18,6 +18,7 @@ const multer = require('multer');
 const fs = require("fs");
 const AWS = require("aws-sdk");
 const cache = new NodeCache({ stdTTL: 60 * 10 }); // Cache TTL: 5 minutes
+const  axios = require ('axios');
 
 
 router.post('/otp_generate_backup', async(req, res) => {
@@ -63,10 +64,10 @@ router.post('/otp_generate_backup', async(req, res) => {
 })
 
 router.post('/otp_generate', async (req, res) => { 
-    const { phone, device_token, name, role, os } = req.body;
-
+    const { phone } = req.body;
+ 
     if (!phone) {
-        return res.status(422).json({
+        return res.json({
             error: true,
             status: 422,
             data: [
@@ -82,16 +83,16 @@ router.post('/otp_generate', async (req, res) => {
 
         if (user) { // If user exists, update their OTP and info
             const update = {
-                otp,
-                device_token,
-                name: req.body.name && req.body.name || user[0].name
+                otp: otp,
+                device_token : req.body.device_token,
+                name: req.body.name ?? user.name
             };
 
             await UserModel.findByIdAndUpdate(user._id, { $set: update });
 
+            console.log('%c [  ]-92', 'font-size:13px; background:pink; color:#bf2c9f;', process.env.FAST2SMS_API_KEY)
             // Send OTP via SMS using Fast2SMS API (with Axios)
             const smsUrl = `https://www.fast2sms.com/dev/bulkV2?authorization=${process.env.FAST2SMS_API_KEY}&message=182194&variables_values=${otp}&route=dlt&numbers=${phone}&sender_id=HORASR`;
-
             try {
                 await axios.get(smsUrl); // Send OTP SMS
             } catch (smsError) {
@@ -107,13 +108,13 @@ router.post('/otp_generate', async (req, res) => {
         } else { // If user doesn't exist, create a new user
             const newUser = new UserModel({
                 email: '',
-                name,
-                role,
+                name: req.body.name && req.body.name,
+                role: req.body.role,
                 password: '',
-                phone,
-                os,
+                phone : req.body.phone,
+                os : req.body.os,
                 address: '',
-                otp,
+                otp: otp,
                 avatar: '',
                 referralCode: '',
                 vechicle_type: '',

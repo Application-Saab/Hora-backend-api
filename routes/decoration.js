@@ -217,6 +217,7 @@ router.get('/searchByTag/v2/:tag', async (req, res) => {
     // Step 1: Return Cached Response if exists
     const cachedData = cache.get(cacheKey);
     if (cachedData) {
+        console.log("returning cached data with key " + cacheKey);
         return res.json({
             ...cachedData,
             cached: true

@@ -557,7 +557,7 @@ router.post('/update_order_status', async (req, res) => {
   const { _id, status } = req.body;
 
   if (!_id) {
-    return res.status(422).json({
+    return res.json({
       error: true,
       status: 422,
       data: [{ path: '_id', message: 'Id is required.' }]
@@ -569,7 +569,7 @@ router.post('/update_order_status', async (req, res) => {
     const order = await orderModel.findById(_id);
 
     if (!order) {
-      return res.status(404).json({ error: true, status: 404, message: 'Details Not Found' });
+      return res.json({ error: true, status: 503, message: 'Details Not Found' });
     }
 
     // Update the status
@@ -594,7 +594,7 @@ router.post('/update_order_status', async (req, res) => {
         );
 
         console.log("Filtered suppliers matching locality and type:", filteredSuppliers.length);
-
+        if (filteredSuppliers.length > 0) {
         filteredSuppliers.forEach(supplier => {
           userSupplierIdsArray.push(supplier._id);
           console.log(`Sending notification to supplier: ${supplier._id}, device_token: ${supplier.device_token}`);
@@ -607,19 +607,17 @@ router.post('/update_order_status', async (req, res) => {
             0
           );
         });
-
-        if (filteredSuppliers.length === 0) {
+}
+         else {
           console.log("No suppliers matched the locality and type for notification.");
         }
-      } catch (notifError) {
-        console.error("Error sending notifications:", notifError);
+      } catch (error) {
+        
       }
+    return res.json({ error: false, status: 200, message: 'Status Updated Successfully' });
     }
 
-    return res.json({ error: false, status: 200, message: 'Status Updated Successfully' });
-
   } catch (error) {
-    console.error("Error updating order status:", error);
     return res.status(400).json({ message: error.message, error: true });
   }
 });
@@ -773,7 +771,7 @@ router.post('/acceptOrder', async (req, res) => {
             console.log("user>>>>", user);
             console.log("user>>>>Accept Order", user.device_token);
 
-            if (user.device_token) {
+            if (user.device_token != "") {
                 notificationFunction.sendNotifications(
                     user.device_token,
                     order.fromId,

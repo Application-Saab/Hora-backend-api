@@ -19,6 +19,7 @@ const ChatMessage = require("../models/eventMessage");
 const PushSub = require("../models/pushSubscription");
 const { ioInstance } = require("../socket");
 const { computeUnreadCountsForUser } = require("../utils/chatUnread");
+const User = require("../models/user");
 
 // AWS S3 Configuration
 const s3 = new AWS.S3({
@@ -148,10 +149,19 @@ router.post("/create-event-invite", async (req, res) => {
 
     // Create chat room for the event
     const newRoom = new ChatRoom({
-      roomId: savedInvite._id,
+      // roomId: savedInvite._id,
+      eventId: savedInvite._id,
       roomName: hostName,
       createdBy: userId,
-      members: [userId],
+      // members: [userId],
+      members: [
+        {
+          userId: userId,
+          name: guestNameToUse,
+          phone: user.phone,
+          profileImageUrl: user.avatar,
+        },
+      ],
     });
 
     await newRoom.save();
@@ -489,34 +499,48 @@ router.put("/event-guest", async (req, res) => {
       return sendResponse(res, 400, true, "Invalid event ID or user ID");
     }
 
+    // GET USER ONLY ONCE
+    const user = await User.findById(userId);
+    if (!user) {
+      return sendResponse(res, 404, true, "User not found");
+    }
     // FIND GUEST ENTRY
     const updatedGuest = await EventGuest.findOne({ eventId, userId });
     if (!updatedGuest) {
       return sendResponse(res, 404, true, "Guest not found");
     }
 
-    let updateData = {};
-    if (name !== undefined) updateData.name = name;
-    if (rsvpStatus !== undefined) updateData.rsvpStatus = rsvpStatus;
-
-    // UPDATE USER NAME ALSO
+    // Update guest & user name
     if (name !== undefined) {
-      const User = require("../models/user");
-      const user = await User.findById(updatedGuest.userId);
-      if (user) {
-        user.name = name;
-        await user.save();
-      }
+      updatedGuest.name = name;
+      user.name = name; // only update once here
+      await user.save();
     }
 
-    Object.assign(updatedGuest, updateData);
+    if (rsvpStatus !== undefined) {
+      updatedGuest.rsvpStatus = rsvpStatus;
+      updatedGuest.name = name;
+    }
+
     const savedGuest = await updatedGuest.save();
 
-    // ADD TO ROOM MEMBER LIST (AUTO JOIN ROOM)
+    // Create member object for ChatRoom
+    const memberObject = {
+      userId,
+      name: name || user.name,
+      phone: user.phone || "",
+      profileImageUrl: user.avatar || "",
+    };
+
+    // ADD MEMBER TO ROOM (avoid duplicates)
     await ChatRoom.findOneAndUpdate(
-      { roomId: eventId },
-      { $addToSet: { members: userId } } // Avoid duplicates
+      { eventId: eventId },
+      { $addToSet: { members: memberObject } }
     );
+    // await ChatRoom.findOneAndUpdate(
+    //   { eventId: eventId },
+    //   { $addToSet: { members: userId } } // Avoid duplicates
+    // );
 
     return sendResponse(
       res,
@@ -544,8 +568,13 @@ router.get("/chatrooms/user/:userId", async (req, res) => {
       return sendResponse(res, 400, true, "Invalid user ID");
     }
 
-    const rooms = await ChatRoom.find({ members: userId })
-      .select("roomId roomName members createdAt roomProfileUrl")
+    // const rooms = await ChatRoom.find({ members: userId })
+    //   .select("roomId eventId roomName members createdAt roomProfileUrl")
+    //   .lean();
+
+    // updated query for new members schema
+    const rooms = await ChatRoom.find({ "members.userId": userId })
+      .select("roomId eventId roomName members createdAt roomProfileUrl roomType")
       .lean();
 
     return sendResponse(res, 200, false, "Rooms fetched successfully", rooms);
@@ -560,18 +589,18 @@ router.get("/chatrooms/user/:userId", async (req, res) => {
 });
 
 // Get chat messages for a room with pagination
-router.get("/chat/messages/:roomId", async (req, res) => {
+router.get("/chat/messages/:groupId", async (req, res) => {
   try {
-    const { roomId } = req.params;
+    const { groupId } = req.params;
     const limit = parseInt(req.query.limit) || 50; // default 50 messages
     const page = parseInt(req.query.page) || 1; // page number
 
-    if (!mongoose.Types.ObjectId.isValid(roomId)) {
+    if (!mongoose.Types.ObjectId.isValid(groupId)) {
       return sendResponse(res, 400, true, "Invalid room ID");
     }
 
     // Latest messages first (reverse later for UI)
-    const messages = await ChatMessage.find({ roomId })
+    const messages = await ChatMessage.find({ groupId }) // TODO Yaha Par Group id se hi fetch karwana hai
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
@@ -588,7 +617,7 @@ router.get("/chat/messages/:roomId", async (req, res) => {
     console.error("Fetch Messages Error:", {
       message: err.message,
       stack: err.stack,
-      roomId: req.params.roomId,
+      groupId: req.params.groupId,
     });
     return sendResponse(res, 500, true, "Server error");
   }
@@ -597,15 +626,15 @@ router.get("/chat/messages/:roomId", async (req, res) => {
 // existing mark-read route
 router.post("/mark-read", async (req, res) => {
   try {
-    const { roomId, userId } = req.body;
+    const { groupId, userId } = req.body;
     if (
-      !mongoose.Types.ObjectId.isValid(roomId) ||
+      !mongoose.Types.ObjectId.isValid(groupId) ||
       !mongoose.Types.ObjectId.isValid(userId)
     ) {
       return res.status(400).json({ error: true, message: "Invalid ids" });
     }
 
-    const room = await ChatRoom.findById(roomId);
+    const room = await ChatRoom.findById(groupId);
     if (!room)
       return res.status(404).json({ error: true, message: "Room not found" });
 
@@ -617,8 +646,8 @@ router.post("/mark-read", async (req, res) => {
 
     // Optionally: emit socket update to other members that this user read messages
     ioInstance &&
-      ioInstance.to(roomId.toString()).emit("message:read:update", {
-        roomId,
+      ioInstance.to(groupId.toString()).emit("message:read:update", {
+        groupId, // TODO Yaha bhi group Id se karna hai
         userId,
         lastReadAt: room.lastReadAt.get(String(userId)) || new Date(),
       });
@@ -647,7 +676,7 @@ router.get("/chatrooms/:userId/unread", async (req, res) => {
 // POST /api/push/subscribe
 router.post("/subscribe", async (req, res) => {
   try {
-    const { userId, roomId, subscription, fcmToken } = req.body;
+    const { userId, groupId, subscription, fcmToken } = req.body;
     if (!userId)
       return res.status(400).json({ error: true, message: "userId required" });
 
@@ -658,7 +687,8 @@ router.post("/subscribe", async (req, res) => {
         {
           $set: {
             userId,
-            roomId: roomId || null,
+            // roomId: roomId || null,
+            groupId: groupId || null,
             subscription,
             fcmToken: fcmToken || null,
           },
@@ -669,7 +699,14 @@ router.post("/subscribe", async (req, res) => {
       // some browsers provide only fcm token; upsert by token
       await PushSub.updateOne(
         { fcmToken },
-        { $set: { userId, roomId: roomId || null, fcmToken } },
+        {
+          $set: {
+            userId,
+            // roomId: roomId || null,
+            groupId: groupId || null,
+            fcmToken,
+          },
+        },
         { upsert: true }
       );
     } else {

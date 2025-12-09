@@ -72,17 +72,17 @@ async function sendToFcmToken(fcmToken, payloadObj) {
 }
 
 // send to all subs for a room (either web-push or fcm tokens)
-async function sendPushToRoom(roomId, messageText, options = {}) {
+async function sendPushToRoom(groupId, messageText, options = {}) {
   // subs stored may include web push subscription docs and optionally fcm tokens linked to user
   const subs = await PushSub.find({
-    $or: [{ roomId }, { roomId: null }],
+    $or: [{ groupId }, { groupId: null }],
   }).lean();
 
   const payloadBase = {
     title: options.title || `New message in ${options.roomName || "room"}`,
     body: options.body || String(messageText).slice(0, 120),
     icon: options.icon || "",
-    data: Object.assign({ roomId: String(roomId) }, options.data || {}),
+    data: Object.assign({ groupId: String(groupId) }, options.data || {}),
   };
 
   const promises = subs.map(async (s) => {

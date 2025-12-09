@@ -5,7 +5,11 @@ const eventMessageSchema = new mongoose.Schema(
     roomId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "ChatRoom",
-      required: true,
+      required: false,
+    },
+    groupId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChatRoom"
     },
     senderId: {
       type: mongoose.Schema.Types.ObjectId,

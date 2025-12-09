@@ -38,29 +38,44 @@ router.post('/edit', async (req, res) => {
     }
 })
 
+//blocker of this getMealDish api 
 router.post('/editByUserID', async (req, res) => {
-    const userID = req.body.userId;
-
-    const updatedData = req.body;
-    const options = { new: true , upsert: true };
-    
     try {
-        // Corrected the syntax for the query to find by userId
+        const { userId } = req.body;
+        const updatedData = req.body;
+
+        // Mongoose 9 recommended options
+        const options = { new: true, upsert: true };
+
         const result = await addressModel.findOneAndUpdate(
-            { userId: userID }, // Corrected query syntax
+            { userId: userId },
             updatedData,
             options
         );
 
         if (!result) {
-            return res.status(404).json({ error: true, status: 404, message: 'Address not found' });
+            return res.status(404).json({
+                error: true,
+                status: 404,
+                message: 'Address not found'
+            });
         }
 
-        return res.json({ error: false, status: 200, message: 'Address Updated Successfully', data: result });
+        return res.json({
+            error: false,
+            status: 200,
+            message: 'Address Updated Successfully',
+            data: result
+        });
+
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true });
+        return res.status(400).json({
+            error: true,
+            message: error.message
+        });
     }
-})
+});
+
 
 router.get('/details/:id', async (req, res) => {
     try {

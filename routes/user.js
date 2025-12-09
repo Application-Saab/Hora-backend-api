@@ -119,6 +119,7 @@ router.post('/otp_generate', async (req, res) => {
                 message: 'OTP sent successfully'
             });
         }
+
     } catch (error) {
         console.error("Error in OTP generation:", error);
         return res.status(400).json({

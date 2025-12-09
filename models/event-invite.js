@@ -5,7 +5,7 @@ const eventInviteSchema = new mongoose.Schema({
     userType: { type: String, default: 'host' }, 
     eventType: { type: String, default: '' },
     hostName: { type: String, default: '' },
-    eventDate: { type: Date, default: Date.now },
+    eventDate: { type: String, default: '' },
     eventTime: { type: String, default: '' },
     location: { type: String, default: '' },
     imageUrl: { type: String },

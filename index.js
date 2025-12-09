@@ -14,13 +14,7 @@ const cron = require('node-cron');
 mongoose.set("strictQuery", true);
 mongoose.connect(
   `mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASS}@${process.env.MONGO_CLUSTER}/${process.env.MONGO_DATABASE}?retryWrites=true&w=majority`
-).then(() => {
-  console.log("MongoDB Connected");
-}).catch((error) => {
-  console.log("MongoDB connection error:", error);
-});
-
-
+);
 const database = mongoose.connection;
 // Database Connection End
 
@@ -28,7 +22,7 @@ const database = mongoose.connection;
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+// app.use(express.json());
 app.use(bodyParser.json({ limit: "50mb" }));
 app.use(
   bodyParser.urlencoded({
@@ -147,8 +141,8 @@ let passportAuth = require("./store/passportAuth").passportAuth;
 
 app.use("/api/admin", AdminRoutes);
 app.use("/api/user", UserRoutes);
-app.use("/api/customer/event", passportAuth, EventInviteRoutes);
-app.use("/api/users", passportAuth, UserRoutes);
+app.use("/api/customer/event", EventInviteRoutes);
+app.use("/api/users", UserRoutes);
 app.use("/api/configuration", ConfigurationRoutes);
 app.use("/api/ingredient", IngredientRoutes);
 app.use("/api/ingredient_type", ingredientTypeRoutes);
@@ -373,9 +367,18 @@ app.get('/test-s3', async (req, res) => {
 
 
 // Not Found Error
-app.use(function (req, res) {
+// app.use(function (req, res) {
+//   res.status(404).json({ message: "Api Not Exits In Server.", error: true });
+// });
+
+app.use((req, res, next) => {
+  if (req.path.startsWith("/socket.io")) {
+    return next(); // let socket.io handle it
+  }
+
   res.status(404).json({ message: "Api Not Exits In Server.", error: true });
 });
+
 
 // error handler
 app.use(function (err, req, res, next) {

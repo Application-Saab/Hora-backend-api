@@ -709,7 +709,7 @@ router.get('/order_details/v1/:id', async (req, res) => {
                 path: 'selecteditems',
                 populate: [
                     { path: 'cuisineId' },
-                    { path: 'mealId', model: 'meals' },
+                    { path: 'mealId', model: 'meal' },
                     { path: 'special_appliance_id' },
                     { path: 'general_appliance_id' },
                     { path: 'serving_dish' }
@@ -1905,49 +1905,45 @@ router.post('/publicOrderList', async(req, res) => {
     }
 })
 
-router.get('/getIngredientByOrder/:id', async(req, res) => {
-	
-	try {
-		
-        const order = await orderModel.find({order_id:req.params.id}).populate('addressId').populate('fromId').populate('addressId').populate({
-            path: "selecteditems",
-            populate: {
-               path: "cuisineId"
-            }
-        }).populate({
-            path: "selecteditems",
-            populate: {
-               path: "mealId"
-            }
-        }).populate({
-            path: "orderApplianceIds"
-        }).populate({
-            path: "selecteditems",
-            populate: {
-               path: "special_appliance_id"
-            }
-        }).populate({
-            path: "selecteditems",
-            populate: {
-               path: "general_appliance_id"
-            }
-        }).populate({
-            path: "selecteditems",
-            populate: {
-               path: "serving_dish"
-            }
-        })
-        
+router.get('/getIngredientByOrder/:id', async (req, res) => {
+    try {
+        const order = await orderModel
+            .find({ order_id: req.params.id })
+            .populate('addressId')
+            .populate('fromId')
+            .populate('addressId')
+            .populate({
+                path: "selecteditems",
+                populate: { path: "cuisineId" }
+            })
+            .populate({
+                path: "selecteditems",
+                populate: { path: "mealId", model: "meal" }
+            })
+            .populate({ path: "orderApplianceIds" })
+            .populate({
+                path: "selecteditems",
+                populate: { path: "special_appliance_id" }
+            })
+            .populate({
+                path: "selecteditems",
+                populate: { path: "general_appliance_id" }
+            })
+            .populate({
+                path: "selecteditems",
+                populate: { path: "serving_dish" }
+            });
+
         const hashMap = {};
-		
-		const noOfPeople = order[0].no_of_people
-		
-		order[0].selecteditems.forEach(ingredientList => {
-			if (ingredientList.ingredientUsed && Array.isArray(ingredientList.ingredientUsed)){
-			ingredientList.ingredientUsed.forEach(ingredient => {
-				const { _id, name, image, unit, qty } = ingredient;
-				const qtyValue = parseFloat(qty);
-				if (!isNaN(qtyValue)){
+        const noOfPeople = order[0].no_of_people;
+
+        order[0].selecteditems.forEach(item => {
+            if (item.ingredientUsed && Array.isArray(item.ingredientUsed)) {
+                item.ingredientUsed.forEach(ingredient => {
+                    const { name, image, unit, qty } = ingredient;
+                    const qtyValue = parseFloat(qty);
+
+                    if (!isNaN(qtyValue)){
 					if (hashMap.hasOwnProperty(name)){
 						hashMap[name].qty=hashMap[name].qty + qtyValue * noOfPeople
                         hashMap[name].count = hashMap[name].count + 1
@@ -1956,11 +1952,11 @@ router.get('/getIngredientByOrder/:id', async(req, res) => {
 						hashMap[name]={qty:qtyValue * noOfPeople, unit, image, count:1}
 					}
 				}
-			})
-			}
-		})
-		
-		for (const key in hashMap) {
+                });
+            }
+        });
+
+        for (const key in hashMap) {
             if (hashMap.hasOwnProperty(key)) {
               const value = hashMap[key];
               
@@ -2008,16 +2004,26 @@ router.get('/getIngredientByOrder/:id', async(req, res) => {
             }
         }
         if (Object.keys(hashMap).length > 0) {
-            return res.json({ error: false, status: 200, message: 'Fetch Data Successfully', data: hashMap })
+            return res.json({
+                error: false,
+                status: 200,
+                message: 'Fetch Data Successfully',
+                data: hashMap
+            });
         } else {
-            return res.json({ error: true, status: 503, message: 'No Record Found' })
+            return res.json({
+                error: true,
+                status: 503,
+                message: 'No Record Found'
+            });
         }
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        return res.status(400).json({
+            message: error.message,
+            error: true
+        });
     }
-	
-	
-})
+});
 
 // Decoration Order Details
 router.get('/order_details_decoration/:id', async (req, res) => {

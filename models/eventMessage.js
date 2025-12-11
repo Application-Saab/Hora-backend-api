@@ -22,7 +22,7 @@ const eventMessageSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["text", "image", "video"],
+      enum: ["text", "image", "video", "info"],
       default: "text",
     },
     mediaUrl: {

@@ -17,46 +17,44 @@ function initSocket(server) {
   });
 
   io.on("connection", async (socket) => {
-    console.log("User connected:", socket.id);
-
     const userId = socket.handshake.query.userId;
-    console.log(
-      "%c [ userId ]-21",
-      "font-size:13px; background:pink; color:#bf2c9f;",
-      userId
-    );
-
     if (!userId || userId === "null") {
-      console.log("Invalid userId → skipping room join");
       return;
     }
 
     socket.userId = userId;
 
     // JOIN ALL CHAT ROOMS
-    // const rooms = await ChatRoom.find({ members: userId }).select("_id");
-    const rooms = await ChatRoom.find({ "members.userId": userId }).select("_id");
+    const rooms = await ChatRoom.find({ "members.userId": userId }).select(
+      "_id"
+    );
 
     rooms.forEach((room) => socket.join(room._id.toString()));
 
-    console.log(
-      "Joined rooms:",
-      rooms.map((r) => r._id.toString())
-    );
+    // Join event room for event specific updates
+    socket.on("joinEvent", (eventId) => {
+      socket.join(eventId);
+      console.log(`User ${userId} joined event room ${eventId}`);
+    });
+
+    socket.on("leaveEvent", (eventId) => {
+      socket.leave(eventId);
+      console.log(`User ${userId} left event room ${eventId}`);
+    });
 
     // Send authoritative unread counts to this socket on connect
     try {
       const unread = await computeUnreadCountsForUser(userId);
-      socket.emit("unread:counts:init", unread); // frontend will listen and seed unreadCounts
+      socket.emit("unread:counts:init", unread);
     } catch (e) {
       console.error("Failed compute unread on connect:", e);
     }
 
     socket.on("message:send", async (data) => {
       try {
-        const {
-          // roomId,
+        let {
           groupId,
+          eventId,
           message,
           type,
           tempId,
@@ -64,8 +62,21 @@ function initSocket(server) {
           senderName,
           senderPhone,
         } = data;
+
+        // If group id not available for info type messages
+        if (!groupId) {
+          const room = await ChatRoom.findOne({
+            eventId,
+            roomType: "group",
+          });
+
+          if (!room) {
+            console.log("No group room found for eventId:", eventId);
+            return;
+          }
+          groupId = room._id;
+        }
         const saved = await EventMessage.create({
-          // roomId,
           groupId,
           senderId: socket.userId,
           message,
@@ -77,7 +88,6 @@ function initSocket(server) {
 
         const finalMsg = {
           _id: saved._id,
-          // roomId,
           groupId,
           senderId: socket.userId,
           message,
@@ -91,7 +101,7 @@ function initSocket(server) {
 
         io.to(groupId).emit("message:new", finalMsg);
 
-        // send push notifications (async, don't block)
+        // send push notifications
         sendPushToRoom(groupId, message, {
           roomName: "",
           body: message,
@@ -117,7 +127,12 @@ function initSocket(server) {
       });
     });
 
-    // DISCONNECT
+    // Socket for update rsvp list on submit
+    socket.on("rsvp:updated", ({ eventId }) => {
+      io.to(eventId.toString()).emit("rsvp:refetch", { eventId });
+    });
+
+    // Disconnect socket
     socket.on("disconnect", () => {
       console.log("User disconnected:", socket.id);
     });

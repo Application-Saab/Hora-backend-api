@@ -128,10 +128,8 @@ router.post("/create-event-invite", async (req, res) => {
     // Determine which name to use for guest
     let guestNameToUse = "";
     if (existingEventsCount === 0 && hostName) {
-      // first event → use hostName
       guestNameToUse = hostName;
     } else if (user && user.name) {
-      // otherwise → use name from user collection
       guestNameToUse = user.name;
     }
 
@@ -149,11 +147,9 @@ router.post("/create-event-invite", async (req, res) => {
 
     // Create chat room for the event
     const newRoom = new ChatRoom({
-      // roomId: savedInvite._id,
       eventId: savedInvite._id,
       roomName: hostName,
       createdBy: userId,
-      // members: [userId],
       members: [
         {
           userId: userId,
@@ -258,7 +254,7 @@ router.get("/event-invites/all/:userId", async (req, res) => {
       _id: { $in: guestEventIds.filter((id) => !hostedEventIds.includes(id)) },
     }).lean();
 
-    // Filter only valid events (having all required details)
+    // Filter only valid events
     const isValidEvent = (event) => event.hostName;
 
     const filteredHosted = (hostedEvents || []).filter(isValidEvent);
@@ -513,7 +509,7 @@ router.put("/event-guest", async (req, res) => {
     // Update guest & user name
     if (name !== undefined) {
       updatedGuest.name = name;
-      user.name = name; // only update once here
+      user.name = name;
       await user.save();
     }
 
@@ -537,10 +533,6 @@ router.put("/event-guest", async (req, res) => {
       { eventId: eventId },
       { $addToSet: { members: memberObject } }
     );
-    // await ChatRoom.findOneAndUpdate(
-    //   { eventId: eventId },
-    //   { $addToSet: { members: userId } } // Avoid duplicates
-    // );
 
     return sendResponse(
       res,
@@ -559,6 +551,86 @@ router.put("/event-guest", async (req, res) => {
   }
 });
 
+// Create direct chat room for one-to-one chat
+router.post("/create-direct-room", async (req, res) => {
+  try {
+    const { members, eventId } = req.body;
+
+    if (!members || !Array.isArray(members) || members.length !== 2) {
+      return res.status(400).send({
+        success: false,
+        message: "Direct chat must contain exactly 2 userIds.",
+      });
+    }
+
+    const [userId1, userId2] = members;
+
+    const existingRoom = await ChatRoom.findOne({
+      roomType: "direct",
+      "members.userId": { $all: [userId1, userId2] },
+      $expr: { $eq: [{ $size: "$members" }, 2] },
+    });
+
+    if (existingRoom) {
+      return res.status(200).send({
+        success: true,
+        message: "Direct room already exists",
+        room: existingRoom,
+      });
+    }
+
+    // Fetch details from User DB for both users
+    const user1 = await User.findById(userId1);
+    const user2 = await User.findById(userId2);
+
+    if (!user1 || !user2) {
+      return res.status(404).send({
+        success: false,
+        message: "One or both users not found",
+      });
+    }
+
+    const membersArr = [
+      {
+        userId: user1._id,
+        name: user1.name || "",
+        phone: user1.phone || "",
+        profileImageUrl: user1.avatar || "",
+      },
+      {
+        userId: user2._id,
+        name: user2.name || "",
+        phone: user2.phone || "",
+        profileImageUrl: user2.avatar || "",
+      },
+    ];
+
+    // create new room
+    const newRoom = new ChatRoom({
+      roomName: `${user1.name || "User"} & ${user2.name || "User"}`,
+      createdBy: userId1,
+      roomType: "direct",
+      members: membersArr,
+      eventId,
+    });
+
+    const savedRoom = await newRoom.save();
+
+    return res.status(200).send({
+      success: true,
+      message: "Direct chat room created successfully",
+      data: savedRoom,
+    });
+  } catch (error) {
+    console.error("Create Direct Room Error:", error);
+
+    return res.status(500).send({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
 // Get all rooms joined by a user
 router.get("/chatrooms/user/:userId", async (req, res) => {
   try {
@@ -568,13 +640,11 @@ router.get("/chatrooms/user/:userId", async (req, res) => {
       return sendResponse(res, 400, true, "Invalid user ID");
     }
 
-    // const rooms = await ChatRoom.find({ members: userId })
-    //   .select("roomId eventId roomName members createdAt roomProfileUrl")
-    //   .lean();
-
     // updated query for new members schema
     const rooms = await ChatRoom.find({ "members.userId": userId })
-      .select("roomId eventId roomName members createdAt roomProfileUrl roomType")
+      .select(
+        "roomId eventId roomName members createdAt roomProfileUrl roomType"
+      )
       .lean();
 
     return sendResponse(res, 200, false, "Rooms fetched successfully", rooms);
@@ -592,15 +662,15 @@ router.get("/chatrooms/user/:userId", async (req, res) => {
 router.get("/chat/messages/:groupId", async (req, res) => {
   try {
     const { groupId } = req.params;
-    const limit = parseInt(req.query.limit) || 50; // default 50 messages
+    const limit = parseInt(req.query.limit) || 10000; // default 10000 messages
     const page = parseInt(req.query.page) || 1; // page number
 
     if (!mongoose.Types.ObjectId.isValid(groupId)) {
       return sendResponse(res, 400, true, "Invalid room ID");
     }
 
-    // Latest messages first (reverse later for UI)
-    const messages = await ChatMessage.find({ groupId }) // TODO Yaha Par Group id se hi fetch karwana hai
+    // Latest messages first
+    const messages = await ChatMessage.find({ groupId })
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
@@ -611,7 +681,7 @@ router.get("/chat/messages/:groupId", async (req, res) => {
       200,
       false,
       "Messages fetched successfully",
-      messages.reverse() // UI ke liye ascending order
+      messages.reverse()
     );
   } catch (err) {
     console.error("Fetch Messages Error:", {
@@ -644,10 +714,10 @@ router.post("/mark-read", async (req, res) => {
     // compute unreadCounts for this user (for all rooms) after marking
     const allCounts = await computeUnreadCountsForUser(userId);
 
-    // Optionally: emit socket update to other members that this user read messages
+    // emit socket update to other members
     ioInstance &&
       ioInstance.to(groupId.toString()).emit("message:read:update", {
-        groupId, // TODO Yaha bhi group Id se karna hai
+        groupId,
         userId,
         lastReadAt: room.lastReadAt.get(String(userId)) || new Date(),
       });
@@ -663,7 +733,7 @@ router.post("/mark-read", async (req, res) => {
   }
 });
 
-// GET /chatrooms/:userId/unread
+// Get chatroom unread by userid
 router.get("/chatrooms/:userId/unread", async (req, res) => {
   const { userId } = req.params;
   if (!mongoose.Types.ObjectId.isValid(userId))
@@ -673,7 +743,7 @@ router.get("/chatrooms/:userId/unread", async (req, res) => {
   return res.json({ error: false, data: counts });
 });
 
-// POST /api/push/subscribe
+// subscribe for notification
 router.post("/subscribe", async (req, res) => {
   try {
     const { userId, groupId, subscription, fcmToken } = req.body;
@@ -687,7 +757,6 @@ router.post("/subscribe", async (req, res) => {
         {
           $set: {
             userId,
-            // roomId: roomId || null,
             groupId: groupId || null,
             subscription,
             fcmToken: fcmToken || null,
@@ -696,13 +765,11 @@ router.post("/subscribe", async (req, res) => {
         { upsert: true }
       );
     } else if (fcmToken) {
-      // some browsers provide only fcm token; upsert by token
       await PushSub.updateOne(
         { fcmToken },
         {
           $set: {
             userId,
-            // roomId: roomId || null,
             groupId: groupId || null,
             fcmToken,
           },
@@ -721,6 +788,7 @@ router.post("/subscribe", async (req, res) => {
   }
 });
 
+//  unsubscribe for notification
 router.post("/unsubscribe", async (req, res) => {
   try {
     const { endpoint, fcmToken } = req.body;
@@ -925,7 +993,7 @@ router.post("/:postId/like", async (req, res) => {
     const existingLike = await postLikes.findOne({ postId, likedById });
 
     if (existingLike) {
-      // Already liked → Unlike it
+      // If  already liked -> Unlike it
       await postLikes.findByIdAndDelete(existingLike._id);
 
       // Decrement like count safely
@@ -938,7 +1006,7 @@ router.post("/:postId/like", async (req, res) => {
         likeCounts: post.likeCounts,
       });
     } else {
-      // Not liked → Add new like
+      // Not liked -> Add new like
       const newLike = new postLikes({ postId, likedById, likedByName });
       await newLike.save();
 
@@ -968,13 +1036,13 @@ router.post("/:postId/comment", async (req, res) => {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    // ✅ Check if post exists
+    // Check if post exists
     const post = await eventPosts.findById(postId);
     if (!post) {
       return res.status(404).json({ message: "Post not found" });
     }
 
-    // ✅ Create new comment
+    // Create new comment
     const newComment = new postComment({
       postId,
       commentedById,

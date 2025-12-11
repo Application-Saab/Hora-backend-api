@@ -16,6 +16,497 @@ const notificationFunction = require("../store/notifications");
 const cityServedModel = require("../models/city-served");
 const cityServedLocalityModel = require("../models/city-served-locality");
 
+
+//............ working and tested apis..................
+
+router.post('/admin_signin', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        if (!email || !password) {
+            return res.status(422).json({
+                error: true,
+                status: 422,
+                data: [
+                    { path: 'email', message: 'Email is required.' },
+                    { path: 'password', message: 'Password is required.' }
+                ]
+            });
+        }
+
+        const user = await UserModel.findOne({ email, role: 'admin', password });
+
+        if (!user) {
+            return res.status(404).json({ error: true, status: 404, message: 'Admin Not Registered' });
+        }
+
+        const token = passportAuth.signToken(user);
+
+        return res.status(200).json({
+            error: false,
+            status: 200,
+            data: user,
+            token
+        });
+
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: error.message, error: true });
+    }
+});
+
+//prev
+
+// router.post('/admin_user_list', async (req, res) => {
+//     try {
+//         const {
+//             role,
+//             email,
+//             phone,
+//             _id,
+//             page = 1,
+//             per_page = 20
+//         } = req.body;
+
+//         // Query builder
+//         const finder = { status: { $ne: 2 } };
+
+//         if (role) finder.role = role;
+
+//         if (email) {
+//             finder.email = new RegExp(email.trim(), 'i');
+//         }
+
+//         if (phone) {
+//             finder.phone = new RegExp(phone.trim(), 'i');
+//         }
+
+//         if (_id) {
+//             finder._id = new ObjectId(_id.trim());
+//         }
+
+//         // Aggregation for user list
+//         const users = await UserModel.aggregate([
+//             { $match: finder },
+//             { $sort: { updatedAt: -1 } },
+//             { $skip: (Number(page) - 1) * Number(per_page) },
+//             { $limit: Number(per_page) }
+//         ]);
+
+//         const totalUsers = await UserModel.countDocuments(finder);
+
+//         const paginate = {
+//             total_item: totalUsers,
+//             showing: users.length,
+//             first_page: 1,
+//             previous_page: Number(page) > 1 ? Number(page) - 1 : null,
+//             current_page: Number(page),
+//             next_page: Number(page) * Number(per_page) < totalUsers ? Number(page) + 1 : null,
+//             last_page: Math.ceil(totalUsers / Number(per_page))
+//         };
+
+//         if (users.length > 0) {
+//             return res.json({
+//                 error: false,
+//                 status: 200,
+//                 message: "Fetch Data Successfully",
+//                 data: { users, paginate }
+//             });
+//         }
+
+//         return res.json({
+//             error: true,
+//             status: 503,
+//             message: "No Record Found"
+//         });
+
+//     } catch (error) {
+//         return res.status(400).json({
+//             error: true,
+//             message: error.message
+//         });
+//     }
+// });
+
+
+//again 
+router.post('/admin_user_list', async (req, res) => {
+    try {
+        let {
+            role,
+            email,
+            phone,
+            _id,
+            page,
+            per_page
+        } = req.body;
+
+        // Ensure page and per_page are valid numbers
+        page = Number(page);
+        per_page = Number(per_page);
+
+        if (isNaN(page) || page < 1) page = 1;
+        if (isNaN(per_page) || per_page < 1) per_page = 20;
+
+        // Build the query
+        const finder = { status: { $ne: 2 } };
+
+        if (role) finder.role = role;
+
+        if (email) {
+            finder.email = new RegExp(email.trim(), 'i');
+        }
+
+        if (phone) {
+            finder.phone = new RegExp(phone.trim(), 'i');
+        }
+
+        if (_id) {
+            try {
+                finder._id = new ObjectId(_id.trim());
+            } catch (err) {
+                return res.status(400).json({
+                    error: true,
+                    message: "Invalid _id format"
+                });
+            }
+        }
+
+        // Aggregation for user list
+        const users = await UserModel.aggregate([
+            { $match: finder },
+            { $sort: { updatedAt: -1 } },
+            { $skip: (page - 1) * per_page },
+            { $limit: per_page }
+        ]);
+
+        const totalUsers = await UserModel.countDocuments(finder);
+
+        const paginate = {
+            total_item: totalUsers,
+            showing: users.length,
+            first_page: 1,
+            previous_page: page > 1 ? page - 1 : null,
+            current_page: page,
+            next_page: page * per_page < totalUsers ? page + 1 : null,
+            last_page: Math.ceil(totalUsers / per_page)
+        };
+
+        if (users.length > 0) {
+            return res.json({
+                error: false,
+                status: 200,
+                message: "Fetch Data Successfully",
+                data: { users, paginate }
+            });
+        }
+
+        return res.json({
+            error: true,
+            status: 503,
+            message: "No Record Found"
+        });
+
+    } catch (error) {
+        return res.status(400).json({
+            error: true,
+            message: error.message
+        });
+    }
+});
+
+
+router.post('/user_signup', async (req, res) => {
+    try {
+        const {
+            email,
+            name,
+            role,
+            avatar,
+            phone,
+            os,
+            address,
+            otp,
+            age,
+            city,
+            aadhar_no,
+            aadhar_front_img,
+            aadhar_back_img,
+            experience,
+            userAppliance,
+            userServedLocalities,
+            job_type,
+            resume,
+            userCuisioness,
+            is_veg
+        } = req.body;
+
+        // Check if user already exists
+        const existingUser = await UserModel.find({ phone, role });
+
+        if (existingUser.length > 0) {
+            return res.json({
+                error: true,
+                status: 503,
+                message: `${commonFunction.capitalizeFirstLetter(role)} Already Added`
+            });
+        }
+
+        // Create new user
+        const newUser = new UserModel({
+            email,
+            name,
+            role,
+            avatar,
+            password: '',
+            phone,
+            os,
+            address,
+            otp,
+            age,
+            city,
+            aadhar_no,
+            aadhar_front_img,
+            aadhar_back_img,
+            experience,
+            userAppliance,
+            userServedLocalities,
+            job_type,
+            resume,
+            userCuisioness,
+            is_veg
+        });
+
+        const savedUser = await newUser.save();
+
+        return res.json({
+            error: false,
+            status: 200,
+            message: `${commonFunction.capitalizeFirstLetter(role)} Registered Successfully`,
+            dataToSave: savedUser,   
+            token: passportAuth.signToken(savedUser)
+        });
+
+    } catch (error) {
+        return res.status(400).json({
+            error: true,
+            message: error.message
+        });
+    }
+});
+
+router.post('/adminOrderList', async (req, res) => {
+    try {
+        const {
+            page = 1,
+            per_page = 100,
+            order_id,
+            type,
+            order_status,
+            status,
+            phone_no,
+            start_createdAt,
+            end_createdAt,
+            createdAt,
+            review_date,
+            order_taken_by,
+            online_phone_no,
+            order_locality,
+            toId,
+            userReviewRatingArray,
+            start_date,
+            end_date,
+            order_date
+        } = req.body;
+
+        // Build the query object
+        const finder = { status: { $ne: 2 } };
+
+        if (order_id) finder.order_id = order_id;
+        if (type) finder.type = type;
+        if (order_status) finder.order_status = order_status;
+        if (status) finder.status = status;
+        if (phone_no) finder.phone_no = phone_no;
+        if (order_taken_by) finder.order_taken_by = order_taken_by;
+        if (online_phone_no) finder.online_phone_no = online_phone_no;
+        if (order_locality) finder.order_locality = order_locality;
+        if (toId) finder.toId = toId;
+        if (userReviewRatingArray && userReviewRatingArray.length > 0) {
+            finder.userReviewRatingArray = { $in: userReviewRatingArray };
+        }
+
+        // Date filters
+        if (start_createdAt && end_createdAt) {
+            finder.createdAt = {
+                $gte: new Date(start_createdAt),
+                $lte: new Date(end_createdAt)
+            };
+        } else if (createdAt) {
+            const start = new Date(createdAt);
+            const end = new Date(start);
+            end.setDate(end.getDate() + 1);
+            finder.createdAt = { $gte: start, $lt: end };
+        }
+
+        if (review_date) finder.review_date = new Date(review_date);
+
+        if (start_date && end_date) {
+            finder.order_date = {
+                $gte: new Date(start_date),
+                $lte: new Date(end_date)
+            };
+        } else if (order_date) {
+            finder.order_date = new Date(order_date);
+        }
+
+        // Aggregation pipeline
+        const order = await orderModel.aggregate([
+            { $match: finder },
+            {
+                $lookup: {
+                    from: 'addresses',
+                    localField: 'addressId',
+                    foreignField: '_id',
+                    as: 'addressId'
+                }
+            },
+            { $sort: { order_id: -1 } },
+            { $skip: (Number(page) - 1) * Number(per_page) },
+            { $limit: Number(per_page) }
+        ]);
+
+        const totalorder = await orderModel.countDocuments(finder);
+
+        const paginate = {
+            total_item: totalorder,
+            showing: order.length,
+            first_page: 1,
+            previous_page: page > 1 ? Number(page) - 1 : null,
+            current_page: Number(page),
+            next_page: Number(page) * Number(per_page) < totalorder ? Number(page) + 1 : null,
+            last_page: Math.ceil(totalorder / Number(per_page))
+        };
+
+        if (order.length > 0) {
+            return res.json({
+                error: false,
+                status: 200,
+                message: 'Fetch Data Successfully',
+                data: { order, paginate }
+            });
+        } else {
+            return res.json({ error: true, status: 503, message: 'No Record Found' });
+        }
+    } catch (error) {
+        return res.status(400).json({ message: error.message, error: true });
+    }
+});
+
+router.get('/getUserDetails/:id', async (req, res) => {
+    try {
+        const id = req.params.id;
+
+        // Validate ObjectId format (additional safety)
+        if (!ObjectId.isValid(id)) {
+            return res.json({
+                error: true,
+                status: 422,
+                message: 'Invalid user ID format.'
+            });
+        }
+
+        const data = await UserModel.findById(id);
+
+        return res.json({
+            error: false,
+            status: 200,
+            message: 'Details Fetch Successfully',
+            data: data
+        });
+
+    } catch (error) {
+        return res.status(400).json({
+            message: error.message,
+            error: true
+        });
+    }
+});
+
+router.post('/update_user_status', async (req, res) => {
+    const { _id } = req.body;
+
+    if (!_id) {
+        return res.json({
+            error: true,
+            status: 422,
+            data: [
+                { path: '_id', message: 'Id is required.' }
+            ]
+        });
+    }
+
+    try {
+        // Same logic but cleaner: findOne returns single user
+        const user = await UserModel.findOne({ _id: req.body._id });
+
+        if (user) {
+
+            const update = {
+                status: req.body.status
+            };
+
+            // Same logic: only notification if device_token exists
+            if (user.device_token && user.device_token !== "") {
+
+                // if (req.body.status == 0) {
+                //     notificationFunction.sendNotifications(
+                //         user.device_token,
+                //         req.body._id,
+                //         'Account Blocked',
+                //         'Please reach out to below contact +91 888-422-1287',
+                //         req.body.status,
+                //         1
+                //     );
+                // }
+
+                if (req.body.status == 2) {
+                    notificationFunction.sendNotifications(
+                        user.device_token,
+                        req.body._id,
+                        'Account Deleted',
+                        'Please reach out to below contact +91 888-422-1287',
+                        req.body.status,
+                        1
+                    );
+                }
+            }
+
+            await UserModel.findByIdAndUpdate(user._id, { $set: update });
+
+            return res.json({
+                error: false,
+                status: 200,
+                message: 'Status Update Successfully'
+            });
+
+        } else {
+            return res.json({
+                error: true,
+                status: 503,
+                message: 'User Not Registered'
+            });
+        }
+
+    } catch (error) {
+        return res.status(400).json({
+            message: error.message,
+            error: true
+        });
+    }
+});
+
+// .................. not used yet ...............
+
 router.post('/admin_signup', async (req, res) => {
     const data = new UserModel({
         email: req.body.email,
@@ -44,132 +535,6 @@ router.post('/admin_signup', async (req, res) => {
         res.status(400).json({ message: error.message ,error: true })
     }
 })
-
-router.post('/admin_signin', async (req, res) => {
-    const { email, password } = req.body;
-    if (!email || !password) {
-        return res.json({
-            error: true,
-            status: 422,
-            data: [
-                { path: 'email', message: 'Email is required.' },
-                { path: 'password', message: 'Password is required.' }
-            ]
-        });
-    }
-    try {
-        const user = await UserModel.find({ email: req.body.email, role: 'admin', password: req.body.password });
-        if(user.length>0){
-            return res.json({ error: false,status:200, data:user[0],token: passportAuth.signToken(user[0]) })
-        }else{
-            return res.json({ error: true,status:503, message: 'Admin Not Registered' })
-        }
-    }
-    catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
-    }
-})
-
-router.post('/admin_user_list', async (req, res) => {
-    let finder ={
-        status: { $ne: 2 }
-    };
-    const { role } = req.body;
-    if (role) {
-        finder['role']= req.body.role;  
-    }
-    if (!req.body.page) {
-        req.body.page = 1;
-    }
-    if (!req.body.per_page) {
-        req.body.per_page = 20;
-    }
-    if (req.body.email) {
-        finder[`email`] = new RegExp((req.body.email).trim(), 'i') 
-    }
-    if (req.body.phone) {
-        finder[`phone`] = new RegExp((req.body.phone).trim(), 'i') 
-    }
-    if (req.body._id) {
-        finder['_id'] = new ObjectId(req.body._id.trim());
-    }
-    try {
-        project = await { "name": 0, "email": 0, "phone": 0 };
-        const users = await UserModel.aggregate(
-            [
-                {
-                    $match: finder
-                },
-                {
-                    $sort: { updatedAt: -1 }
-                },
-                { $match: { "_id": { '$nin': [] } } },
-                {
-                    $skip: Number(req.body.page - 1) * Number(req.body.per_page)
-                },
-                {
-                    $limit: Number(req.body.per_page)
-                }
-            ]
-        );
-        let OverallResult = users;
-        const totalUsers = await UserModel.count(finder);
-        let paginate = {
-            "total_item": totalUsers,
-            "showing": OverallResult.length,
-            "first_page": 1,
-            "previous_page": req.body.per_page,
-            "current_page": req.body.page,
-            "next_page": (parseInt(req.body.page) + 1),
-            "last_page": parseInt((totalUsers) / parseInt(req.body.per_page))
-        }
-        if(users.length>0){
-            return res.json({ error: false,status:200, message: 'Fetch Data Successfully', data: { users: OverallResult, paginate }})
-        }else{
-            return res.json({ error: true,status:503, message: 'No Record Found'})
-        }
-    }
-    catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
-    }
-})
-
-router.post('/update_user_status', async (req, res) => {
-    const { _id } = req.body;
-    if (!_id) {
-        return res.json({
-            error: true,
-            status: 422,
-            data: [
-                { path: '_id', message: 'Id is required.' }
-            ]
-        });
-    }
-    try {
-        const user = await UserModel.find({ _id: req.body._id });
-        if(user.length>0){
-            const update = {
-                status: req.body.status
-            };
-            if(user[0].device_token != ""){
-                // if(req.body.status == 0){
-                //     notificationFunction.sendNotifications(user[0].device_token,req.body._id,'Account Blocked','Please reach out to below contact +91 888-422-1287',req.body.status,1)
-                // }
-                if(req.body.status == 2){
-                    notificationFunction.sendNotifications(user[0].device_token,req.body._id,'Account Deleted','Please reach out to below contact +91 888-422-1287',req.body.status,1)
-                }
-            }
-            const result = await UserModel.findByIdAndUpdate(user[0]._id, { $set: update })
-            return res.json({ error: false,status:200, message:'Status Update Successfully' })
-        }else{
-            return res.json({ error: true,status:503, message: 'User Not Registered' })
-        }
-    }
-    catch (error) {
-        res.status(400).json({ message: error.message,error: true })
-    }
-})
-
 router.post('/admin_user_update', async (req, res) => {
     const id = req.body._id;
     const updatedData = req.body;
@@ -184,7 +549,6 @@ router.post('/admin_user_update', async (req, res) => {
         res.status(400).json({ message: error.message ,error: true })
     }
 })
-
 router.get('/admin_user_details/:id', async (req, res) => {
     try {
      const data = await UserModel.findById(req.params.id).populate('userAppliance','_id name image').populate('userCuisioness','_id name image').populate('userDishArray','_id name image').populate('userServedLocalities','_id name ')
@@ -194,45 +558,6 @@ router.get('/admin_user_details/:id', async (req, res) => {
      res.status(400).json({ message: error.message ,error: true})
      }
 })
-
-router.post('/user_signup', async (req, res) => {
-    const data = new UserModel({
-        email: req.body.email,
-        name: req.body.name,
-        role: req.body.role,
-        avatar: req.body.avatar,
-        password: '',
-        phone: req.body.phone,
-        os: req.body.os,
-        address: req.body.address,
-        otp: req.body.otp,
-        age: req.body.age,
-        city: req.body.city,
-        aadhar_no: req.body.aadhar_no,
-        aadhar_front_img: req.body.aadhar_front_img,
-        aadhar_back_img: req.body.aadhar_back_img,
-        experience: req.body.experience,
-        userAppliance: req.body.userAppliance,
-        userServedLocalities: req.body.userServedLocalities,
-        job_type: req.body.job_type,
-        resume: req.body.resume,
-        userCuisioness: req.body.userCuisioness,
-        is_veg: req.body.is_veg,
-    })
-    try {
-        const user = await UserModel.find({ phone: req.body.phone, role: req.body.role });
-        if(user.length>0){
-            return res.json({ error: true,status:503, message: `${commonFunction.capitalizeFirstLetter(data.role)}`+' Already Added' })
-        }else{
-            const dataToSave = await data.save();
-            return res.json({ error: false,status:200, message: `${commonFunction.capitalizeFirstLetter(data.role)}`+' Registered Successfully', dataToSave,token: passportAuth.signToken(dataToSave)})
-        }
-    }
-    catch (error) {
-        res.status(400).json({ message: error.message ,error: true})
-    }
-})
-
 router.post('/admin_user_address_list', async (req, res) => {
     let finder ={
         status: { $ne: 2 }
@@ -268,7 +593,6 @@ router.post('/admin_user_address_list', async (req, res) => {
         res.status(400).json({ message: error.message ,error: true })
     }
 })
-
 router.get('/getDashboardCount', async (req, res) => {
     async.parallel({
         total_customer: function(callback) {
@@ -340,120 +664,5 @@ router.get('/getDashboardCount', async (req, res) => {
     });
 })
 
-router.post('/adminOrderList', async (req, res) => {
-    let finder ={
-        status: { $ne: 2 }
-    };
-    if (!req.body.page) {
-        req.body.page = 1;
-    }
-    if (!req.body.per_page) {
-        req.body.per_page = 100;
-    }
-    if (req.body.order_id) {
-        finder['order_id'] = req.body.order_id;
-    }
-    if (req.body.type){
-        finder['type'] = req.body.type;
-    }
-    if (req.body.order_status){
-        finder['order_status'] = req.body.order_status;
-    }
-    if (req.body.status){
-        finder['status'] = req.body.status;
-    }
-    if (req.body.phone_no){
-        finder['phone_no'] = req.body.phone_no;
-    }
-    if (req.body.start_createdAt && req.body.end_createdAt) {
-        finder['createdAt'] = {
-            $gte: new Date(req.body.start_createdAt),
-            $lte: new Date(req.body.end_createdAt)
-        };
-    } else if (req.body.createdAt) {
-        const date = new Date(req.body.createdAt);
-        const nextDate = new Date(date);
-        nextDate.setDate(nextDate.getDate() + 1);
-    
-        finder['createdAt'] = {
-            $gte: date,
-            $lt: nextDate
-        };
-    }    
-    if (req.body.review_date){
-        finder['review_date'] = new Date(req.body.review_date);
-    }
-    if (req.body.order_taken_by){
-        finder['order_taken_by'] = req.body.order_taken_by;
-    }
-    if (req.body.online_phone_no){
-        finder['online_phone_no'] = req.body.online_phone_no;
-    }
-    if (req.body.order_locality){
-	finder['order_locality'] = req.body.order_locality;
-    }
-    if (req.body.toId){
-        finder['toId'] = req.body.toId;
-    }
-   if (req.body.userReviewRatingArray && req.body.userReviewRatingArray.length > 0) {
-    finder['userReviewRatingArray'] = { $in: req.body.userReviewRatingArray };
-   }
- 
-   if (req.body.start_date && req.body.end_date) {
-        finder['order_date'] = {
-            $gte: new Date(req.body.start_date),
-            $lte: new Date(req.body.end_date)
-        };
-    } else if (req.body.order_date) {
-        finder['order_date'] = new Date(req.body.order_date);
-    }
-
-
-    try {
-        // const order = await orderModel.find(finder).populate('fromId').populate('toId').populate('addressId');
-        const order = await orderModel.aggregate(
-            [
-                { $match: finder },
-                { $lookup: { from: 'addresses', localField: 'addressId', foreignField: '_id', as: 'addressId' } },
-                // { $lookup: { from: 'users', localField: 'fromId', foreignField: '_id', as: 'fromId' } },
-                { $sort: { order_id: -1 } },
-                { $match: { "_id": { '$nin': [] } } },
-                { $skip: Number(req.body.page - 1) * Number(req.body.per_page) },
-                { $limit: Number(req.body.per_page) }
-            ]
-        );
-
-        let OverallResult = order;
-        const totalorder = await orderModel.count(finder);
-        let paginate = {
-            "total_item": totalorder,
-            "showing": OverallResult.length,
-            "first_page": 1,
-            "previous_page": req.body.per_page,
-            "current_page": req.body.page,
-            "next_page": (parseInt(req.body.page) + 1),
-            "last_page": parseInt((totalorder) / parseInt(req.body.per_page))
-        }
-        if(order.length>0){
-            return res.json({ error: false,status:200, message: 'Fetch Data Successfully', data: { order: OverallResult, paginate }})
-        }else{
-            return res.json({ error: true,status:503, message: 'No Record Found'})
-        }
-    }
-    catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
-    }
-})
-
-router.get('/getUserDetails/:id', async (req, res) => {
-    try {
-        var id = new ObjectId(req.params.id);
-        const data = await UserModel.findById(id);
-        return res.json({ error: false,status:200, message: 'Details Fetch Successfully', data:data})
-    }
-    catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
-    }
-})
 
 module.exports = router;

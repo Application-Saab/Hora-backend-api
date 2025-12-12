@@ -70,12 +70,24 @@ router.post('/edit', async (req, res) => {
         const result = await decorationModel.findByIdAndUpdate(id, updatedData, options);
 
         if (result) {
-            return res.json({ error: false, status: 200, message: 'Updated Successfully', data: result });
+            return res.json({
+                error: false,
+                status: 200,
+                message: 'Updated Successfully',
+                data: result
+            });
         } else {
-            return res.json({ error: true, status: 404, message: 'Decoration not found.' });
+            return res.json({
+                error: true,
+                status: 404,
+                message: 'Decoration not found.'
+            });
         }
     } catch (error) {
-        res.status(400).json({ error: true, message: error.message });
+        return res.status(400).json({
+            error: true,
+            message: error.message
+        });
     }
 });
 
@@ -115,15 +127,29 @@ router.get('/searchByName/:name', async (req, res) => {
     const { name } = req.params;
 
     try {
-        const decorations = await decorationModel.find({ name: { $regex: new RegExp(name, 'i') } });
+        const decorations = await decorationModel.find({
+            name: { $regex: new RegExp(name, 'i') }
+        });
 
         if (decorations.length > 0) {
-            return res.json({ error: false, status: 200, message: 'Search Successful', data: decorations });
+            return res.json({
+                error: false,
+                status: 200,
+                message: 'Search Successful',
+                data: decorations
+            });
         } else {
-            return res.json({ error: true, status: 404, message: 'No matching decorations found.' });
+            return res.json({
+                error: true,
+                status: 404,
+                message: 'No matching decorations found.'
+            });
         }
     } catch (error) {
-        res.status(400).json({ error: true, message: error.message });
+        return res.status(400).json({
+            error: true,
+            message: error.message
+        });
     }
 });
 
@@ -133,13 +159,11 @@ router.get('/searchByTag/:tag', async (req, res) => {
     const cacheKey = `search_tag_${tag}`;
 
     try {
-        // Check cache first
         const cached = cache.get(cacheKey);
         if (cached) {
             return res.json({ ...cached, cached: true });
         }
-
-        const decorations = await decorationModel.find({ tag: { $in: [tag] } });
+        const decorations = await decorationModel.find({ tag: { $in: [tag] } }).lean();
 
         if (decorations.length > 0) {
             const response = {
@@ -148,7 +172,7 @@ router.get('/searchByTag/:tag', async (req, res) => {
                 message: 'Search Successful',
                 data: decorations
             };
-            cache.set(cacheKey, response); // Cache the response
+            cache.set(cacheKey, response);
             return res.json(response);
         } else {
             const response = {
@@ -156,11 +180,14 @@ router.get('/searchByTag/:tag', async (req, res) => {
                 status: 404,
                 message: 'No matching decorations found.'
             };
-            cache.set(cacheKey, response); // Cache the not-found too (optional)
+            cache.set(cacheKey, response);
             return res.json(response);
         }
     } catch (error) {
-        return res.status(400).json({ error: true, message: error.message });
+        return res.status(400).json({
+            error: true,
+            message: error.message
+        });
     }
 });
 
@@ -187,7 +214,7 @@ router.get('/searchByTag/v2/:tag', async (req, res) => {
 
     const cacheKey = `search_${tag}_${limit}_${page}_${priceFilter}_${sortBy}_${theme}`;
 
-    // Check if data exists in cache
+    // Step 1: Return Cached Response if exists
     const cachedData = cache.get(cacheKey);
     if (cachedData) {
         console.log("returning cached data with key " + cacheKey);
@@ -197,7 +224,7 @@ router.get('/searchByTag/v2/:tag', async (req, res) => {
         });
     }
 
-    const query = { tag };
+    const query = { tag }; 
 
     if (priceFilter === 'under2000') {
         query.price = { $lt: 2000 };
@@ -213,19 +240,32 @@ router.get('/searchByTag/v2/:tag', async (req, res) => {
     }
 
     try {
-        const sortOrder = (sortBy === 'asc') ? 1 : (sortBy === 'desc') ? -1 : null;
-        // Final sort criteria: always sort by popularityScore, price if applicable
-        const sortCriteria = sortOrder !== null
-            ? (priceFilter == 'all' || priceFilter == 'All') || (query.price != null || query.price != undefined)
-            ? { popularity_score: -1, price: sortOrder }
-            : { price: sortOrder, popularity_score: -1 }
-            : { popularity_score: -1 };
+        // Step 3: Build Sort Criteria Safely (Fixing undefined error)
+        let sortOrder =
+            sortBy === 'asc' ? 1 :
+            sortBy === 'desc' ? -1 :
+            null;
+
+        let sortCriteria;
+
+        if (sortOrder !== null) {
+            if (priceFilter === 'all' || priceFilter === 'All' || query.price !== undefined || query.price !== null) {
+                sortCriteria = { popularity_score: -1, price: sortOrder };
+            } else {
+                sortCriteria = { price: sortOrder, popularity_score: -1 };
+            }
+        } else {
+            sortCriteria = { popularity_score: -1 };
+        }
+
+        // Step 4: Execute Query Safely
         const decorationsQuery = decorationModel
             .find(query)
             .collation({ locale: "en", numericOrdering: true })
             .sort(sortCriteria)
             .skip((page - 1) * limit)
-            .limit(limit);
+            .limit(limit)
+            .lean(); 
 
         const [decorations, totalDecorations] = await Promise.all([
             decorationsQuery,
@@ -246,10 +286,11 @@ router.get('/searchByTag/v2/:tag', async (req, res) => {
             }
         };
 
-        // Store in cache
+        // Step 5: Save to Cache
         cache.set(cacheKey, response);
 
         return res.json(response);
+
     } catch (error) {
         return res.status(500).json({
             error: true,

@@ -494,13 +494,15 @@ router.post('/add', async(req, res) => {
             dishfinder[`_id`]={ '$in': [ String(dish_elements) ] }
             responseobject.mealObject=dish_elements;
             (async () => {
-                await dishModel.find(dishfinder).exec(function(err, dishResponse) {
-                    if(dishResponse.length>0){
-                        noOfChefHelper=noOfChefHelper+Number(dishResponse[0].cooking_min);
-                    }
-                    loop4();
-                    index = index + 1;
-                });
+              const dishResponse = await dishModel.find(dishfinder);
+
+                if (dishResponse.length > 0) {
+                noOfChefHelper += Number(dishResponse[0].cooking_min);
+                }
+
+                loop4();
+                index = index + 1;
+
             })();
             
         }, async(errSelPro) => {
@@ -520,20 +522,27 @@ router.post('/add', async(req, res) => {
     }
 })
 
-router.post('/edit', async(req, res) => {
+router.post('/edit', async (req, res) => {
+  try {
     const id = req.body._id;
-    const updatedData = req.body;
-    console.log("updatedData",updatedData)
-    const options = { new: true };
-    try {
-        const result = await orderModel.findByIdAndUpdate(
-            id, updatedData, options
-        )
-        return res.json({ error: false, status: 200, message: 'Updated Successfully', data: result })
-    } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+
+    const updatedData = { ...req.body };
+    console.log("updatedData:", updatedData);
+
+    const options = { new: true, runValidators: true }; // runValidators ensures schema validation
+
+    const result = await orderModel.findByIdAndUpdate(id, updatedData, options);
+
+    if (!result) {
+      return res.status(404).json({ error: true, status: 404, message: 'Order not found' });
     }
-})
+
+    return res.json({ error: false, status: 200, message: 'Updated Successfully', data: result });
+  } catch (error) {
+    console.error("Error updating order:", error);
+    return res.status(400).json({ message: error.message, error: true });
+  }
+});
 
 router.get('/details/:id', async(req, res) => {
     try {
@@ -544,85 +553,74 @@ router.get('/details/:id', async(req, res) => {
     }
 })
 
-router.post('/update_order_status', async(req, res) => {
-    const { _id } = req.body;
-    if (!_id) {
-        return res.json({
-            error: true,
-            status: 422,
-            data: [
-                { path: '_id', message: 'Id is required.' }
-            ]
+router.post('/update_order_status', async (req, res) => {
+  const { _id, status } = req.body;
+
+  if (!_id) {
+    return res.json({
+      error: true,
+      status: 422,
+      data: [{ path: '_id', message: 'Id is required.' }]
+    });
+  }
+
+  try {
+    // Find the order by ID
+    const order = await orderModel.findById(_id);
+
+    if (!order) {
+      return res.json({ error: true, status: 503, message: 'Details Not Found' });
+    }
+
+    // Update the status
+    order.status = status;
+    await order.save();
+
+    // If status is 1, send notifications to suppliers
+    if (status == 1) {
+      try {
+        const userSupplierIdsArray = [];
+        const userFinder = { role: 'supplier', device_token: { $nin: [null, ""] } };
+        console.log("Finding suppliers with finder:", userFinder);
+
+        const suppliers = await userModel.find(userFinder);
+        console.log("Total suppliers found with device_token:", suppliers.length);
+
+        const orderLocality = order.order_locality || '';
+        const orderType = order.type || '';
+
+        const filteredSuppliers = suppliers.filter(user =>
+          user.city && user.order_type && user.city === orderLocality && user.order_type === orderType
+        );
+
+        console.log("Filtered suppliers matching locality and type:", filteredSuppliers.length);
+        if (filteredSuppliers.length > 0) {
+        filteredSuppliers.forEach(supplier => {
+          userSupplierIdsArray.push(supplier._id);
+          console.log(`Sending notification to supplier: ${supplier._id}, device_token: ${supplier.device_token}`);
+          notificationFunction.sendNotifications(
+            supplier.device_token,
+            order.fromId, // fromId from order
+            'New order',
+            'You have a new order!!!',
+            '',
+            0
+          );
         });
-    }
-    try {
-        const order = await orderModel.find({ _id: req.body._id });
-        if (order.length > 0) {
-            const update = {
-                status: req.body.status
-            };
-            const result = await orderModel.findByIdAndUpdate(order[0]._id, { $set: update })
-        try {
-            
-           if (req.body.status == 1) {
-                var userSupplierIdsArray = [];
-                // Find all suppliers with device_token not null/empty
-                var userFinder = { role: 'supplier', device_token: { "$nin": [null, ""] } };
-                console.log("Finding suppliers with finder:", userFinder);
-                const userIds = await userModel.find(userFinder);
-                console.log("Total suppliers found with device_token:", userIds.length);
- 
-                // Get the order's locality, type, and status from the order document
-                const orderLocality = order[0].order_locality || '';
-                const orderType = order[0].type || '';
-                const orderStatus = req.body.status;
- 
-                console.log("Order locality:", orderLocality, "Order type:", orderType, "Order status:", orderStatus);
- 
-                if (orderStatus == 1) {
-                    let filteredSuppliers = userIds.filter(user => {
-                        // user.city and user.order_type must exist
-                        return (
-                            user.city &&
-                            user.order_type &&
-                            user.city == orderLocality &&
-                            user.order_type == orderType
-                        );
-                    });
- 
-                    console.log("Filtered suppliers matching locality and type:", filteredSuppliers.length);
- 
-                    if (filteredSuppliers.length > 0) {
-                        filteredSuppliers.forEach(element => {
-                            userSupplierIdsArray.push(element._id);
-                            console.log(`Sending notification to supplier: ${element._id}, device_token: ${element.device_token}`);
-                            notificationFunction.sendNotifications(
-                                element.device_token,
-                                order[0].fromId, // Use fromId from the order document
-                                'New order',
-                                'You have a new order!!!',
-                                '',
-                                0
-                            );
-                        });
-                    } else {
-                        console.log("No suppliers matched the locality and type for notification.");
-                    }
-                } else {
-                    console.log("Order status is not 1, no notifications sent to suppliers.");
-                }
-            }
-        } catch (error) {
-            
-        } 
-            return res.json({ error: false, status: 200, message: 'Status Update Successfully' })
-        } else {
-            return res.json({ error: true, status: 503, message: 'Details Not Found' })
+}
+         else {
+          console.log("No suppliers matched the locality and type for notification.");
         }
-    } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+      } catch (error) {
+        
+      }
+    return res.json({ error: false, status: 200, message: 'Status Updated Successfully' });
     }
-})
+
+  } catch (error) {
+    return res.status(400).json({ message: error.message, error: true });
+  }
+});
 
 router.post('/order_list', async(req, res) => {
     let finder = {
@@ -700,49 +698,54 @@ router.get('/order_details/:id', async(req, res) => {
     }
 })
 
-router.get('/order_details/v1/:id', async(req, res) => {
-    try {
-        const order = await orderModel.findById(req.params.id).populate('addressId').populate('fromId').populate('addressId').populate({
-            path: "selecteditems",
-            populate: {
-               path: "cuisineId"
-            }
-        }).populate({
-            path: "selecteditems",
-            populate: {
-               path: "mealId"
-            }
-        }).populate({
-            path: "orderApplianceIds"
-        }).populate({
-            path: "selecteditems",
-            populate: {
-               path: "special_appliance_id"
-            }
-        }).populate({
-            path: "selecteditems",
-            populate: {
-               path: "general_appliance_id"
-            }
-        }).populate({
-            path: "selecteditems",
-            populate: {
-               path: "serving_dish"
-            }
-        })
-        console.log("order>>>>>>>",order);
-        if (Object.keys(order).length > 0) {
-            return res.json({ error: false, status: 200, message: 'Fetch Data Successfully', data: order })
-        } else {
-            return res.json({ error: true, status: 503, message: 'No Record Found' })
-        }
-    } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
-    }
-})
+router.get('/order_details/v1/:id', async (req, res) => {
+    const { id } = req.params;
 
-router.post('/acceptOrder', async(req, res) => {
+    try {
+        const order = await orderModel.findById(id)
+            .populate('addressId')
+            .populate('fromId')
+            .populate({
+                path: 'selecteditems',
+                populate: [
+                    { path: 'cuisineId' },
+                    { path: 'mealId' },
+                    { path: 'special_appliance_id' },
+                    { path: 'general_appliance_id' },
+                    { path: 'serving_dish' }
+                ]
+            })
+            .populate('orderApplianceIds')
+            .exec(); // Recommended in Mongoose 9
+
+        console.log("order>>>>>>>", order);
+
+        if (order) {
+            return res.status(200).json({
+                error: false,
+                status: 200,
+                message: 'Fetch Data Successfully',
+                data: order
+            });
+        } else {
+            return res.status(503).json({
+                error: true,
+                status: 503,
+                message: 'No Record Found'
+            });
+        }
+
+    } catch (error) {
+        return res.status(400).json({
+            error: true,
+            message: error?.message || "Something went wrong"
+        });
+    }
+});
+
+router.post('/acceptOrder', async (req, res) => {
     const { requestdata } = req.body;
+
     if (!req.body._id) {
         return res.json({
             error: true,
@@ -752,77 +755,129 @@ router.post('/acceptOrder', async(req, res) => {
             ]
         });
     }
+
     try {
-        // const otp = commonFunction.OTP();
-        const order = await orderModel.find({ _id: req.body._id,order_status: 0 });
-        if (order.length > 0) {
+        const order = await orderModel.findOne({ _id: req.body._id, order_status: 0 });
+
+        if (order) {
             const update = {
                 order_status: 1,
                 toId: req.body.userId,
                 // otp: otp,
             };
-            const user = await userModel.find({ _id: order[0].fromId });
-            console.log("user>>>>",user);
-            console.log("user>>>>Accept Order",user[0].device_token);
-            if(user[0].device_token != ""){
-                notificationFunction.sendNotifications(user[0].device_token,order[0].fromId,'Accept order','Your order has been accepted !!',req.body._id,0)
+
+            const user = await userModel.findById(order.fromId);
+
+            console.log("user>>>>", user);
+            console.log("user>>>>Accept Order", user.device_token);
+
+            if (user.device_token != "") {
+                notificationFunction.sendNotifications(
+                    user.device_token,
+                    order.fromId,
+                    'Accept order',
+                    'Your order has been accepted !!',
+                    req.body._id,
+                    0
+                );
             }
-            const result = await orderModel.findByIdAndUpdate(order[0]._id, { $set: update })
-            return res.json({ error: false, status: 200, message: 'Order accepted successfully',data:result })  
+
+            const result = await orderModel.findByIdAndUpdate(
+                order._id,
+                { $set: update },
+                { new: true } // To return the updated document
+            );
+
+            return res.json({
+                error: false,
+                status: 200,
+                message: 'Order accepted successfully',
+                data: result
+            });
         } else {
-            return res.json({ error: true, status: 503, message: 'Order already accepted' })
+            return res.json({
+                error: true,
+                status: 503,
+                message: 'Order already accepted'
+            });
         }
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        res.status(400).json({ message: error.message, error: true });
     }
-})
+});
 
-router.post('/startOrder', async(req, res) => {
+router.post('/startOrder', async (req, res) => {
     const { requestdata } = req.body;
+
     if (!req.body._id) {
         return res.json({
             error: true,
             status: 422,
-            data: [
-                { path: '_id', message: 'Id is required.' }
-            ]
+            data: [{ path: '_id', message: 'Id is required.' }]
         });
     }
+
     if (!req.body.otp) {
         return res.json({
             error: true,
             status: 422,
-            data: [
-                { path: 'otp', message: 'otp is required.' }
-            ]
+            data: [{ path: 'otp', message: 'otp is required.' }]
         });
     }
+
     try {
-        const order = await orderModel.find({ _id: req.body._id });
-        const order_otp = await orderModel.find({ _id: req.body._id,otp: req.body.otp });
-        if (order.length > 0) {
-            if(order_otp.length>0){
+        const order = await orderModel.findOne({ _id: req.body._id });
+
+        const order_otp = await orderModel.findOne({
+            _id: req.body._id,
+            otp: req.body.otp
+        });
+
+        if (order) {
+            if (order_otp) {
                 const update = {
                     order_status: 2,
                     toId: req.body.userId,
                     job_start_time: req.body.job_start_time
                 };
-                const result = await orderModel.findByIdAndUpdate(order[0]._id, { $set: update })
-                return res.json({ error: false, status: 200, message: 'Order started successfully',data:result })
-            }else{
-                return res.json({ error: true, status: 503, message: 'otp mismatched' })
-            }   
-        } else {
-            return res.json({ error: true, status: 503, message: 'Order already started' })
-        }
-    } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
-    }
-})
 
-router.post('/completeOrder', async(req, res) => {
-    const { requestdata } = req.body;
-    if (!req.body._id) {
+                const result = await orderModel.findByIdAndUpdate(
+                    order._id,
+                    { $set: update },
+                    { new: true } // return updated order
+                );
+
+                return res.json({
+                    error: false,
+                    status: 200,
+                    message: 'Order started successfully',
+                    data: result
+                });
+
+            } else {
+                return res.json({
+                    error: true,
+                    status: 503,
+                    message: 'otp mismatched'
+                });
+            }
+        } else {
+            return res.json({
+                error: true,
+                status: 503,
+                message: 'Order already started'
+            });
+        }
+
+    } catch (error) {
+        res.status(400).json({ message: error.message, error: true });
+    }
+});
+
+router.post('/completeOrder', async (req, res) => {
+    const { _id, userId, job_end_time } = req.body;
+
+    if (!_id) {
         return res.json({
             error: true,
             status: 422,
@@ -831,29 +886,59 @@ router.post('/completeOrder', async(req, res) => {
             ]
         });
     }
+
     try {
-        const order = await orderModel.find({ _id: req.body._id });
-        if (order.length > 0) {
-            const update = {
-                order_status: 3,
-                toId: req.body.userId,
-                job_end_time: req.body.job_end_time,
-                order_complete_date: new Date().getTime()
-            };
-            const user = await userModel.find({ _id: order[0].fromId });
-            console.log("user>>>>Complete Order",user[0].device_token);
-            if(user[0].device_token != ""){
-                notificationFunction.sendNotifications(user[0].device_token,order[0].fromId,'Complete order','Thanks!! Older is completed now !!',req.body._id,0)
-            }
-            const result = await orderModel.findByIdAndUpdate(order[0]._id, { $set: update })
-            return res.json({ error: false, status: 200, message: 'Order completed successfully',data:result })   
-        } else {
-            return res.json({ error: true, status: 503, message: 'No Order Found' })
+        // Use findById for single document
+        const order = await orderModel.findById(_id);
+
+        if (!order) {
+            return res.status(503).json({
+                error: true,
+                status: 503,
+                message: 'No Order Found'
+            });
         }
+
+        // Prepare update
+        const update = {
+            order_status: 3,
+            toId: userId,
+            job_end_time,
+            order_complete_date: new Date().getTime()
+        };
+
+        // Get user from fromId
+        const user = await userModel.findById(order.fromId);
+
+        // Send notification if device_token exists
+        if (user?.device_token) {
+            notificationFunction.sendNotifications(
+                user.device_token,
+                order.fromId,
+                'Complete order',
+                'Thanks!! Order is completed now !!',
+                _id,
+                0
+            );
+        }
+
+        // Update order
+        const result = await orderModel.findByIdAndUpdate(order._id, update, { new: true });
+
+        return res.status(200).json({
+            error: false,
+            status: 200,
+            message: 'Order completed successfully',
+            data: result
+        });
+
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        return res.status(400).json({
+            error: true,
+            message: error.message
+        });
     }
-})
+});
 
 router.post('/publicOrderList/v2', async(req, res) => {
     let finder = { status: 1 };
@@ -1346,9 +1431,10 @@ router.post('/user_review_list', async(req, res) => {
     }
 })
 
-router.post('/cancelOrder', async(req, res) => {
-    const { requestdata } = req.body;
-    if (!req.body._id) {
+router.post('/cancelOrder', async (req, res) => {
+    const { _id } = req.body;
+
+    if (!_id) {
         return res.json({
             error: true,
             status: 422,
@@ -1357,21 +1443,34 @@ router.post('/cancelOrder', async(req, res) => {
             ]
         });
     }
+
     try {
-        const order = await orderModel.find({ _id: req.body._id });
-        if (order.length > 0) {
-            const update = {
-                order_status: 4
-            };
-            const result = await orderModel.findByIdAndUpdate(order[0]._id, { $set: update })
-            return res.json({ error: false, status: 200, message: 'Order cancelled successfully',data:result })   
-        } else {
-            return res.json({ error: true, status: 503, message: 'No Order Found' })
+        const order = await orderModel.findById(_id);
+
+        if (!order) {
+            return res.status(404).json({
+                error: true,
+                status: 503,
+                message: 'No Order Found'
+            });
         }
+
+        order.order_status = 4; // Cancelled
+        const result = await order.save(); // Save the updated document
+
+        return res.status(200).json({
+            error: false,
+            status: 200,
+            message: 'Order cancelled successfully',
+            data: result
+        });
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        return res.status(400).json({
+            error: true,
+            message: error.message
+        });
     }
-})
+});
 
 router.get('/booking_details/:id', async(req, res) => {
     let responseOrderObject={};
@@ -1506,51 +1605,73 @@ router.post('/user_order_list', async(req, res) => {
             ]
         });
     }
+
     let finder = {
         status: 1
     };
+
     let finderMany = { };
+
     finder['fromId'] = req.body._id;
+
     if (!req.body.page) {
         req.body.page = 1;
     }
+
     if (!req.body.per_page) {
         req.body.per_page = 20;
     }
+
     try {
+
         finderMany[`order_status`] = {
-            $in: [1,2]
+            $in: [1, 2]
         };
-        const order = await orderModel.find(finder).sort({ order_status: 1}).populate('fromId').populate('toId').populate('addressId').populate({
-            path: "selecteditems",
-            populate: {
-               path: "cuisineId"
-            }
-        }).populate({
-            path: "selecteditems",
-            populate: {
-               path: "mealId"
-            }
-        }).populate({
-            path: "selecteditems",
-            populate: {
-               path: "special_appliance_id"
-            }
-        }).populate({
-            path: "selecteditems",
-            populate: {
-               path: "general_appliance_id"
-            }
-        }).populate({
-            path: "selecteditems",
-            populate: {
-               path: "serving_dish"
-            }
-        }).populate({
-            path: "orderApplianceIds"
-        });
+
+        const order = await orderModel.find(finder)
+            .sort({ order_status: 1 })
+            .populate('fromId')
+            .populate('toId')
+            .populate('addressId')
+            .populate({
+                path: "selecteditems",
+                populate: {
+                   path: "cuisineId"
+                }
+            })
+            .populate({
+                path: "selecteditems",
+                populate: {
+                   path: "mealId"
+                }
+            })
+            .populate({
+                path: "selecteditems",
+                populate: {
+                   path: "special_appliance_id"
+                }
+            })
+            .populate({
+                path: "selecteditems",
+                populate: {
+                   path: "general_appliance_id"
+                }
+            })
+            .populate({
+                path: "selecteditems",
+                populate: {
+                   path: "serving_dish"
+                }
+            })
+            .populate({
+                path: "orderApplianceIds"
+            });
+
         let OverallResult = order;
-        const totalorder = await orderModel.count(finder);
+
+        // ⭐ Mongoose 9 change: .count() → .countDocuments()
+        const totalorder = await orderModel.countDocuments(finder);
+
         let paginate = {
             "total_item": totalorder,
             "showing": OverallResult.length,
@@ -1560,15 +1681,26 @@ router.post('/user_order_list', async(req, res) => {
             "next_page": (parseInt(req.body.page) + 1),
             "last_page": parseInt((totalorder) / parseInt(req.body.per_page))
         }
-        if(order.length>0){
-            return res.json({ error: false,status:200, message: 'Fetch Data Successfully', data: { order: OverallResult, paginate }})
-        }else{
-            return res.json({ error: true,status:503, message: 'No Record Found'})
+
+        if(order.length > 0){
+            return res.json({ 
+                error: false,
+                status: 200, 
+                message: 'Fetch Data Successfully', 
+                data: { order: OverallResult, paginate }
+            });
+        } else {
+            return res.json({ 
+                error: true, 
+                status: 503, 
+                message: 'No Record Found' 
+            });
         }
+
     } catch (error) {
         res.status(400).json({ message: error.message, error: true })
     }
-})
+});
 
 router.post('/publicOrderList/v1', async(req, res) => {
     const userId  = req.body.userId;
@@ -1773,49 +1905,45 @@ router.post('/publicOrderList', async(req, res) => {
     }
 })
 
-router.get('/getIngredientByOrder/:id', async(req, res) => {
-	
-	try {
-		
-        const order = await orderModel.find({order_id:req.params.id}).populate('addressId').populate('fromId').populate('addressId').populate({
-            path: "selecteditems",
-            populate: {
-               path: "cuisineId"
-            }
-        }).populate({
-            path: "selecteditems",
-            populate: {
-               path: "mealId"
-            }
-        }).populate({
-            path: "orderApplianceIds"
-        }).populate({
-            path: "selecteditems",
-            populate: {
-               path: "special_appliance_id"
-            }
-        }).populate({
-            path: "selecteditems",
-            populate: {
-               path: "general_appliance_id"
-            }
-        }).populate({
-            path: "selecteditems",
-            populate: {
-               path: "serving_dish"
-            }
-        })
-        
+router.get('/getIngredientByOrder/:id', async (req, res) => {
+    try {
+        const order = await orderModel
+            .find({ order_id: req.params.id })
+            .populate('addressId')
+            .populate('fromId')
+            .populate('addressId')
+            .populate({
+                path: "selecteditems",
+                populate: { path: "cuisineId" }
+            })
+            .populate({
+                path: "selecteditems",
+                populate: { path: "mealId" }    
+            })
+            .populate({ path: "orderApplianceIds" })
+            .populate({
+                path: "selecteditems",
+                populate: { path: "special_appliance_id" }
+            })
+            .populate({
+                path: "selecteditems",
+                populate: { path: "general_appliance_id" }
+            })
+            .populate({
+                path: "selecteditems",
+                populate: { path: "serving_dish" }
+            });
+
         const hashMap = {};
-		
-		const noOfPeople = order[0].no_of_people
-		
-		order[0].selecteditems.forEach(ingredientList => {
-			if (ingredientList.ingredientUsed && Array.isArray(ingredientList.ingredientUsed)){
-			ingredientList.ingredientUsed.forEach(ingredient => {
-				const { _id, name, image, unit, qty } = ingredient;
-				const qtyValue = parseFloat(qty);
-				if (!isNaN(qtyValue)){
+        const noOfPeople = order[0].no_of_people;
+
+        order[0].selecteditems.forEach(item => {
+            if (item.ingredientUsed && Array.isArray(item.ingredientUsed)) {
+                item.ingredientUsed.forEach(ingredient => {
+                    const { name, image, unit, qty } = ingredient;
+                    const qtyValue = parseFloat(qty);
+
+                    if (!isNaN(qtyValue)){
 					if (hashMap.hasOwnProperty(name)){
 						hashMap[name].qty=hashMap[name].qty + qtyValue * noOfPeople
                         hashMap[name].count = hashMap[name].count + 1
@@ -1824,11 +1952,11 @@ router.get('/getIngredientByOrder/:id', async(req, res) => {
 						hashMap[name]={qty:qtyValue * noOfPeople, unit, image, count:1}
 					}
 				}
-			})
-			}
-		})
-		
-		for (const key in hashMap) {
+                });
+            }
+        });
+
+        for (const key in hashMap) {
             if (hashMap.hasOwnProperty(key)) {
               const value = hashMap[key];
               
@@ -1876,187 +2004,175 @@ router.get('/getIngredientByOrder/:id', async(req, res) => {
             }
         }
         if (Object.keys(hashMap).length > 0) {
-            return res.json({ error: false, status: 200, message: 'Fetch Data Successfully', data: hashMap })
-        } else {
-            return res.json({ error: true, status: 503, message: 'No Record Found' })
-        }
-    } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
-    }
-	
-	
-})
-
-router.get('/order_details_decoration/:id', async (req, res) => {
-    try {
-        const order = await orderModel.find({ order_id: req.params.id })
-            .populate('addressId')
-            .populate('fromId')
-            .populate('addressId');
-
-        let decorations;
-        let orderWithDecorations;
-
-        if (order.length > 0) {
-            const decorationPromisesArray = order.map(async (orderItem) => {
-                const decorationPromises = orderItem.items.map(async (itemId) => {
-                    return await decorationModel.findById(itemId);
-                });
-                return await Promise.all(decorationPromises);
+            return res.json({
+                error: false,
+                status: 200,
+                message: 'Fetch Data Successfully',
+                data: hashMap
             });
-
-            // Resolve all promises
-            decorations = await Promise.all(decorationPromisesArray);
-
-            orderWithDecorations = {
-                ...order[0], // Access the first element directly, as order is an array
-                items: order[0].items.map((itemId, index) => ({
-                    itemId: itemId,
-                    decoration: decorations[index]
-                }))
-            };
-        }
-
-        if (order.length > 0) {
-            return res.json({ error: false, status: 200, message: 'Fetch Data Successfully', data: orderWithDecorations });
         } else {
-            return res.json({ error: true, status: 503, message: 'No Record Found' });
+            return res.json({
+                error: true,
+                status: 503,
+                message: 'No Record Found'
+            });
         }
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true });
+        return res.status(400).json({
+            message: error.message,
+            error: true
+        });
     }
 });
 
-router.get('/order_details_food_delivery/:id', async(req, res) => {
-    try {
-        const order = await orderModel.find({ order_id: req.params.id }).populate('addressId').populate('fromId').populate('addressId').populate({
-            path: "selecteditems",
-            populate: {
-               path: "cuisineId"
-            }
-        }).populate({
-            path: "selecteditems",
-            populate: {
-               path: "mealId"
-            }
-        })
+// Decoration Order Details
+router.get('/order_details_decoration/:id', async (req, res) => {
+  try {
+    const order = await orderModel
+      .findOne({ order_id: req.params.id })
+      .populate('addressId')
+      .populate('fromId')
+      .exec();
 
-        
-        const dishObject = Object.values(order[0].selecteditems).filter(x =>
-            x._id != "641540d58c62c01319fcccae" &&
-            x._id != "641540da8c62c01319fccef8"
-          )
-
-        
-
-        let noOfPeople = order[0].no_of_people
-        let noOfBurner = order[0].no_of_burner
-
-        const itemCount = dishObject.filter(x => x.mealId[0]._id.valueOf() == "63f1b6b7ed240f7a09f7e2de" || x.mealId[0]._id.valueOf() == "63f1b39a4082ee76673a0a9f" || x.mealId[0]._id.valueOf() == "63edc4757e1b370928b149b3").length
-
-        
-        const mainCourseItemCount = dishObject.filter(x => x.mealId[0]._id.valueOf() === "63f1b6b7ed240f7a09f7e2de").length
-        const appetizerItemCount = dishObject.filter(x => x.mealId[0]._id.valueOf() === "63f1b39a4082ee76673a0a9f").length
-        const breadItemCount = dishObject.filter(x => x.mealId[0]._id.valueOf() === "63edc4757e1b370928b149b3").length
-
-
-
-        let foodItems = []
-
-        Object.values(order[0].selecteditems).forEach(x => {
-            let quantity = x.cuisineArray[1] * noOfPeople
-
-            
-            if (x._id != "641540d58c62c01319fcccae" &&
-                x._id != "641540da8c62c01319fccef8" && (x.mealId[0]._id.valueOf() == "63f1b6b7ed240f7a09f7e2de" || x.mealId[0]._id.valueOf() == "63f1b39a4082ee76673a0a9f" || x.mealId[0]._id.valueOf() == "63edc4757e1b370928b149b3")) {
-                
-
-                
-                    if (itemCount == 4) {
-                    quantity = quantity * (1 + 0.15)
-                }
-                else if (itemCount == 6) {
-                    quantity = quantity * (1 - 0.15)
-                }
-                else if (itemCount == 7) {
-                    quantity = quantity * (1 - 0.15)
-                }
-                else if (itemCount == 8) {
-                    quantity = quantity * (1 - 0.25)
-                }
-                else if (itemCount == 9) {
-                    quantity = quantity * (1 - 0.35)
-                }
-                else if (itemCount == 10) {
-                    quantity = quantity * (1 - 0.35)
-                }
-                else if (itemCount == 11) {
-                    quantity = quantity * (1 - 0.40)
-                }
-                else if (itemCount == 12 || itemCount == 13) {
-                    quantity = quantity * (1 - 0.50)
-                }
-                else if (itemCount == 14) {
-                    quantity = quantity * (1 - 0.53)
-                }
-                else if (itemCount == 15) {
-                    quantity = quantity * (1 - 0.55)
-                }
-            }
-            quantity = Math.round(quantity)
-            let unit = x.cuisineArray[2];
-            if (quantity >= 1000) {
-                quantity = quantity / 1000;
-                if (unit === 'Gram')
-                    unit = 'KG'
-                else if (unit === 'ml')
-                    unit = 'L'
-            }
-            
-
-           foodItems.push({ 
-                [x.name]: { 
-                   price: x.cuisineArray[0], 
-                    quantity, 
-                    unit 
-                }
-            });
-        })
-
-        foodItems.push({ 
-            "water/disposal": { 
-                quantity: noOfBurner * noOfPeople, 
-                unit: null 
-            }
-        });
-
-        order[0].userOrderDishImageArray = Object.assign({}, ...foodItems);
-        
-        if (Object.keys(order).length > 0) {
-            return res.json({ error: false, status: 200, message: 'Fetch Data Successfully', data: order[0] })
-        } else {
-            return res.json({ error: true, status: 503, message: 'No Record Found' })
-        }
-    } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+    if (!order) {
+      return res.status(404).json({ error: true, status: 404, message: 'No Record Found' });
     }
-})
+
+    const decorationDocs = await Promise.all(
+      order.items.map(itemId => decorationModel.findById(itemId).exec())
+    );
+
+    const orderWithDecorations = {
+      ...order.toObject(),
+      items: order.items.map((itemId, idx) => ({
+        itemId,
+        decoration: decorationDocs[idx] ?? null
+      }))
+    };
+
+    console.log('%c [OrderWithDecorations]', orderWithDecorations);
+
+    return res.json({
+      error: false,
+      status: 200,
+      message: 'Fetch Data Successfully',
+      data: orderWithDecorations
+    });
+
+  } catch (err) {
+    console.error('Error fetching order + decorations:', err);
+    return res.status(500).json({ error: true, status: 500, message: err.message });
+  }
+});
+
+router.get('/order_details_food_delivery/:id', async (req, res) => {
+  try {
+    const order = await orderModel
+      .find({ order_id: req.params.id })
+      .populate('addressId')
+      .populate('fromId')
+      .populate({
+        path: 'selecteditems',
+        populate: [
+          { path: 'cuisineId' },
+          { path: 'mealId' }
+        ]
+      });
+
+    if (!order?.length) {
+      return res.json({ error: true, status: 503, message: 'No Record Found' });
+    }
+
+    const orderData = order[0];
+
+    const dishObject = Object.values(orderData.selecteditems).filter(x =>
+      x._id.toString() !== "641540d58c62c01319fcccae" &&
+      x._id.toString() !== "641540da8c62c01319fccef8"
+    );
+
+    const noOfPeople = orderData.no_of_people;
+    const noOfBurner = orderData.no_of_burner;
+
+    const itemCount = dishObject.filter(x =>
+      ["63f1b6b7ed240f7a09f7e2de", "63f1b39a4082ee76673a0a9f", "63edc4757e1b370928b149b3"]
+        .includes(x.mealId[0]._id.toString())
+    ).length;
+
+    let foodItems = [];
+
+    for (const x of Object.values(orderData.selecteditems)) {
+      let quantity = x.cuisineArray[1] * noOfPeople;
+      const allowedMeals = ["63f1b6b7ed240f7a09f7e2de", "63f1b39a4082ee76673a0a9f", "63edc4757e1b370928b149b3"];
+
+      if (
+        x._id.toString() !== "641540d58c62c01319fcccae" &&
+        x._id.toString() !== "641540da8c62c01319fccef8" &&
+        allowedMeals.includes(x.mealId[0]?._id.toString())
+      ) {
+        if (itemCount === 4) quantity *= 1.15;
+        else if ([6, 7].includes(itemCount)) quantity *= 0.85;
+        else if (itemCount === 8) quantity *= 0.75;
+        else if ([9, 10].includes(itemCount)) quantity *= 0.65;
+        else if (itemCount === 11) quantity *= 0.60;
+        else if ([12, 13].includes(itemCount)) quantity *= 0.50;
+        else if (itemCount === 14) quantity *= 0.47;
+        else if (itemCount === 15) quantity *= 0.45;
+      }
+
+      quantity = Math.round(quantity);
+      let unit = x.cuisineArray[2];
+
+      if (quantity >= 1000) {
+        quantity /= 1000;
+        if (unit === 'Gram') unit = 'KG';
+        else if (unit === 'ml') unit = 'L';
+      }
+
+      foodItems.push({
+        [x.name]: {
+          price: x.cuisineArray[0],
+          quantity,
+          unit
+        }
+      });
+    }
+
+    foodItems.push({
+      "water/disposal": {
+        quantity: noOfBurner * noOfPeople,
+        unit: null
+      }
+    });
+
+    orderData.userOrderDishImageArray = Object.assign({}, ...foodItems);
+
+    return res.json({
+      error: false,
+      status: 200,
+      message: 'Fetch Data Successfully',
+      data: orderData
+    });
+
+  } catch (error) {
+    return res.status(400).json({ message: error.message, error: true });
+  }
+});
 
 router.get('/order_details_photography/:id', async (req, res) => {
     try {
         const order = await orderModel.find({ order_id: req.params.id })
             .populate('addressId')
             .populate('fromId')
-            .populate('addressId');
+            .populate('addressId')
+            .exec(); // Recommended for Mongoose 9
 
-        
         let photography;
         let orderWithPhotography;
 
         if (order.length > 0) {
             const photographyPromisesArray = order.map(async (orderItem) => {
                 const photographyPromises = orderItem.items.map(async (itemId) => {
-                    return await photographyModel.findById(itemId);
+                    return await photographyModel.findById(itemId).exec(); // Mongoose 9 safe
                 });
                 return await Promise.all(photographyPromises);
             });
@@ -2064,24 +2180,35 @@ router.get('/order_details_photography/:id', async (req, res) => {
             // Resolve all promises
             photography = await Promise.all(photographyPromisesArray);
 
-            
-
             orderWithPhotography = {
-                ...order[0], // Access the first element directly, as order is an array
+                ...order[0]._doc, // Mongoose 9 returns document object safely
                 items: order[0].items.map((itemId, index) => ({
                     itemId: itemId,
-                    photography: photography[index]
+                    photography: photography[0][index] // keep same structure
                 }))
             };
         }
 
         if (order.length > 0) {
-            return res.json({ error: false, status: 200, message: 'Fetch Data Successfully', data: orderWithPhotography});
+            return res.json({
+                error: false,
+                status: 200,
+                message: 'Fetch Data Successfully',
+                data: orderWithPhotography
+            });
         } else {
-            return res.json({ error: true, status: 503, message: 'No Record Found' });
+            return res.json({
+                error: true,
+                status: 503,
+                message: 'No Record Found'
+            });
         }
+
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true });
+        return res.status(400).json({
+            error: true,
+            message: error?.message || "Something went wrong"
+        });
     }
 });
 

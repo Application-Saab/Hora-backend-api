@@ -77,52 +77,72 @@ router.post('/update_ingredient_status', async (req, res) => {
 })
 
 router.post('/admin_ingredient_list', async (req, res) => {
-    let finder ={
-        status: { $ne: 2 }
-    };
-    const { type } = req.body;
-    if (!req.body.page) {
-        req.body.page = 1;
-    }
-    if (!req.body.per_page) {
-        req.body.per_page = 20;
-    }
-    if (req.body.name) {
-        finder[`name`] = new RegExp((req.body.name).trim(), 'i') 
-    }
     try {
-        const ingredient = await ingredientModel.aggregate(
-            [
-                { $match: finder},
-                { $lookup : { from: 'ingredienttypes',localField: 'ingredientTypeId', foreignField: '_id',pipeline: [
-                    { $project: { name: 1,_id:0 } },
-                 ], as: 'ingredientTypeId'}},
-                { $sort: { name: 1 }},
-                { $match: { "_id": { '$nin': [] } } },
-                { $skip: Number(req.body.page - 1) * Number(req.body.per_page)},
-                { $limit: Number(req.body.per_page)}
-            ]
-        );
-        let OverallResult = ingredient;
-        const totalingredient = await ingredientModel.count(finder);
-        let paginate = {
-            "total_item": totalingredient,
-            "showing": OverallResult.length,
-            "first_page": 1,
-            "previous_page": req.body.per_page,
-            "current_page": req.body.page,
-            "next_page": (parseInt(req.body.page) + 1),
-            "last_page": parseInt((totalingredient) / parseInt(req.body.per_page))
+        // Filter
+        let finder = {
+            status: { $ne: 2 }
+        };
+
+        const type = req.body?.type;
+
+        const page = Number(req.body?.page) || 1;
+        const perPage = Number(req.body?.per_page) || 20;
+
+        if (req.body?.name) {
+            finder.name = new RegExp(req.body.name.trim(), 'i');
         }
-        if(ingredient.length>0){
-            return res.json({ error: false,status:200, message: 'Fetch Data Successfully', data: { ingredient: OverallResult, paginate }})
-        }else{
-            return res.json({ error: true,status:503, message: 'No Record Found'})
+
+        // Aggregate query
+        const ingredient = await ingredientModel.aggregate([
+            { $match: finder },
+            {
+                $lookup: {
+                    from: 'ingredienttypes',
+                    localField: 'ingredientTypeId',
+                    foreignField: '_id',
+                    pipeline: [{ $project: { name: 1, _id: 0 } }],
+                    as: 'ingredientTypeId'
+                }
+            },
+            { $sort: { name: 1 } },
+            { $match: { _id: { $nin: [] } } },
+            { $skip: (page - 1) * perPage },
+            { $limit: perPage }
+        ]);
+
+        const totalingredient = await ingredientModel.countDocuments(finder);
+
+        const paginate = {
+            total_item: totalingredient,
+            showing: ingredient.length,
+            first_page: 1,
+            previous_page: perPage,
+            current_page: page,
+            next_page: page + 1,
+            last_page: Math.ceil(totalingredient / perPage)
+        };
+
+        if (ingredient.length > 0) {
+            return res.json({
+                error: false,
+                status: 200,
+                message: 'Fetch Data Successfully',
+                data: { ingredient, paginate }
+            });
+        } else {
+            return res.json({
+                error: true,
+                status: 503,
+                message: 'No Record Found'
+            });
         }
+
+    } catch (error) {
+        return res.status(400).json({
+            message: error.message,
+            error: true
+        });
     }
-    catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
-    }
-})
+});
 
 module.exports = router;

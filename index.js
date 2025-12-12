@@ -14,8 +14,13 @@ const cron = require('node-cron');
 mongoose.set("strictQuery", true);
 mongoose.connect(
   `mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASS}@${process.env.MONGO_CLUSTER}/${process.env.MONGO_DATABASE}?retryWrites=true&w=majority`,
-  { useNewUrlParser: true, useUnifiedTopology: true }
-);
+//  { useNewUrlParser: true, useUnifiedTopology: true }
+).then(() => {
+  console.log("MongoDB Connected");
+}).catch((error) => {
+  console.log("MongoDB connection error:", error);
+});
+
 const database = mongoose.connection;
 // Database Connection End
 
@@ -275,7 +280,14 @@ app.post('/api/decoration_image_upload', compressedUpload.single('file'), async 
     const fileName = `${originalName}-${Date.now()}.webp`;
     const outputPath = path.join(outputFolder, fileName);
 
-    const success = await compressImageToWebP(file.buffer, outputPath);
+    // Compress image buffer to WebP and save
+    let success = false;
+    try {
+      success = await compressImageToWebP(file.buffer, outputPath);
+    } catch (compressErr) {
+      console.error('Compression failed, saving best effort:', compressErr);
+      // Optionally, you could fallback to saving original buffer as .webp
+    }
 
     return res.json({
       error: false,
@@ -283,9 +295,10 @@ app.post('/api/decoration_image_upload', compressedUpload.single('file'), async 
       message: success ? 'Compressed under 40KB' : 'Saved with best effort',
       data: fileName,
     });
+
   } catch (err) {
     console.error('Compression error:', err);
-    res.status(500).json({ error: true, message: 'Image compression failed' });
+    return res.status(500).json({ error: true, message: 'Image compression failed' });
   }
 });
 

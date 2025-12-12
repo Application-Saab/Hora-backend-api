@@ -78,125 +78,128 @@ router.post('/update_configuration_status', async (req, res) => {
 })
 
 router.post('/admin_configuration_list', async (req, res) => {
-    let finder ={
-        status: 1
-    };
-    const type = req.body.type;
-    const sub_type = req.body.sub_type;
-    if (type) {
-        finder['type']= req.body.type; 
-    }
-    if (sub_type) {
-        finder['sub_type']= req.body.sub_type; 
-    }
-    if (!req.body.page) {
-        req.body.page = 1;
-    }
-    if (!req.body.per_page) {
-        req.body.per_page = 100;
-    }
-    if (req.body.name) {
-        finder[`name`] = new RegExp((req.body.name).trim(), 'i') 
-    }
     try {
-        const configuration = await ConfigurationModel.aggregate(
-            [
-                {
-                    $match: finder
-                },
-                {
-                    $sort: { name: 1 }
-                },
-                { $match: { "_id": { '$nin': [] } } },
-                {
-                    $skip: Number(req.body.page - 1) * Number(req.body.per_page)
-                },
-                {
-                    $limit: Number(req.body.per_page)
-                }
-            ]
-        );
-        let OverallResult = configuration;
-        const totalConfiguration = await ConfigurationModel.count(finder);
-        let paginate = {
-            "total_item": totalConfiguration,
-            "showing": OverallResult.length,
-            "first_page": 1,
-            "previous_page": req.body.per_page,
-            "current_page": req.body.page,
-            "next_page": (parseInt(req.body.page) + 1),
-            "last_page": parseInt((totalConfiguration) / parseInt(req.body.per_page))
+        const {
+            type,
+            sub_type,
+            name,
+            page = 1,
+            per_page = 100
+        } = req.body;
+
+        // Build filter object
+        const finder = { status: 1 };
+
+        if (type) finder.type = type;
+        if (sub_type) finder.sub_type = sub_type;
+        if (name) finder.name = new RegExp(name.trim(), 'i');
+
+        // Query with aggregation
+        const configuration = await ConfigurationModel.aggregate([
+            { $match: finder },
+            { $sort: { name: 1 } },
+            { $match: { _id: { $nin: [] } } }, // unchanged
+            { $skip: (Number(page) - 1) * Number(per_page) },
+            { $limit: Number(per_page) }
+        ]);
+
+        const totalConfiguration = await ConfigurationModel.countDocuments(finder);
+
+        const paginate = {
+            total_item: totalConfiguration,
+            showing: configuration.length,
+            first_page: 1,
+            previous_page: page > 1 ? page - 1 : 1,
+            current_page: page,
+            next_page: Number(page) + 1,
+            last_page: Math.ceil(totalConfiguration / per_page)
+        };
+
+        if (configuration.length > 0) {
+            return res.json({
+                error: false,
+                status: 200,
+                message: 'Fetch Data Successfully',
+                data: { configuration, paginate }
+            });
         }
-        if(configuration.length>0){
-            return res.json({ error: false,status:200, message: 'Fetch Data Successfully', data: { configuration: OverallResult, paginate }})
-        }else{
-            return res.json({ error: true,status:503, message: 'No Record Found'})
-        }
+
+        return res.json({
+            error: true,
+            status: 503,
+            message: 'No Record Found'
+        });
+
+    } catch (error) {
+        return res.status(400).json({
+            error: true,
+            message: error.message
+        });
     }
-    catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
-    }
-})
+});
 
 router.post('/admin_configuration_list_all', async (req, res) => {
-    let finder ={
-        status: { $ne: 2 }
-    };
-    const type = req.body.type;
-    const sub_type = req.body.sub_type;
-    if (type) {
-        finder['type']= req.body.type; 
-    }
-    if (sub_type) {
-        finder['sub_type']= req.body.sub_type; 
-    }
-    if (!req.body.page) {
-        req.body.page = 1;
-    }
-    if (!req.body.per_page) {
-        req.body.per_page = 100;
-    }
-    if (req.body.name) {
-        finder[`name`] = new RegExp((req.body.name).trim(), 'i') 
-    }
     try {
-        const configuration = await ConfigurationModel.aggregate(
-            [
-                {
-                    $match: finder
-                },
-                {
-                    $sort: { name: 1 }
-                },
-                { $match: { "_id": { '$nin': [] } } },
-                {
-                    $skip: Number(req.body.page - 1) * Number(req.body.per_page)
-                },
-                {
-                    $limit: Number(req.body.per_page)
-                }
-            ]
-        );
-        let OverallResult = configuration;
-        const totalConfiguration = await ConfigurationModel.count(finder);
-        let paginate = {
-            "total_item": totalConfiguration,
-            "showing": OverallResult.length,
-            "first_page": 1,
-            "previous_page": req.body.per_page,
-            "current_page": req.body.page,
-            "next_page": (parseInt(req.body.page) + 1),
-            "last_page": parseInt((totalConfiguration) / parseInt(req.body.per_page))
+        // Filter
+        let finder = {
+            status: { $ne: 2 }
+        };
+
+        const type = req.body?.type;
+        const sub_type = req.body?.sub_type;
+
+        if (type) finder.type = type;
+        if (sub_type) finder.sub_type = sub_type;
+
+        const page = Number(req.body?.page) || 1;
+        const perPage = Number(req.body?.per_page) || 100;
+
+        if (req.body?.name) {
+            finder.name = new RegExp(req.body.name.trim(), 'i');
         }
-        if(configuration.length>0){
-            return res.json({ error: false,status:200, message: 'Fetch Data Successfully', data: { configuration: OverallResult, paginate }})
-        }else{
-            return res.json({ error: true,status:503, message: 'No Record Found'})
+
+        // Aggregate query
+        const configuration = await ConfigurationModel.aggregate([
+            { $match: finder },
+            { $sort: { name: 1 } },
+            { $match: { _id: { $nin: [] } } },
+            { $skip: (page - 1) * perPage },
+            { $limit: perPage }
+        ]);
+
+        const totalConfiguration = await ConfigurationModel.countDocuments(finder);
+
+        const paginate = {
+            total_item: totalConfiguration,
+            showing: configuration.length,
+            first_page: 1,
+            previous_page: perPage,
+            current_page: page,
+            next_page: page + 1,
+            last_page: Math.ceil(totalConfiguration / perPage)
+        };
+
+        if (configuration.length > 0) {
+            return res.json({
+                error: false,
+                status: 200,
+                message: 'Fetch Data Successfully',
+                data: { configuration, paginate }
+            });
+        } else {
+            return res.json({
+                error: true,
+                status: 503,
+                message: 'No Record Found'
+            });
         }
+
+    } catch (error) {
+        return res.status(400).json({
+            message: error.message,
+            error: true
+        });
     }
-    catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
-    }
-})
+});
 
 module.exports = router;

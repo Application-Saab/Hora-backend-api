@@ -709,7 +709,7 @@ router.get('/order_details/v1/:id', async (req, res) => {
                 path: 'selecteditems',
                 populate: [
                     { path: 'cuisineId' },
-                    { path: 'mealId', model: 'meal' },
+                    { path: 'mealId' },
                     { path: 'special_appliance_id' },
                     { path: 'general_appliance_id' },
                     { path: 'serving_dish' }
@@ -1918,7 +1918,7 @@ router.get('/getIngredientByOrder/:id', async (req, res) => {
             })
             .populate({
                 path: "selecteditems",
-                populate: { path: "mealId", model: "meal" }
+                populate: { path: "mealId" }    
             })
             .populate({ path: "orderApplianceIds" })
             .populate({

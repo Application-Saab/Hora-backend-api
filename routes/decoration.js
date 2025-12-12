@@ -224,8 +224,7 @@ router.get('/searchByTag/v2/:tag', async (req, res) => {
         });
     }
 
-    // Step 2: Build Query Safely
-    const query = { tag: { $in: [tag] } }; 
+    const query = { tag }; 
 
     if (priceFilter === 'under2000') {
         query.price = { $lt: 2000 };

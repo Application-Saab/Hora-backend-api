@@ -90,7 +90,6 @@ router.post('/otp_generate', async (req, res) => {
 
             await UserModel.findByIdAndUpdate(user._id, { $set: update });
 
-            console.log('%c [  ]-92', 'font-size:13px; background:pink; color:#bf2c9f;', process.env.FAST2SMS_API_KEY)
             // Send OTP via SMS using Fast2SMS API (with Axios)
             const smsUrl = `https://www.fast2sms.com/dev/bulkV2?authorization=${process.env.FAST2SMS_API_KEY}&message=182194&variables_values=${otp}&route=dlt&numbers=${phone}&sender_id=HORASR`;
             try {
@@ -170,21 +169,21 @@ router.post('/otp_generate', async (req, res) => {
 router.post('/otp_verify', async (req, res) => {
     const { phone, otp, role } = req.body;
     if (!phone) {
-        return res.status(422).json({
+        return res.json({
             error: true,
             status: 422,
             data: [{ path: 'phone', message: 'Phone is required.' }]
         });
     }
     if (!otp) {
-        return res.status(422).json({
+        return res.json({
             error: true,
             status: 422,
             data: [{ path: 'otp', message: 'OTP is required.' }]
         });
     }
     if (!role) {
-        return res.status(422).json({
+        return res.json({
             error: true,
             status: 422,
             data: [{ path: 'role', message: 'Role is required.' }]
@@ -527,9 +526,9 @@ router.put("/user-details/:id", async (req, res) => {
 
     // Update object prepare karo
     let updateData = {};
-    if (name !== undefined) updateData.name = name;
-    if (phone !== undefined) updateData.phone = phone;
-    if (avatar !== undefined) updateData.avatar = avatar;
+    if (name) updateData.name = name;
+    if (phone) updateData.phone = phone;
+    if (avatar) updateData.avatar = avatar;
 
     const updatedUser = await UserModel.findByIdAndUpdate(
       id,
@@ -542,7 +541,7 @@ router.put("/user-details/:id", async (req, res) => {
     }
 
     // 🔥 EXTRA FEATURE: Update name in all EventGuest entries for this user
-    if (name !== undefined) {
+    if (name) {
       const EventGuest = require("../models/event-guest"); // Import lazily to avoid circular deps
 
       await EventGuest.updateMany(

@@ -878,7 +878,7 @@ router.post('/completeOrder', async (req, res) => {
     const { _id, userId, job_end_time } = req.body;
 
     if (!_id) {
-        return res.status(422).json({
+        return res.json({
             error: true,
             status: 422,
             data: [
@@ -1435,7 +1435,7 @@ router.post('/cancelOrder', async (req, res) => {
     const { _id } = req.body;
 
     if (!_id) {
-        return res.status(422).json({
+        return res.json({
             error: true,
             status: 422,
             data: [

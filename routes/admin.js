@@ -50,7 +50,7 @@ router.post("/admin_signin", async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(422).json({
+      return res.json({
         error: true,
         status: 422,
         data: [
@@ -64,20 +64,18 @@ router.post("/admin_signin", async (req, res) => {
 
     if (!user) {
       return res
-        .status(503)
         .json({ error: true, status: 503, message: "Admin Not Registered" });
     }
 
     const token = passportAuth.signToken(user);
 
-    return res.status(200).json({
+    return res.json({
       error: false,
       status: 200,
       data: user,
       token,
     });
   } catch (error) {
-    console.error(error);
     return res.status(400).json({ message: error.message, error: true });
   }
 });

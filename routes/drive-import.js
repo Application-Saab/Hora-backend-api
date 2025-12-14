@@ -178,7 +178,7 @@ async function handleDriveFolderUpload(folderUrl, vendorId) {
     { $set: { orderGalleryLink, orderDriveLink: folderUrl } }
   );
 
-  console.log("✅ Upload completed for vendorId:", vendorId);
+  console.log("Upload completed for vendorId:", vendorId);
   return uploadedFiles;
 }
 
@@ -193,18 +193,18 @@ router.post("/import-drive-folder", async (req, res) => {
         .json({ message: "Folder URL and Vendor ID are required." });
     }
 
-    // 🚀 Turant response bhej do
+    // Turant response bhej do
     res.status(202).json({
       message: "Upload started, processing in background.",
       vendorId,
     });
 
-    // 🚀 Background processing
+    // Background processing
     process.nextTick(async () => {
       try {
         await handleDriveFolderUpload(folderUrl, vendorId);
       } catch (err) {
-        console.error("❌ Background upload failed:", err);
+        console.error("Background upload failed:", err);
       }
     });
   } catch (error) {

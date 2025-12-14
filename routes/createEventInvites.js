@@ -80,8 +80,6 @@ router.post("/create-event-invite", async (req, res) => {
       googleMapLink,
     } = req.body;
 
-    const User = require("../models/user");
-
     // Generate wonderland_id
     const lastWonderlandId = await EventInvite.findOne()
       .sort({ wonderland_id: -1 })
@@ -303,7 +301,6 @@ router.put("/event-invites/:id", async (req, res) => {
     const isFirstEvent = oldestEvent && oldestEvent._id.equals(existing._id);
 
     if (isFirstEvent && !existing.hostName && hostName) {
-      const User = require("../models/user");
       const user = await User.findById(existing.userId);
       if (user) {
         user.name = hostName;
@@ -738,7 +735,6 @@ router.get("/chatrooms/:userId/unread", async (req, res) => {
   const { userId } = req.params;
   if (!mongoose.Types.ObjectId.isValid(userId))
     return res.status(400).json({ error: true, message: "Invalid userId" });
-  const { computeUnreadCountsForUser } = require("../utils/chatUnread");
   const counts = await computeUnreadCountsForUser(userId);
   return res.json({ error: false, data: counts });
 });

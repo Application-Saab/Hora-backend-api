@@ -103,10 +103,10 @@ cron.schedule('0 0 * * 0', () => {
   commonFunction.updateDecorationPopularity()
 });
 
-// setTimeout(async()=>{
-//   console.log("Updating scores")
-//   await commonFunction.updateDecorationPopularity()
-// },10000)
+setTimeout(async()=>{
+  console.log("Updating scores")
+  await commonFunction.updateDecorationPopularity()
+},10000)
 
 database.on("error", (error) => {
   console.log(error);

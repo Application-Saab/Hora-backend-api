@@ -44,7 +44,6 @@ router.post('/editByUserID', async (req, res) => {
         const { userId } = req.body;
         const updatedData = req.body;
 
-        // Mongoose 9 recommended options
         const options = { new: true, upsert: true };
 
         const result = await addressModel.findOneAndUpdate(
@@ -75,7 +74,6 @@ router.post('/editByUserID', async (req, res) => {
         });
     }
 });
-
 
 router.get('/details/:id', async (req, res) => {
     try {

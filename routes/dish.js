@@ -4,9 +4,6 @@ const decorationModel = require('../models/decoration');
 const photographyModel = require('../models/photography')
 const router = express.Router();
 
-var ObjectId = require('mongoose').Types.ObjectId; 
-
-//fixed
 router.post('/add', async (req, res) => {
     try {
         const cuisineId = req.body?.cuisineId?.[0];
@@ -167,6 +164,185 @@ router.post('/add', async (req, res) => {
     }
 });
 
+router.post('/edit', async (req, res) => {
+    const id = req.body?._id;
+    const updatedData = req.body;
+    const options = { new: true };
+
+    if (!id) {
+        return res.json({
+            error: true,
+            status: 422,
+            message: "_id is required"
+        });
+    }
+
+    try {
+        // If cuisine matches Decoration
+        if (req.body?.cuisineId?.[0] === "65a2d129513d9389d34e31d4") {
+            console.log(1);
+
+            const result = await decorationModel.findByIdAndUpdate(
+                id,
+                updatedData,
+                options
+            );
+
+            return res.json({
+                error: false,
+                status: 200,
+                message: 'Updated Successfully',
+                data: result
+            });
+        }
+
+        // ELSE update Dish
+        const result = await dishModel.findByIdAndUpdate(
+            id,
+            updatedData,
+            options
+        );
+
+        return res.json({
+            error: false,
+            status: 200,
+            message: 'Updated Successfully',
+            data: result
+        });
+
+    } catch (error) {
+        return res.status(400).json({
+            message: error.message,
+            error: true
+        });
+    }
+});
+
+router.get('/details/:id', async (req, res) => {
+    try {
+        const id = req.params?.id;
+
+        const data = await dishModel.findById(id);
+
+        return res.json({
+            error: false,
+            status: 200,
+            message: 'Details Fetch Successfully',
+            data: data
+        });
+
+    } catch (error) {
+        return res.status(400).json({
+            message: error.message,
+            error: true
+        });
+    }
+});
+
+router.post('/update_dish_status', async (req, res) => {
+    const { _id } = req.body;
+
+    // Validation
+    if (!_id) {
+        return res.json({
+            error: true,
+            status: 422,
+            data: [{ path: '_id', message: 'Id is required.' }]
+        });
+    }
+
+    try {
+        // Find dish
+        const dish = await dishModel.findById(_id);
+
+        if (!dish) {
+            return res.json({
+                error: true,
+                status: 503,
+                message: 'Details Not Found'
+            });
+        }
+
+        // Update status
+        await dishModel.findByIdAndUpdate(_id, {
+            $set: { status: req.body.status }
+        });
+
+        return res.json({
+            error: false,
+            status: 200,
+            message: 'Status Update Successfully'
+        });
+
+    } catch (error) {
+        return res.status(400).json({
+            message: error.message,
+            error: true
+        });
+    }
+});
+
+router.post('/user_dish_list', async(req, res) => {
+    let finder = {
+        status: 1
+    };
+    const { type } = req.body;
+    if (!req.body.page) {
+        req.body.page = 1;
+    }
+    if (!req.body.per_page) {
+        req.body.per_page = 20;
+    }
+    if (req.body.name) {
+        finder[`name`] = new RegExp((req.body.name).trim(), 'i')
+    }
+    // if (req.body.mealId) {
+    //     finder[`mealId`] = req.body.mealId
+    // }
+    // if (req.body.cuisineId) {
+    //     finder[`cuisineId`] = req.body.cuisineId
+    // }
+    if (req.body.mealId) {
+        finder[`mealId`] = { '$in': [ new ObjectId(req.body.mealId) ] }
+    }
+    if (req.body.cuisineId) {
+        finder[`cuisineId`] = { '$in': [ new ObjectId(req.body.cuisineId) ] }
+    }
+    try {
+        const dish = await dishModel.aggregate(
+            [
+                { $match: finder },
+                { $lookup: { from: 'meals', localField: 'mealId', foreignField: '_id', pipeline: [{ $project: { name: 1, _id: 0 } }], as: 'mealId' } },
+                { $lookup: { from: 'configurations', localField: 'cuisineId', foreignField: '_id', pipeline: [{ $project: { name: 1, _id: 0 } }], as: 'cuisineId' } },
+                { $sort: { updatedAt: -1 } },
+                { $match: { "_id": { '$nin': [] } } },
+                { $skip: Number(req.body.page - 1) * Number(req.body.per_page) },
+                { $limit: Number(req.body.per_page) }
+            ]
+        );
+        let OverallResult = dish;
+        const totaldish = await dishModel.count(finder);
+        let paginate = {
+            "total_item": totaldish,
+            "showing": OverallResult.length,
+            "first_page": 1,
+            "previous_page": req.body.per_page,
+            "current_page": req.body.page,
+            "next_page": (parseInt(req.body.page) + 1),
+            "last_page": parseInt((totaldish) / parseInt(req.body.per_page))
+        }
+        if (dish.length > 0) {
+            return res.json({ error: false, status: 200, message: 'Fetch Data Successfully', data: { dish: OverallResult, paginate } })
+        } else {
+            return res.json({ error: true, status: 503, message: 'No Record Found' })
+        }
+    } catch (error) {
+        res.status(400).json({ message: error.message, error: true })
+    }
+})
+
+var ObjectId = require('mongoose').Types.ObjectId; 
+
 router.post('/admin_dish_list', async (req, res) => {
     try {
         let finder = {
@@ -309,7 +485,7 @@ router.post('/admin_dish_list', async (req, res) => {
         // ---------------------------------------------
         // Response
         // ---------------------------------------------
-        if (dish.length > 0 || (decoration && decoration.length > 0)) {
+        if (dish.length > 0 || (decoration.length > 0)) {
             return res.json({
                 error: false,
                 status: 200,
@@ -332,184 +508,6 @@ router.post('/admin_dish_list', async (req, res) => {
     }
 });
 
-router.post('/update_dish_status', async (req, res) => {
-    const { _id } = req.body;
-
-    // Validation
-    if (!_id) {
-        return res.json({
-            error: true,
-            status: 422,
-            data: [{ path: '_id', message: 'Id is required.' }]
-        });
-    }
-
-    try {
-        // Find dish
-        const dish = await dishModel.findById(_id);
-
-        if (!dish) {
-            return res.json({
-                error: true,
-                status: 503,
-                message: 'Details Not Found'
-            });
-        }
-
-        // Update status
-        await dishModel.findByIdAndUpdate(_id, {
-            $set: { status: req.body.status }
-        });
-
-        return res.json({
-            error: false,
-            status: 200,
-            message: 'Status Update Successfully'
-        });
-
-    } catch (error) {
-        return res.status(400).json({
-            message: error.message,
-            error: true
-        });
-    }
-});
-
-router.post('/edit', async (req, res) => {
-    const id = req.body?._id;
-    const updatedData = req.body;
-    const options = { new: true };
-
-    if (!id) {
-        return res.json({
-            error: true,
-            status: 422,
-            message: "_id is required"
-        });
-    }
-
-    try {
-        // If cuisine matches Decoration
-        if (req.body?.cuisineId?.[0] === "65a2d129513d9389d34e31d4") {
-            console.log(1);
-
-            const result = await decorationModel.findByIdAndUpdate(
-                id,
-                updatedData,
-                options
-            );
-
-            return res.json({
-                error: false,
-                status: 200,
-                message: 'Updated Successfully',
-                data: result
-            });
-        }
-
-        // ELSE update Dish
-        const result = await dishModel.findByIdAndUpdate(
-            id,
-            updatedData,
-            options
-        );
-
-        return res.json({
-            error: false,
-            status: 200,
-            message: 'Updated Successfully',
-            data: result
-        });
-
-    } catch (error) {
-        return res.status(400).json({
-            message: error.message,
-            error: true
-        });
-    }
-});
-
-router.get('/details/:id', async (req, res) => {
-    try {
-        const id = req.params?.id;
-
-        const data = await dishModel.findById(id);
-
-        return res.json({
-            error: false,
-            status: 200,
-            message: 'Details Fetch Successfully',
-            data: data
-        });
-
-    } catch (error) {
-        return res.status(400).json({
-            message: error.message,
-            error: true
-        });
-    }
-});
-
-//.............. not used ..............
-
-router.post('/user_dish_list', async(req, res) => {
-    let finder = {
-        status: 1
-    };
-    const { type } = req.body;
-    if (!req.body.page) {
-        req.body.page = 1;
-    }
-    if (!req.body.per_page) {
-        req.body.per_page = 20;
-    }
-    if (req.body.name) {
-        finder[`name`] = new RegExp((req.body.name).trim(), 'i')
-    }
-    // if (req.body.mealId) {
-    //     finder[`mealId`] = req.body.mealId
-    // }
-    // if (req.body.cuisineId) {
-    //     finder[`cuisineId`] = req.body.cuisineId
-    // }
-    if (req.body.mealId) {
-        finder[`mealId`] = { '$in': [ new ObjectId(req.body.mealId) ] }
-    }
-    if (req.body.cuisineId) {
-        finder[`cuisineId`] = { '$in': [ new ObjectId(req.body.cuisineId) ] }
-    }
-    try {
-        const dish = await dishModel.aggregate(
-            [
-                { $match: finder },
-                { $lookup: { from: 'meals', localField: 'mealId', foreignField: '_id', pipeline: [{ $project: { name: 1, _id: 0 } }], as: 'mealId' } },
-                { $lookup: { from: 'configurations', localField: 'cuisineId', foreignField: '_id', pipeline: [{ $project: { name: 1, _id: 0 } }], as: 'cuisineId' } },
-                { $sort: { updatedAt: -1 } },
-                { $match: { "_id": { '$nin': [] } } },
-                { $skip: Number(req.body.page - 1) * Number(req.body.per_page) },
-                { $limit: Number(req.body.per_page) }
-            ]
-        );
-        let OverallResult = dish;
-        const totaldish = await dishModel.count(finder);
-        let paginate = {
-            "total_item": totaldish,
-            "showing": OverallResult.length,
-            "first_page": 1,
-            "previous_page": req.body.per_page,
-            "current_page": req.body.page,
-            "next_page": (parseInt(req.body.page) + 1),
-            "last_page": parseInt((totaldish) / parseInt(req.body.per_page))
-        }
-        if (dish.length > 0) {
-            return res.json({ error: false, status: 200, message: 'Fetch Data Successfully', data: { dish: OverallResult, paginate } })
-        } else {
-            return res.json({ error: true, status: 503, message: 'No Record Found' })
-        }
-    } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
-    }
-})
 
 router.get('/getRandomDishList', async(req, res) => {
     let finder = {

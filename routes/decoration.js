@@ -64,10 +64,27 @@ router.post('/add', async (req, res) => {
 
 router.get('/details/:id', async (req, res) => {
     try {
-        const data = await decorationModel.findById(req.params.id).populate({
-            path: "tag"
+        const result = await decorationModel.findByIdAndUpdate(id, updatedData, options);
+
+        if (result) {
+            return res.json({
+                error: false,
+                status: 200,
+                message: 'Updated Successfully',
+                data: result
+            });
+        } else {
+            return res.json({
+                error: true,
+                status: 404,
+                message: 'Decoration not found.'
+            });
+        }
+    } catch (error) {
+        return res.status(400).json({
+            error: true,
+            message: error.message
         });
-        return res.json({ error: false, status: 200, message: 'Details Fetch Successfully', data: data })
     }
     catch (error) {
         res.status(400).json({ message: error.message, error: true })
@@ -173,13 +190,10 @@ router.get('/searchByTag/:tag', async (req, res) => {
     const cacheKey = `search_tag_${tag}`;
 
     try {
-        // Check cache first
         const cached = cache.get(cacheKey);
         if (cached) {
             return res.json({ ...cached, cached: true });
         }
-
-        // Mongoose 9 compatible query (no change needed)
         const decorations = await decorationModel.find({ tag: { $in: [tag] } }).lean();
 
         if (decorations.length > 0) {
@@ -208,6 +222,15 @@ router.get('/searchByTag/:tag', async (req, res) => {
     }
 });
 
+
+router.get('/details/:id', async (req, res) => {
+    try {
+        const data = await decorationModel.findById(req.params.id).populate({
+            path: "tag"
+        });
+    }
+});
+
 router.get('/searchByTag/v2/:tag', async (req, res) => {
     const { tag } = req.params;
     const limit = parseInt(req.query.limit) || 10;
@@ -218,7 +241,7 @@ router.get('/searchByTag/v2/:tag', async (req, res) => {
 
     const cacheKey = `search_${tag}_${limit}_${page}_${priceFilter}_${sortBy}_${theme}`;
 
-    // 🔥 Step 1: Return Cached Response if exists
+    // Step 1: Return Cached Response if exists
     const cachedData = cache.get(cacheKey);
     if (cachedData) {
         return res.json({
@@ -227,8 +250,7 @@ router.get('/searchByTag/v2/:tag', async (req, res) => {
         });
     }
 
-    // 🔥 Step 2: Build Query Safely
-    const query = { tag: { $in: [tag] } }; // Safe for array/string tags
+    const query = { tag }; 
 
     if (priceFilter === 'under2000') {
         query.price = { $lt: 2000 };
@@ -244,7 +266,7 @@ router.get('/searchByTag/v2/:tag', async (req, res) => {
     }
 
     try {
-        // 🔥 Step 3: Build Sort Criteria Safely (Fixing undefined error)
+        // Step 3: Build Sort Criteria Safely (Fixing undefined error)
         let sortOrder =
             sortBy === 'asc' ? 1 :
             sortBy === 'desc' ? -1 :
@@ -253,7 +275,7 @@ router.get('/searchByTag/v2/:tag', async (req, res) => {
         let sortCriteria;
 
         if (sortOrder !== null) {
-            if (priceFilter === 'all' || priceFilter === 'All' || query.price !== undefined) {
+            if (priceFilter === 'all' || priceFilter === 'All' || query.price !== undefined || query.price !== null) {
                 sortCriteria = { popularity_score: -1, price: sortOrder };
             } else {
                 sortCriteria = { price: sortOrder, popularity_score: -1 };
@@ -262,14 +284,14 @@ router.get('/searchByTag/v2/:tag', async (req, res) => {
             sortCriteria = { popularity_score: -1 };
         }
 
-        // 🔥 Step 4: Execute Query Safely
+        // Step 4: Execute Query Safely
         const decorationsQuery = decorationModel
             .find(query)
             .collation({ locale: "en", numericOrdering: true })
             .sort(sortCriteria)
             .skip((page - 1) * limit)
             .limit(limit)
-            .lean(); // Better for performance
+            .lean(); 
 
         const [decorations, totalDecorations] = await Promise.all([
             decorationsQuery,
@@ -290,7 +312,7 @@ router.get('/searchByTag/v2/:tag', async (req, res) => {
             }
         };
 
-        // 🔥 Step 5: Save to Cache
+        // Step 5: Save to Cache
         cache.set(cacheKey, response);
 
         return res.json(response);

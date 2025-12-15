@@ -1,25 +1,24 @@
 const crypto = require("crypto");
-const axios = require("axios");
+const request = require("request");
 const express = require("express");
 const router = express.Router();
+const userModel = require("../models/user");
 const orderModel = require("../models/order");
 
-// Create payment link
 router.post("/payment", async (req, res) => {
   try {
     let { user_id, price, phone, name, merchantTransactionId } = req.body;
-
     if (user_id === "670cafda63f0548f592bf2f2") {
-      price = 1;
+      price = 1; // For testing purpose only
     }
 
+    // Validate inputs
     if (!name || name.trim() === "") {
       return res.status(400).send({
         message: "Customer name is required and cannot be empty",
         success: false,
       });
     }
-
     if (!/^\+?\d{10,12}$/.test(phone)) {
       return res.status(400).send({
         message:
@@ -49,40 +48,40 @@ router.post("/payment", async (req, res) => {
       },
     };
 
-    try {
-      const response = await axios.post(
-        "https://api.razorpay.com/v1/payment_links",
-        data,
-        {
-          auth: {
-            username: process.env.RAZORPAY_KEY_ID,
-            password: process.env.RAZORPAY_KEY_SECRET,
-          },
-          headers: { "Content-Type": "application/json" },
-        }
-      );
-      console.log('%c [ response ]-54', 'font-size:13px; background:pink; color:#bf2c9f;', response)
+    const requestOptions = {
+      method: "POST",
+      url: "https://api.razorpay.com/v1/payment_links",
+      auth: {
+        user: process.env.RAZORPAY_KEY_ID,
+        pass: process.env.RAZORPAY_KEY_SECRET,
+      },
+      headers: {
+        "Content-Type": "application/json",
+      },
+      json: data,
+    };
 
-      if (response.data.short_url) {
-        return res.status(200).send(response.data.short_url);
-      } else {
+    request(requestOptions, function (error, response, body) {
+      if (error) {
+        console.error("Request error:", error);
         return res.status(500).send({
-          message: "Failed to create payment link",
+          message: error.message,
           success: false,
-          errorDetails: response.data,
         });
       }
-    } catch (error) {
-      return res.status(error.response?.status || 500).send({
-        message:
-          error.response?.data?.error?.description ||
-          error.message ||
-          "Request failed",
-        success: false,
-        errorDetails: error.response?.data || null,
-      });
-    }
+
+      if (response.statusCode === 200 && body.short_url) {
+        res.status(200).send(body.short_url); // Return the payment URL
+      } else {
+        res.status(response.statusCode || 500).send({
+          message: body.error.description || "Failed to create payment link",
+          success: false,
+          errorDetails: body.error || body,
+        });
+      }
+    });
   } catch (error) {
+    console.error("Catch error:", error);
     res.status(500).send({
       message: error.message,
       success: false,
@@ -90,57 +89,67 @@ router.post("/payment", async (req, res) => {
   }
 });
 
-// Check payment status
 router.post("/status/:txnId", async (req, res) => {
   try {
     const merchantTransactionId = req.params["txnId"];
 
-    try {
-      const response = await axios.get(
-        `https://api.razorpay.com/v1/payment_links?reference_id=${merchantTransactionId}`,
-        {
-          auth: {
-            username: process.env.RAZORPAY_KEY_ID,
-            password: process.env.RAZORPAY_KEY_SECRET,
-          },
-          headers: { accept: "application/json" },
-        }
-      );
+    const options = {
+      method: "GET",
+      url: `https://api.razorpay.com/v1/payment_links?reference_id=${merchantTransactionId}`,
+      auth: {
+        user: process.env.RAZORPAY_KEY_ID,
+        pass: process.env.RAZORPAY_KEY_SECRET,
+      },
+      headers: {
+        accept: "application/json",
+        "Content-Type": "application/json",
+      },
+    };
 
-      const responseData = response.data;
-      const paymentLinks = responseData.payment_links || [];
-
-      if (paymentLinks.length > 0) {
-        const paymentLink = paymentLinks[0];
-
-        if (paymentLink.status === "paid") {
-          return res.status(200).send({
-            success: true,
-            message: "PAYMENT_SUCCESS",
-          });
-        } else {
-          return res.status(200).send({
-            success: false,
-            message: paymentLink.status.toUpperCase(),
-          });
-        }
-      } else {
-        return res.status(404).send({
-          message: "Payment link not found",
+    request(options, function (error, response, body) {
+      if (error) {
+        console.error("Request error:", error);
+        return res.status(500).send({
+          message: error.message,
           success: false,
-          errorDetails: responseData,
         });
       }
-    } catch (error) {
-      return res.status(error.response?.status || 500).send({
-        message:
-          error.response?.data?.error?.description ||
-          "Failed to fetch payment link",
-        success: false,
-        errorDetails: error.response?.data || null,
-      });
-    }
+
+      try {
+        const responseData = JSON.parse(body);
+        const paymentLinks = responseData.payment_links || [];
+
+        if (response.statusCode === 200 && paymentLinks.length > 0) {
+          const paymentLink = paymentLinks[0];
+          if (paymentLink.status === "paid") {
+            res.status(200).send({
+              success: true,
+              message: "PAYMENT_SUCCESS",
+            });
+          } else {
+            res.status(200).send({
+              success: false,
+              message: paymentLink.status.toUpperCase(),
+            });
+          }
+        } else {
+          res.status(response.statusCode || 404).send({
+            message: "Payment link not found",
+            success: false,
+            errorDetails: responseData,
+          });
+        }
+      } catch (parseError) {
+        console.error("Parse error:", parseError);
+        res.status(500).send({
+          message: "Failed to parse Razorpay response",
+          success: false,
+          errorDetails: parseError.message,
+        });
+      }
+    });
   } catch (error) {
+    console.error("Catch error:", error);
     res.status(500).send({
       message: error.message,
       success: false,
@@ -148,66 +157,65 @@ router.post("/status/:txnId", async (req, res) => {
   }
 });
 
-// ---------------- WEBHOOK ----------------
 router.post("/razorpay/webhook", async (req, res) => {
   try {
-    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    const webhookSecret = "Sahaj@22";
     const receivedSignature = req.headers["x-razorpay-signature"];
     const body = JSON.stringify(req.body);
 
+    // Signature Verification
     const expectedSignature = crypto
       .createHmac("sha256", webhookSecret)
       .update(body)
       .digest("hex");
 
     if (expectedSignature !== receivedSignature) {
+      console.log("Invalid webhook signature");
       return res
         .status(400)
         .send({ success: false, message: "Invalid signature" });
     }
 
+    // Immediate success response for razorpay webhook
+    res.status(200).send({ success: true, message: "Received and processing" });
+
+    // Background Processing
     const event = req.body.event;
     const payload =
-      req.body.payload.payment.entity ||
-      req.body.payload.payment_link.entity;
+      req.body.payload.payment.entity || req.body.payload.payment_link.entity;
+    console.log("Webhook event received (Background):", event);
 
     if (event === "payment_link.paid" || event === "payment.captured") {
       const referenceId =
         payload.reference_id || payload.notes.merchantTransactionId;
 
       if (!referenceId) {
-        return res
-          .status(400)
-          .send({ success: false, message: "Missing referenceId" });
+        console.log("Missing referenceId, skipping background update");
+        return;
       }
 
       const order = await orderModel.findOne({ _id: referenceId });
 
       if (!order) {
-        return res
-          .status(404)
-          .send({ success: false, message: "Order not found" });
+        console.log("Order not found for referenceId", referenceId);
+        return;
       }
 
       if (order.status === 1) {
-        return res.status(200).send({ success: true, message: "Already paid" });
+        console.log("Order already marked as paid");
+        return;
       }
 
       await orderModel.findByIdAndUpdate(order._id, { $set: { status: 1 } });
-
-      return res.status(200).send({
-        success: true,
-        message: "Payment webhook processed",
-      });
+      console.log("Order updated successfully for:", referenceId);
     } else {
-      return res.status(200).send({ success: true, message: "Event ignored" });
+      console.log("Ignored event :", event);
     }
   } catch (error) {
-    return res.status(500).send({ success: false, message: error.message });
+    console.error("Critical Webhook processing error:", error);
   }
 });
 
-// ---------------- PAYMENT V2 (unchanged) ----------------
 router.post("/payment/v2", async (req, res) => {
   try {
     const { user_id, price, phone, name, merchantTransactionId } = req.body;
@@ -217,8 +225,7 @@ router.post("/payment/v2", async (req, res) => {
       merchantTransactionId: merchantTransactionId,
       merchantUserId: user_id,
       amount: price * 100,
-      callbackUrl:
-        "https://webhook.site/1995bfbd-46d5-418b-a1ba-82bd39db1bdb",
+      callbackUrl: "https://webhook.site/1995bfbd-46d5-418b-a1ba-82bd39db1bdb",
       mobileNumber: phone,
       paymentInstrument: {
         type: "PAY_PAGE",

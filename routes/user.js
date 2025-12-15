@@ -18,14 +18,16 @@ const multer = require('multer');
 const fs = require("fs");
 const AWS = require("aws-sdk");
 const cache = new NodeCache({ stdTTL: 60 * 10 }); // Cache TTL: 5 minutes
-const axios = require('axios');
+const  axios = require ('axios');
 
 // ..................working and tested..................
 
 router.post('/otp_generate', async (req, res) => { 
     const { phone, device_token, name, role, os } = req.body;
 
-    // Check if phone is provided
+router.post('/otp_generate', async (req, res) => { 
+    const { phone } = req.body;
+ 
     if (!phone) {
         return res.status(422).json({
             error: true,
@@ -43,16 +45,15 @@ router.post('/otp_generate', async (req, res) => {
 
         if (user) { // If user exists, update their OTP and info
             const update = {
-                otp,
-                device_token,
-                name: name ?? user.name // If name provided, use it; otherwise, keep current name
+                otp: otp,
+                device_token : req.body.device_token,
+                name: req.body.name ?? user.name
             };
 
             await UserModel.findByIdAndUpdate(user._id, { $set: update });
 
             // Send OTP via SMS using Fast2SMS API (with Axios)
             const smsUrl = `https://www.fast2sms.com/dev/bulkV2?authorization=${process.env.FAST2SMS_API_KEY}&message=182194&variables_values=${otp}&route=dlt&numbers=${phone}&sender_id=HORASR`;
-
             try {
                 await axios.get(smsUrl); // Send OTP SMS
             } catch (smsError) {
@@ -71,8 +72,8 @@ router.post('/otp_generate', async (req, res) => {
                 name,
                 role,
                 password: '',
-                phone,
-                os,
+                phone : req.body.phone,
+                os : req.body.os,
                 address: '',
                 otp,
                 avatar: '',
@@ -121,7 +122,6 @@ router.post('/otp_generate', async (req, res) => {
         }
 
     } catch (error) {
-        console.error("Error in OTP generation:", error);
         return res.status(400).json({
             message: error.message,
             error: true
@@ -156,17 +156,13 @@ router.post('/otp_verify', async (req, res) => {
     }
 
     try {
-        // Fetch user by phone
         const user = await UserModel.findOne({ phone });
 
-        // Handle case where user does not exist
         if (!user) {
             return res.status(404).json({ error: true, status: 404, message: 'User not found' });
         }
 
-        // Handle OTP verification
-        if (otp === '1234') { // Temporary hardcoded OTP check
-            // Check if role matches
+        if (otp === '1234') { 
             if (role !== user.role) {
                 return res.status(503).json({
                     error: true,
@@ -183,7 +179,6 @@ router.post('/otp_verify', async (req, res) => {
                 return res.status(503).json({ error: true, status: 503, message: 'Account Deleted' });
             }
 
-            // Everything checks out, return user data and token
             return res.status(200).json({
                 error: false,
                 status: 200,
@@ -191,7 +186,6 @@ router.post('/otp_verify', async (req, res) => {
                 token: passportAuth.signToken(user) // Generate token for the user
             });
         } else {
-            // OTP mismatch handling
             if (otp !== user.otp) {
                 return res.status(503).json({ error: true, status: 503, message: 'OTP Mismatch' });
             }
@@ -205,7 +199,6 @@ router.post('/otp_verify', async (req, res) => {
                 });
             }
 
-            // Handle account status
             if (user.status === 0) {
                 return res.status(503).json({ error: true, status: 503, message: 'Account Blocked' });
             }
@@ -213,7 +206,6 @@ router.post('/otp_verify', async (req, res) => {
                 return res.status(503).json({ error: true, status: 503, message: 'Account Deleted' });
             }
 
-            // Everything checks out, return user data and token
             return res.status(200).json({
                 error: false,
                 status: 200,
@@ -223,11 +215,82 @@ router.post('/otp_verify', async (req, res) => {
         }
 
     } catch (error) {
-        console.error("Error in OTP verification:", error);
         return res.status(400).json({
             message: error.message,
             error: true
         });
+    }
+});
+
+router.get('/user_details', async (req, res) => {
+    try {
+        const totalPersonalField = 9;
+        const totalProfessionalField = 6;
+
+        let donePersonalField = 0;
+        let doneProfessionalField = 0;
+
+        // Fetch user
+        const data = await UserModel.findById(req.user._id).populate({
+            path: "userServedLocalities",
+            populate: { path: "cityId" }
+        });
+
+        let userResponse = data;
+
+        // Personal fields check
+        const personalFields = [
+            data?.name,
+            data?.avatar,
+            data?.age,
+            data?.vechicle_type,
+            data?.aadhar_no,
+            data?.aadhar_front_img,
+            data?.aadhar_back_img,
+            data?.userServedLocalities?.length > 0 ? true : null,
+            data?.city
+        ];
+
+        personalFields.forEach(field => {
+            if (field !== '' && field !== undefined && field !== null) {
+                donePersonalField++;
+            }
+        });
+
+        userResponse.isPersonalStatus =
+            donePersonalField === totalPersonalField ? 1 : 0;
+
+        // Professional fields check
+        const professionalFields = [
+            data?.resume,
+            data?.experience,
+            data?.job_type,
+            data?.is_veg,
+            data?.userAppliance?.length > 0 ? true : null,
+            data?.userCuisioness?.length > 0 ? true : null
+        ];
+
+        professionalFields.forEach(field => {
+            if (field !== '' && field !== undefined && field !== null) {
+                doneProfessionalField++;
+            }
+        });
+
+        userResponse.isProfessionStatus =
+            doneProfessionalField === totalProfessionalField ? 1 : 0;
+
+        // Keep your existing timeout
+        setTimeout(() => {
+            return res.json({
+                error: false,
+                status: 200,
+                message: 'Details Fetch Successfully',
+                data: data
+            });
+        }, 1000);
+
+    } catch (error) {
+        res.status(400).json({ message: error.message, error: true });
     }
 });
 
@@ -329,8 +392,9 @@ async function deleteFromS3(key) {
 
 const deleteFileWithRetry = async (filePath, retries = 3, delay = 100) => {
   for (let attempt = 1; attempt <= retries; attempt++) {
-    try { 
-      await fs.unlinkSync(filePath);
+    try {
+      // await fs.unlink(filePath);
+      await fs.promises.unlink(filePath);
       console.log(`Successfully deleted file: ${filePath}`);
       return;
     } catch (err) {
@@ -501,26 +565,17 @@ router.put(
       const file = req.file;
       const { avatar, clearAvatar } = req.body;
 
-      // SAME user lookup
       const user = await UserModel.findById(id);
       if (!user) return sendResponse(res, 404, true, "User not found");
 
-      // SAME S3 key extraction logic
-      const extractKey = (url) => {
-        const key = url.split(`${process.env.S3_BUCKET_NAME}/`)[1];
-        return key || null;
-      };
-
-      // SAME clearAvatar logic
       if (clearAvatar === "true") {
         if (user.avatar) {
-          const key = extractKey(user.avatar);
+          const key = user.avatar.split(`${process.env.S3_BUCKET_NAME}/`)[1];
           if (key) await deleteFromS3(key);
         }
         user.avatar = null;
       }
 
-      // SAME file upload logic
       else if (file) {
         if (user.avatar) {
           const key = extractKey(user.avatar);
@@ -549,7 +604,6 @@ router.put(
         ]);
       }
 
-      // SAME direct URL logic
       else if (avatar) {
         if (isS3Url(avatar)) user.avatar = avatar;
         else
@@ -561,7 +615,6 @@ router.put(
           );
       }
 
-      // SAME validation
       else {
         return sendResponse(
           res,
@@ -571,7 +624,6 @@ router.put(
         );
       }
 
-      // SAME save response
       const updated = await user.save();
       return sendResponse(res, 200, false, "User avatar updated successfully", {
         _id: updated._id,
@@ -867,24 +919,45 @@ router.get('/user_details', async (req, res) => {
 });
 
 
-
-//..................not used yet.................
-
-
-router.post('/user_update', async(req, res) => {
+router.post('/supplier_personal_details_update', async (req, res) => {
     const id = req.user._id;
-    const updatedData = req.body;
-    console.log("updatedData>>>>>>",updatedData);
+
+    // Prepare updated data cleanly (only keys that exist in req.body)
+    const updatedData = {
+        name: req.body.name,
+        age: req.body.age,
+        vechicle_type: req.body.vechicle_type,
+        city: req.body.city,
+        lat: req.body.lat,
+        lng: req.body.lng,
+        aadhar_no: req.body.aadhar_no,
+        aadhar_front_img: req.body.aadhar_front_img,
+        aadhar_back_img: req.body.aadhar_back_img,
+        avatar: req.body.avatar,
+        userServedLocalities: req.body.userServedLocalities,
+        order_type: req.body.order_type
+    };
+
     const options = { new: true };
+
     try {
-        const result = await UserModel.findByIdAndUpdate(
-            id, updatedData, options
-        )
-        return res.json({ error: false, status: 200, message: 'Updated Successfully', data: result })
+        const result = await UserModel.findByIdAndUpdate(id, updatedData, options);
+
+        return res.json({
+            error: false,
+            status: 200,
+            message: 'Personal Details Updated Successfully',
+            data: result
+        });
+
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        return res.status(400).json({
+            message: error.message,
+            error: true
+        });
     }
-})
+});
+
 router.post('/supplier_professional_details_update', async(req, res) => {
     const id = req.user._id;
     const updatedData = {};
@@ -1002,6 +1075,50 @@ router.get('/my_account', async(req, res) => {
     } catch (error) {
         res.status(400).json({ message: error.message, error: true })
     }
+})
+
+router.post('/update_resume_profile', async (req, res) => {
+    try {
+        const id = req.user._id;
+
+        const {
+            resume,
+            experience,
+            job_profile,
+            order_type
+        } = req.body;
+
+        const updatedData = {
+            resume,
+            experience,
+            job_profile
+        };
+
+        if (order_type) {
+            updatedData.order_type = order_type;
+        }
+
+        const options = { new: true };
+
+        const result = await UserModel.findByIdAndUpdate(
+            id,
+            updatedData,
+            options
+        );
+
+        return res.json({
+            error: false,
+            status: 200,
+            message: 'Resume & Profile Details Updated Successfully',
+            data: result
+        });
+
+    } catch (error) {
+        return res.status(400).json({
+            error: true,
+            message: error.message
+        });
+    }
 });
 
 router.post('/update_work_details', async(req, res) => {
@@ -1050,7 +1167,61 @@ router.post('/update_special_appliance', async(req, res) => {
     } catch (error) {
         res.status(400).json({ message: error.message, error: true })
     }
+})
+
+router.post('/getMealDish', async (req, res) => {
+  try {
+    const { cuisineId = [], is_dish } = req.body;
+
+    let finder = { status: 1 };
+    let dishfinder = { status: 1 };
+
+    if (Array.isArray(cuisineId) && cuisineId.length > 0) {
+      dishfinder.cuisineId = { 
+        $in: cuisineId.map(id => new mongoose.Types.ObjectId(id)) 
+      };
+    }
+
+    if (is_dish === 1) {
+      dishfinder.is_dish = 1;
+    } else if (is_dish === 2) {
+      dishfinder.is_dish = { $in: [1, 2] };
+    } else {
+          delete dishfinder.is_dish;
+      }
+
+    const meals = await mealModel.find(finder).exec();
+
+    const newArray = await Promise.all(
+      meals.map(async (meal) => {
+        dishfinder.mealId = { $in: [new mongoose.Types.ObjectId(meal._id)] };
+
+        let query = dishModel.find(dishfinder);
+
+        ['special_appliance_id', 'general_appliance_id', 'serving_dish']
+          .forEach(field => {
+            if (dishModel.schema.path(field)) {
+              query = query.populate(field, '_id name image');
+            }
+          });
+
+        const dishResponse = await query.exec();
+        return { mealObject: meal, dish: dishResponse };
+      })
+    );
+
+    return res.json({
+      error: false,
+      status: 200,
+      message: "Fetch Data Successfully",
+      data: newArray
+    });
+
+  } catch (error) {
+    return res.status(500).json({ message: error.message, error: true });
+  }
 });
+  
 
 router.get('/getCityServedLocalityList', async(req, res) => {
     let finder = { status: 1 };

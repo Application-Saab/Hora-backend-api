@@ -32,14 +32,21 @@ router.get("/thumbnailsWithinProject", async (req, res) => {
         .json({ message: "Folder Name and Customer ID are required." });
     }
 
-    let folderPath = vendorId
-      ? `${folderName}_${customerId}_${vendorId}/`
-      : `${folderName}_${customerId}/`;
+    // Check for duplicate folder
+    const existingFolder = await FolderModel.findOne({
+      folderName,
+      customerId,
+    });
 
-    const params = {
-      Bucket: process.env.S3_BUCKET_NAME,
-      Prefix: folderPath.trim(),
-    };
+    if (existingFolder) {
+      return res.status(400).json({
+        message: `Folder with the name '${folderName}' already exists for this customer.`,
+      });
+    }
+
+    // Create and save folder
+    const folder = new FolderModel({ folderName, customerId, vendorId });
+    await folder.save();
 
     // ⭐ OLD AWS SDK v2 LIST (works in Node 22)
     const s3Response = await s3.listObjectsV2(params).promise();
@@ -247,22 +254,41 @@ router.post("/deleteImage", async (req, res) => {
       return res.status(400).json({ message: "Thumbnail key is required." });
     }
 
-    // Derive original image key from thumbnail key
-    const originalKey = thumbnailKey
-      .replace("/thumb_", "/")
-      .replace(/_thumbnail\.webp$|\.webp$/i, "");
+    let folderPath = vendorId
+      ? `${folderName}_${customerId}_${vendorId}/`
+      : `${folderName}_${customerId}/`;
 
-    const objectsToDelete = [
-      { Key: thumbnailKey },
-      { Key: originalKey },
-    ];
+    const params = {
+      Bucket: process.env.S3_BUCKET_NAME,
+      Prefix: folderPath.trim(),
+    };
+
+    const s3Response = await s3.listObjectsV2(params).promise();
+
+    const thumbFiles =
+      (s3Response.Contents || []).filter((file) =>
+        file.Key.includes("/thumb_")
+      );
+
+    const metadataPromises = thumbFiles.map(async (file) => {
+      try {
+        const metadata = await s3
+          .headObject({
+            Bucket: process.env.S3_BUCKET_NAME,
+            Key: file.Key,
+          })
+          .promise();
+
+        const filePhoneNo =
+          metadata.Metadata && metadata.Metadata.phoneno;
 
     const command = new DeleteObjectsCommand({
       Bucket: process.env.S3_BUCKET_NAME,
       Delete: { Objects: objectsToDelete },
     });
 
-    const deleteResponse = await s3.send(command);
+    const allResults = await Promise.all(metadataPromises);
+    const filteredThumbnails = allResults.filter(Boolean);
 
     return res.status(200).json({
       message: "Thumbnail and original image deleted successfully.",
@@ -316,34 +342,6 @@ router.get("/originalImage", async (req, res) => {
   } catch (error) {
     console.error("Error fetching original image:", error);
     return res.status(500).json({ message: "Server error", error: error.message });
-  }
-});
-
-
-//.......remain because page is not used.....
-router.get("/GetFoldersByCustomerId/:customerId", async (req, res) => {
-  try {
-    const { customerId } = req.params;
-
-    // Validate request
-    if (!customerId) {
-      return res.status(400).json({ message: "Customer ID is required" });
-    }
-
-    // Find all folders for the given customerId
-    const folders = await FolderModel.find({ customerId });
-
-    if (folders.length === 0) {
-      return res.status(404).json({
-        message: `No folders found for customer with ID '${customerId}'`,
-      });
-    }
-
-    res
-      .status(200)
-      .json({ message: "Folders retrieved successfully.", folders });
-  } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
   }
 });
 
@@ -656,6 +654,36 @@ router.get("/templates", async (req, res) => {
   } catch (error) {
     console.error("Error fetching templates:", error);
     res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
+// Get single template by ID (full data)
+router.get("/templates/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid template ID" });
+    }
+
+    const template = await TemplateMaster.findById(id);
+
+    if (!template) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Template not found" });
+    }
+
+    return res.status(200).json({ success: true, template });
+  } catch (error) {
+    console.error("Error fetching template by ID:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message
+    });
   }
 });
 

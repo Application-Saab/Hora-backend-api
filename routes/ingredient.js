@@ -145,5 +145,4 @@ router.post('/admin_ingredient_list', async (req, res) => {
     }
 });
 
-
 module.exports = router;

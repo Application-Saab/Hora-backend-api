@@ -10,7 +10,9 @@ const imagePath=__dirname+ "/uploads/";
 // Database Connection Start
 const port = process.env.PORT;
 mongoose.set("strictQuery", true); // optional
-mongoose.connect(`mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASS}@cluster0.mx5lhta.mongodb.net/${process.env.MONGO_DATABASE}?retryWrites=true&w=majority`, { useNewUrlParser: true, useUnifiedTopology: true, autoIndex: false })
+mongoose.connect(
+  `mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASS}@cluster0.mx5lhta.mongodb.net/${process.env.MONGO_DATABASE}?retryWrites=true&w=majority`
+)
 .then(() => console.log('Database Connected data.js'))
 .catch((err) => console.log('Database connection error:', err));
 

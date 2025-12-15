@@ -10,6 +10,8 @@ var _ = require('lodash');
 const AddressModel = require('../models/address');
 const photographyModel = require('../models/photography');
 
+//........... used api ...........
+
 router.post('/add', async (req, res) => {
     const {
         name,
@@ -107,6 +109,50 @@ router.post('/edit', async (req, res) => {
         });
     }
 });
+
+router.get('/searchByTag/:tag', async (req, res) => {
+    const { tag } = req.params;
+
+    try {
+        const photograph = await photographyModel.find({
+            tag: { $in: [tag] }
+        });
+
+        if (photograph.length > 0) {
+            return res.json({
+                error: false,
+                status: 200,
+                message: 'Search Successful',
+                data: photograph
+            });
+        } else {
+            return res.json({
+                error: true,
+                status: 404,
+                message: 'No matching photograph found.'
+            });
+        }
+    } catch (error) {
+        return res.status(400).json({
+            error: true,
+            message: error.message
+        });
+    }
+});
+
+//............. not used ..............
+
+router.get('/details/:id', async (req, res) => {
+    try {
+        const data = await photographyModel.findById(req.params.id).populate({
+            path: "tag"
+        });
+        return res.json({ error: false,status:200, message: 'Details Fetch Successfully', data:data})
+    }
+    catch (error) {
+        res.status(400).json({ message: error.message ,error: true })
+    }
+})
 
 router.post('/update_photography_status', async (req, res) => {
     const { _id, status } = req.body;

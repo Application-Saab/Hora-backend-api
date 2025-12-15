@@ -88,7 +88,6 @@ router.get("/", async (req, res) => {
 });
 
 // Get Badge By EventId
-
 router.get("/event/:eventId", async (req, res) => {
   try {
     const { eventId } = req.params;
@@ -174,7 +173,6 @@ router.post("/disable/:id", async (req, res) => {
 });
 
 // Create Report for Badge
-
 router.post("/report/:id", async (req, res) => {
   try {
     const { id } = req.params;

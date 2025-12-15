@@ -75,7 +75,7 @@ router.post('/update_ingredient_status', async (req, res) => {
         res.status(400).json({ message: error.message,error: true })
     }
 })
-
+// used in admin  fixed
 router.post('/admin_ingredient_list', async (req, res) => {
     try {
         // Filter

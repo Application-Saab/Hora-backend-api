@@ -119,6 +119,7 @@ database.once("connected", () => {
 const AdminRoutes = require("./routes/admin");
 const UserRoutes = require("./routes/user");
 const EventInviteRoutes = require("./routes/createEventInvites");
+const EventChatRoutes = require("./routes/eventChat");
 const EventBadgeRoutes = require("./routes/event-badge");
 const ConfigurationRoutes = require("./routes/configuration");
 const IngredientRoutes = require("./routes/ingredient");
@@ -142,6 +143,7 @@ let passportAuth = require("./store/passportAuth").passportAuth;
 app.use("/api/admin", AdminRoutes);
 app.use("/api/user", UserRoutes);
 app.use("/api/customer/event", EventInviteRoutes);
+app.use("/api/customer/event/chat", EventChatRoutes);
 app.use("/api/users", UserRoutes);
 app.use("/api/configuration", ConfigurationRoutes);
 app.use("/api/ingredient", IngredientRoutes);

@@ -20,16 +20,54 @@ const AWS = require("aws-sdk");
 const cache = new NodeCache({ stdTTL: 60 * 10 }); // Cache TTL: 5 minutes
 const  axios = require ('axios');
 
-// ..................working and tested..................
 
-router.post('/otp_generate', async (req, res) => { 
-    const { phone, device_token, name, role, os } = req.body;
+router.post('/otp_generate_backup', async(req, res) => {
+    const { phone } = req.body;
+    if (!phone) {
+        return res.json({
+            error: true,
+            status: 422,
+            data: [
+                { path: 'phone', message: 'Phone is required.' }
+            ]
+        });
+    }
+    try {
+        const user = await UserModel.find({ phone: req.body.phone });
+        if (user.length > 0) {
+            const otp = commonFunction.OTP();
+            if (otp) {
+                const update = {
+                    otp: otp
+                };
+                var textno = '8952072758'
+                const result = await UserModel.findByIdAndUpdate(user[0]._id, { $set: update });
+                request({
+                    url: 'https://www.fast2sms.com/dev/bulkV2?authorization=' + process.env.FAST2SMS_API_KEY + '&variables_values=' + otp + '&route=otp&numbers=' + textno,
+                    method: 'GET',
+                }, async(response, error) => {
+                    console.log("response>>>>>>>>>>>", response);
+                    console.log("error>>>>>>>>>>>", error);
+                    try {
+                        return res.json({ error: false, status: 200, otp: otp, messgae: 'Otp Send Successfully' })
+                    } catch (error) {
+                        return res.json({ error: true, status: 503, message: error })
+                    }
+                })
+            }
+        } else {
+            return res.json({ error: true, status: 503, message: 'User Not Registered' })
+        }
+    } catch (error) {
+        res.status(400).json({ message: error.message, error: true })
+    }
+})
 
 router.post('/otp_generate', async (req, res) => { 
     const { phone } = req.body;
  
     if (!phone) {
-        return res.status(422).json({
+        return res.json({
             error: true,
             status: 422,
             data: [
@@ -69,13 +107,13 @@ router.post('/otp_generate', async (req, res) => {
         } else { // If user doesn't exist, create a new user
             const newUser = new UserModel({
                 email: '',
-                name,
-                role,
+                name: req.body.name && req.body.name,
+                role: req.body.role,
                 password: '',
                 phone : req.body.phone,
                 os : req.body.os,
                 address: '',
-                otp,
+                otp: otp,
                 avatar: '',
                 referralCode: '',
                 vechicle_type: '',
@@ -120,7 +158,6 @@ router.post('/otp_generate', async (req, res) => {
                 message: 'OTP sent successfully'
             });
         }
-
     } catch (error) {
         return res.status(400).json({
             message: error.message,
@@ -131,24 +168,22 @@ router.post('/otp_generate', async (req, res) => {
 
 router.post('/otp_verify', async (req, res) => {
     const { phone, otp, role } = req.body;
-
-    // Validation checks
     if (!phone) {
-        return res.status(422).json({
+        return res.json({
             error: true,
             status: 422,
             data: [{ path: 'phone', message: 'Phone is required.' }]
         });
     }
     if (!otp) {
-        return res.status(422).json({
+        return res.json({
             error: true,
             status: 422,
             data: [{ path: 'otp', message: 'OTP is required.' }]
         });
     }
     if (!role) {
-        return res.status(422).json({
+        return res.json({
             error: true,
             status: 422,
             data: [{ path: 'role', message: 'Role is required.' }]
@@ -297,7 +332,7 @@ router.get('/user_details', async (req, res) => {
 const sendResponse = (res, status, error, message, data = null) =>
   res.status(status).json({ error, status, message, data });
 
- 
+
 //  Get user details by ID
 router.get("/user-details/:id", async (req, res) => {
   try {
@@ -328,7 +363,6 @@ router.get("/user-details/:id", async (req, res) => {
       "User fetched successfully",
       respData
     );
-
   } catch (err) {
     console.error("Fetch user error:", {
       message: err.message,
@@ -340,6 +374,7 @@ router.get("/user-details/:id", async (req, res) => {
   }
 });
 
+// AWS S3 Configuration
 const s3 = new AWS.S3({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
@@ -473,9 +508,7 @@ function isS3Url(str) {
 // });
 
 
-
 //  Update user details (Name) and also update name in guest models for RSVP
-//fixed
 router.put("/user-details/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -493,9 +526,9 @@ router.put("/user-details/:id", async (req, res) => {
 
     // Update object prepare karo
     let updateData = {};
-    if (name !== undefined) updateData.name = name;
-    if (phone !== undefined) updateData.phone = phone;
-    if (avatar !== undefined) updateData.avatar = avatar;
+    if (name) updateData.name = name;
+    if (phone) updateData.phone = phone;
+    if (avatar) updateData.avatar = avatar;
 
     const updatedUser = await UserModel.findByIdAndUpdate(
       id,
@@ -508,8 +541,8 @@ router.put("/user-details/:id", async (req, res) => {
     }
 
     // 🔥 EXTRA FEATURE: Update name in all EventGuest entries for this user
-    if (name !== undefined) {
-      const EventGuest = require("../models/event-guest"); // SAME rakha, aapne bola change nahi karna!
+    if (name) {
+      const EventGuest = require("../models/event-guest"); // Import lazily to avoid circular deps
 
       await EventGuest.updateMany(
         { userId: id },        
@@ -578,7 +611,7 @@ router.put(
 
       else if (file) {
         if (user.avatar) {
-          const key = extractKey(user.avatar);
+          const key = user.avatar.split(`${process.env.S3_BUCKET_NAME}/`)[1];
           if (key) await deleteFromS3(key);
         }
 
@@ -641,283 +674,22 @@ router.put(
   }
 );
 
-// router.post('/getMealDish', async (req, res) => {
-//   try {
-//     const { cuisineId = [], is_dish } = req.body;
-
-//     let finder = { status: 1 };
-//     let dishfinder = { status: 1 };
-
-//     // Filter by cuisineId if provided
-//     if (Array.isArray(cuisineId) && cuisineId.length > 0) {
-//       dishfinder.cuisineId = { $in: cuisineId.map(id => mongoose.Types.ObjectId(id)) };
-//     }
-
-//     // Filter by is_dish
-//     if (is_dish === 1) {
-//       dishfinder.is_dish = 1;
-//     } else if (is_dish === 2) {
-//       dishfinder.is_dish = { $in: [1, 2] };
-//     }
-
-//     // Cache key based on request body
-//     const cacheKey = `mealDish_${JSON.stringify(req.body)}`;
-//     const cachedData = cache.get(cacheKey);
-//     if (cachedData) {
-//       console.log("Returning cached data:", cacheKey);
-//       return res.json({ ...cachedData, cached: true });
-//     }
-
-//     // Fetch all active meals
-//     const meals = await mealModel.find(finder).exec();
-
-//     const newArray = await Promise.all(
-//       meals.map(async (meal) => {
-//         // Filter dishes by mealId
-//         dishfinder.mealId = { $in: [meal._id] };
-
-//         // Build query safely
-//         let query = dishModel.find(dishfinder);
-
-//         // Only populate if schema has the path
-//         ['special_appliance_id', 'general_appliance_id', 'serving_dish'].forEach(field => {
-//           if (dishModel.schema.path(field)) {
-//             query = query.populate(field, '_id name image');
-//           }
-//         });
-
-//         const dishResponse = await query.exec();
-
-//         return { mealObject: meal, dish: dishResponse };
-//       })
-//     );
-
-//     const responseData = {
-//       error: false,
-//       status: 200,
-//       message: 'Fetch Data Successfully',
-//       data: newArray
-//     };
-
-//     // Save response in cache
-//     cache.put(cacheKey, responseData, 5 * 60 * 1000); // cache for 5 minutes
-
-//     return res.json(responseData);
-//   } catch (error) {
-//     console.error("Error in /getMealDish:", error);
-//     return res.status(500).json({ message: error.message, error: true });
-//   }
-// });
-
-router.post('/getMealDish', async (req, res) => {
-  try {
-    const { cuisineId = [], is_dish } = req.body;
-
-    let finder = { status: 1 };
-    let dishfinder = { status: 1 };
-
-    if (Array.isArray(cuisineId) && cuisineId.length > 0) {
-      dishfinder.cuisineId = { 
-        $in: cuisineId.map(id => new mongoose.Types.ObjectId(id)) 
-      };
-    }
-
-    if (is_dish === 1) {
-      dishfinder.is_dish = 1;
-    } else if (is_dish === 2) {
-      dishfinder.is_dish = { $in: [1, 2] };
-    }
-
-    const meals = await mealModel.find(finder).exec();
-
-    const newArray = await Promise.all(
-      meals.map(async (meal) => {
-        dishfinder.mealId = { $in: [new mongoose.Types.ObjectId(meal._id)] };
-
-        let query = dishModel.find(dishfinder);
-
-        ['special_appliance_id', 'general_appliance_id', 'serving_dish']
-          .forEach(field => {
-            if (dishModel.schema.path(field)) {
-              query = query.populate(field, '_id name image');
-            }
-          });
-
-        const dishResponse = await query.exec();
-        return { mealObject: meal, dish: dishResponse };
-      })
-    );
-
-    return res.json({
-      error: false,
-      status: 200,
-      message: "Fetch Data Successfully",
-      data: newArray
-    });
-
-  } catch (error) {
-    console.error("Error in /getMealDish:", error);
-    return res.status(500).json({ message: error.message, error: true });
-  }
-});
 
 
-
-router.post('/supplier_personal_details_update', async (req, res) => {
+router.post('/user_update', async(req, res) => {
     const id = req.user._id;
-
-    // Prepare updated data cleanly (only keys that exist in req.body)
-    const updatedData = {
-        name: req.body.name,
-        age: req.body.age,
-        vechicle_type: req.body.vechicle_type,
-        city: req.body.city,
-        lat: req.body.lat,
-        lng: req.body.lng,
-        aadhar_no: req.body.aadhar_no,
-        aadhar_front_img: req.body.aadhar_front_img,
-        aadhar_back_img: req.body.aadhar_back_img,
-        avatar: req.body.avatar,
-        userServedLocalities: req.body.userServedLocalities,
-        order_type: req.body.order_type
-    };
-
+    const updatedData = req.body;
+    console.log("updatedData>>>>>>",updatedData);
     const options = { new: true };
-
     try {
-        const result = await UserModel.findByIdAndUpdate(id, updatedData, options);
-
-        return res.json({
-            error: false,
-            status: 200,
-            message: 'Personal Details Updated Successfully',
-            data: result
-        });
-
-    } catch (error) {
-        return res.status(400).json({
-            message: error.message,
-            error: true
-        });
-    }
-});
-
-router.post('/update_resume_profile', async (req, res) => {
-    try {
-        const id = req.user._id;
-
-        const {
-            resume,
-            experience,
-            job_profile,
-            order_type
-        } = req.body;
-
-        const updatedData = {
-            resume,
-            experience,
-            job_profile
-        };
-
-        if (order_type) {
-            updatedData.order_type = order_type;
-        }
-
-        const options = { new: true };
-
         const result = await UserModel.findByIdAndUpdate(
-            id,
-            updatedData,
-            options
-        );
-
-        return res.json({
-            error: false,
-            status: 200,
-            message: 'Resume & Profile Details Updated Successfully',
-            data: result
-        });
-
+            id, updatedData, options
+        )
+        return res.json({ error: false, status: 200, message: 'Updated Successfully', data: result })
     } catch (error) {
-        return res.status(400).json({
-            error: true,
-            message: error.message
-        });
+        res.status(400).json({ message: error.message, error: true })
     }
-});
-
-router.get('/user_details', async (req, res) => {
-    try {
-        const totalPersonalField = 9;
-        const totalProfessionalField = 6;
-
-        let donePersonalField = 0;
-        let doneProfessionalField = 0;
-
-        // Fetch user
-        const data = await UserModel.findById(req.user._id).populate({
-            path: "userServedLocalities",
-            populate: { path: "cityId" }
-        });
-
-        let userResponse = data;
-
-        // Personal fields check
-        const personalFields = [
-            data?.name,
-            data?.avatar,
-            data?.age,
-            data?.vechicle_type,
-            data?.aadhar_no,
-            data?.aadhar_front_img,
-            data?.aadhar_back_img,
-            data?.userServedLocalities?.length > 0 ? true : null,
-            data?.city
-        ];
-
-        personalFields.forEach(field => {
-            if (field !== '' && field !== undefined && field !== null) {
-                donePersonalField++;
-            }
-        });
-
-        userResponse.isPersonalStatus =
-            donePersonalField === totalPersonalField ? 1 : 0;
-
-        // Professional fields check
-        const professionalFields = [
-            data?.resume,
-            data?.experience,
-            data?.job_type,
-            data?.is_veg,
-            data?.userAppliance?.length > 0 ? true : null,
-            data?.userCuisioness?.length > 0 ? true : null
-        ];
-
-        professionalFields.forEach(field => {
-            if (field !== '' && field !== undefined && field !== null) {
-                doneProfessionalField++;
-            }
-        });
-
-        userResponse.isProfessionStatus =
-            doneProfessionalField === totalProfessionalField ? 1 : 0;
-
-        // Keep your existing timeout
-        setTimeout(() => {
-            return res.json({
-                error: false,
-                status: 200,
-                message: 'Details Fetch Successfully',
-                data: data
-            });
-        }, 1000);
-
-    } catch (error) {
-        res.status(400).json({ message: error.message, error: true });
-    }
-});
-
+})
 
 router.post('/supplier_personal_details_update', async (req, res) => {
     const id = req.user._id;
@@ -1135,7 +907,7 @@ router.post('/update_work_details', async(req, res) => {
     } catch (error) {
         res.status(400).json({ message: error.message, error: true })
     }
-});
+})
 
 router.post('/update_cuisioness', async(req, res) => {
     const id = req.user._id;
@@ -1152,7 +924,7 @@ router.post('/update_cuisioness', async(req, res) => {
     } catch (error) {
         res.status(400).json({ message: error.message, error: true })
     }
-});
+})
 
 router.post('/update_special_appliance', async(req, res) => {
     const id = req.user._id;
@@ -1253,49 +1025,6 @@ router.get('/getCityServedLocalityList', async(req, res) => {
     } catch (error) {
         res.status(400).json({ message: error.message, error: true })
     }
-});
-
-router.post('/otp_generate_backup', async(req, res) => {
-    const { phone } = req.body;
-    if (!phone) {
-        return res.json({
-            error: true,
-            status: 422,
-            data: [
-                { path: 'phone', message: 'Phone is required.' }
-            ]
-        });
-    }
-    try {
-        const user = await UserModel.find({ phone: req.body.phone });
-        if (user.length > 0) {
-            const otp = commonFunction.OTP();
-            if (otp) {
-                const update = {
-                    otp: otp
-                };
-                var textno = '8952072758'
-                const result = await UserModel.findByIdAndUpdate(user[0]._id, { $set: update });
-                request({
-                    url: 'https://www.fast2sms.com/dev/bulkV2?authorization=' + process.env.FAST2SMS_API_KEY + '&variables_values=' + otp + '&route=otp&numbers=' + textno,
-                    method: 'GET',
-                }, async(response, error) => {
-                    console.log("response>>>>>>>>>>>", response);
-                    console.log("error>>>>>>>>>>>", error);
-                    try {
-                        return res.json({ error: false, status: 200, otp: otp, messgae: 'Otp Send Successfully' })
-                    } catch (error) {
-                        return res.json({ error: true, status: 503, message: error })
-                    }
-                })
-            }
-        } else {
-            return res.json({ error: true, status: 503, message: 'User Not Registered' })
-        }
-    } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
-    }
-});
-
+})
 
 module.exports = router;

@@ -20,107 +20,7 @@ const s3 = new AWS.S3({
   region: process.env.AWS_REGION,
 });
 
-//........ used api ..........
-
-router.get("/thumbnailsWithinProject", async (req, res) => {
-  try {
-    const { folderName, customerId, vendorId, phoneNo } = req.query;
-
-    if (!folderName || !customerId) {
-      return res
-        .status(400)
-        .json({ message: "Folder Name and Customer ID are required." });
-    }
-
-    // Check for duplicate folder
-    const existingFolder = await FolderModel.findOne({
-      folderName,
-      customerId,
-    });
-
-    if (existingFolder) {
-      return res.status(400).json({
-        message: `Folder with the name '${folderName}' already exists for this customer.`,
-      });
-    }
-
-    // Create and save folder
-    const folder = new FolderModel({ folderName, customerId, vendorId });
-    await folder.save();
-
-    // ⭐ OLD AWS SDK v2 LIST (works in Node 22)
-    const s3Response = await s3.listObjectsV2(params).promise();
-
-    const thumbFiles =
-      (s3Response.Contents || []).filter((file) =>
-        file.Key.includes("/thumb_")
-      );
-
-    const metadataPromises = thumbFiles.map(async (file) => {
-      try {
-        // ⭐ OLD AWS SDK v2 HEAD object
-        const metadata = await s3
-          .headObject({
-            Bucket: process.env.S3_BUCKET_NAME,
-            Key: file.Key,
-          })
-          .promise();
-
-        const filePhoneNo =
-          metadata.Metadata && metadata.Metadata.phoneno;
-
-        if (!phoneNo || filePhoneNo === phoneNo) {
-          return {
-            key: file.Key,
-            url: `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${file.Key}`,
-            phoneNo: filePhoneNo,
-          };
-        }
-      } catch (err) {
-        console.warn(`Metadata fetch failed for ${file.Key}:`, err.message);
-        return null;
-      }
-    });
-
-    const allResults = await Promise.all(metadataPromises);
-    const filteredThumbnails = allResults.filter(Boolean);
-
-    res.status(200).json({ thumbnails: filteredThumbnails });
-  } catch (error) {
-    console.error("Error fetching thumbnails:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
-});
-
-router.get("/templates/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    if (!mongoose.isValidObjectId(id)) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid template ID" });
-    }
-
-    const template = await TemplateMaster.findById(id);
-
-    if (!template) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Template not found" });
-    }
-
-    return res.status(200).json({ success: true, template });
-  } catch (error) {
-    console.error("Error fetching template by ID:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Server error",
-      error: error.message
-    });
-  }
-});
-
+// Create a folder (POST /api/folders)
 router.post("/CreateFolder", async (req, res) => {
   try {
     const { folderName, customerId, vendorId } = req.body;
@@ -153,199 +53,6 @@ router.post("/CreateFolder", async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 });
-
-router.post("/upload", upload.array("files", 300), async (req, res) => {
-  try {
-    const { folderName, customerId, vendorId, phoneNo } = req.body;
-
-    if (!folderName || !customerId) {
-      return res
-        .status(400)
-        .json({ message: "Folder Name and Customer ID are required." });
-    }
-
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ message: "No files were uploaded." });
-    }
-
-    let folderPath = vendorId
-      ? `${folderName}_${customerId}_${vendorId}`
-      : `${folderName}_${customerId}`;
-
-    const uploadPromises = req.files.map(async (file) => {
-      try {
-        const filePath = file.path;
-        const fileName = file.filename;
-
-        const thumbnailPath = `${filePath.replace(
-          /\.(png|jpeg|jpg)$/i,
-          ""
-        )}_thumbnail.webp`;
-
-        console.log(
-          `Processing file: ${fileName} at ${new Date().toLocaleTimeString()}`
-        );
-
-        // Generate thumbnail
-        const thumbnailPromise = generateThumbnail(filePath, thumbnailPath);
-
-        // Upload original file
-        const s3UploadPromise = uploadFileToS3(
-          filePath,
-          fileName,
-          folderPath,
-          phoneNo
-        );
-
-        await thumbnailPromise;
-
-        // Upload thumbnail
-        const thumbFileName = `thumb_${fileName.replace(
-          /\.(png|jpeg|jpg)$/i,
-          ""
-        )}.webp`;
-
-        const s3ThumbPromise = uploadFileToS3(
-          thumbnailPath,
-          thumbFileName,
-          folderPath,
-          phoneNo
-        );
-
-        const [s3Response, s3ThumbResponse] = await Promise.all([
-          s3UploadPromise,
-          s3ThumbPromise,
-        ]);
-
-        // Remove local temp files
-        fs.unlinkSync(filePath);
-        fs.unlinkSync(thumbnailPath);
-
-        return {
-          fileName: file.originalname,
-          fileUrl: s3Response.Location,
-          s3Key: s3Response.Key,
-          thumbnailUrl: s3ThumbResponse.Location,
-          thumbnailKey: s3ThumbResponse.Key,
-        };
-      } catch (error) {
-        console.error(`Error processing ${file.filename}:`, error);
-        return { fileName: file.originalname, error: error.message };
-      }
-    });
-
-    const uploadedFiles = await Promise.all(uploadPromises);
-
-    res.status(201).json({
-      message: "Files uploaded successfully.",
-      files: uploadedFiles,
-    });
-  } catch (error) {
-    console.error("Upload error:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
-});
-
-router.post("/deleteImage", async (req, res) => {
-  try {
-    const { thumbnailKey } = req.body;
-
-    if (!thumbnailKey) {
-      return res.status(400).json({ message: "Thumbnail key is required." });
-    }
-
-    let folderPath = vendorId
-      ? `${folderName}_${customerId}_${vendorId}/`
-      : `${folderName}_${customerId}/`;
-
-    const params = {
-      Bucket: process.env.S3_BUCKET_NAME,
-      Prefix: folderPath.trim(),
-    };
-
-    const s3Response = await s3.listObjectsV2(params).promise();
-
-    const thumbFiles =
-      (s3Response.Contents || []).filter((file) =>
-        file.Key.includes("/thumb_")
-      );
-
-    const metadataPromises = thumbFiles.map(async (file) => {
-      try {
-        const metadata = await s3
-          .headObject({
-            Bucket: process.env.S3_BUCKET_NAME,
-            Key: file.Key,
-          })
-          .promise();
-
-        const filePhoneNo =
-          metadata.Metadata && metadata.Metadata.phoneno;
-
-    const command = new DeleteObjectsCommand({
-      Bucket: process.env.S3_BUCKET_NAME,
-      Delete: { Objects: objectsToDelete },
-    });
-
-    const allResults = await Promise.all(metadataPromises);
-    const filteredThumbnails = allResults.filter(Boolean);
-
-    return res.status(200).json({
-      message: "Thumbnail and original image deleted successfully.",
-      deleted: deleteResponse.Deleted || [],
-      errors: deleteResponse.Errors || [],
-    });
-  } catch (error) {
-    console.error("Error deleting image pair:", error);
-    return res.status(500).json({
-      message: "Server error",
-      error: error.message,
-    });
-  }
-});
-
-router.get("/originalImage", async (req, res) => {
-  try {
-    const { thumbnailKey } = req.query;
-
-    if (!thumbnailKey) {
-      return res.status(400).json({ message: "Thumbnail key is required." });
-    }
-
-    // Extract base file name (remove the 'thumb_' prefix and .webp extension)
-    const baseKey = thumbnailKey.replace("/thumb_", "/").replace(/\.webp$/, "");
-
-    // List objects in the same folder
-    const params = {
-      Bucket: process.env.S3_BUCKET_NAME,
-      Prefix: baseKey, // list all variations of the image
-    };
-
-    const data = await s3.listObjectsV2(params).promise();
-    const Contents = data.Contents || [];
-
-    if (!Contents.length) {
-      return res.status(404).json({ message: "Original image not found" });
-    }
-
-    // Find the original image (skip the .webp one)
-    const originalFile = Contents.find((file) => !file.Key.endsWith(".webp"));
-
-    if (!originalFile) {
-      return res.status(404).json({ message: "Original image not found" });
-    }
-
-    // Construct the original image URL
-    const originalImageUrl = `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${originalFile.Key}`;
-
-    return res.status(200).json({ originalImageUrl });
-  } catch (error) {
-    console.error("Error fetching original image:", error);
-    return res.status(500).json({ message: "Server error", error: error.message });
-  }
-});
-
-//............. not used api ..............
 
 // Delete a folder (DELETE /api/photo/DeleteFolder)
 router.post("/DeleteFolder", async (req, res) => {
@@ -480,6 +187,262 @@ router.post("/UpdateFolder", async (req, res) => {
       .status(200)
       .json({ message: `Folder name updated successfully.`, folder });
   } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
+// Get all folders by customerId (GET /api/folders/:customerId)
+router.get("/GetFoldersByCustomerId/:customerId", async (req, res) => {
+  try {
+    const { customerId } = req.params;
+
+    // Validate request
+    if (!customerId) {
+      return res.status(400).json({ message: "Customer ID is required" });
+    }
+
+    // Find all folders for the given customerId
+    const folders = await FolderModel.find({ customerId });
+
+    if (folders.length === 0) {
+      return res.status(404).json({
+        message: `No folders found for customer with ID '${customerId}'`,
+      });
+    }
+
+    res
+      .status(200)
+      .json({ message: "Folders retrieved successfully.", folders });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
+router.post("/upload", upload.array("files", 300), async (req, res) => {
+  try {
+    const { folderName, customerId, vendorId, phoneNo } = req.body;
+
+    if (!folderName || !customerId) {
+      return res
+        .status(400)
+        .json({ message: "Folder Name and Customer ID are required." });
+    }
+
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ message: "No files were uploaded." });
+    }
+
+    let folderPath = vendorId
+      ? `${folderName}_${customerId}_${vendorId}`
+      : `${folderName}_${customerId}`;
+
+    const uploadPromises = req.files.map(async (file) => {
+      try {
+        const filePath = file.path;
+        const fileName = file.filename;
+
+        const thumbnailPath = `${filePath.replace(
+          /\.(png|jpeg|jpg)$/i,
+          ""
+        )}_thumbnail.webp`;
+
+        console.log(
+          `Processing file: ${fileName} at ${new Date().toLocaleTimeString()}`
+        );
+
+        // Generate thumbnail
+        const thumbnailPromise = generateThumbnail(filePath, thumbnailPath);
+
+        // Upload original file
+        const s3UploadPromise = uploadFileToS3(
+          filePath,
+          fileName,
+          folderPath,
+          phoneNo
+        );
+
+        await thumbnailPromise;
+
+        // Upload thumbnail
+        const thumbFileName = `thumb_${fileName.replace(
+          /\.(png|jpeg|jpg)$/i,
+          ""
+        )}.webp`;
+
+        const s3ThumbPromise = uploadFileToS3(
+          thumbnailPath,
+          thumbFileName,
+          folderPath,
+          phoneNo
+        );
+
+        const [s3Response, s3ThumbResponse] = await Promise.all([
+          s3UploadPromise,
+          s3ThumbPromise,
+        ]);
+
+        // Remove local temp files
+        fs.unlinkSync(filePath);
+        fs.unlinkSync(thumbnailPath);
+
+        return {
+          fileName: file.originalname,
+          fileUrl: s3Response.Location,
+          s3Key: s3Response.Key,
+          thumbnailUrl: s3ThumbResponse.Location,
+          thumbnailKey: s3ThumbResponse.Key,
+        };
+      } catch (error) {
+        console.error(`Error processing ${file.filename}:`, error);
+        return { fileName: file.originalname, error: error.message };
+      }
+    });
+
+    const uploadedFiles = await Promise.all(uploadPromises);
+
+    res.status(201).json({
+      message: "Files uploaded successfully.",
+      files: uploadedFiles,
+    });
+  } catch (error) {
+    console.error("Upload error:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
+router.get("/thumbnailsWithinProject", async (req, res) => {
+  try {
+    const { folderName, customerId, vendorId, phoneNo } = req.query;
+
+    if (!folderName || !customerId) {
+      return res
+        .status(400)
+        .json({ message: "Folder Name and Customer ID are required." });
+    }
+
+    let folderPath = vendorId
+      ? `${folderName}_${customerId}_${vendorId}/`
+      : `${folderName}_${customerId}/`;
+
+    const params = {
+      Bucket: process.env.S3_BUCKET_NAME,
+      Prefix: folderPath.trim(),
+    };
+
+    const s3Response = await s3.listObjectsV2(params).promise();
+
+    const thumbFiles =
+      (s3Response.Contents || []).filter((file) =>
+        file.Key.includes("/thumb_")
+      );
+
+    const metadataPromises = thumbFiles.map(async (file) => {
+      try {
+        const metadata = await s3
+          .headObject({
+            Bucket: process.env.S3_BUCKET_NAME,
+            Key: file.Key,
+          })
+          .promise();
+
+        const filePhoneNo =
+          metadata.Metadata && metadata.Metadata.phoneno;
+
+        if (!phoneNo || filePhoneNo === phoneNo) {
+          return {
+            key: file.Key,
+            url: `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${file.Key}`,
+            phoneNo: filePhoneNo,
+          };
+        }
+      } catch (err) {
+        console.warn(`Metadata fetch failed for ${file.Key}:`, err.message);
+        return null;
+      }
+    });
+
+    const allResults = await Promise.all(metadataPromises);
+    const filteredThumbnails = allResults.filter(Boolean);
+
+    res.status(200).json({ thumbnails: filteredThumbnails });
+  } catch (error) {
+    console.error("Error fetching thumbnails:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
+router.get("/originalImage", async (req, res) => {
+  try {
+    const { thumbnailKey } = req.query;
+
+    if (!thumbnailKey) {
+      return res.status(400).json({ message: "Thumbnail key is required." });
+    }
+
+    // Extract base file name (remove the 'thumb_' prefix and .webp extension)
+    const baseKey = thumbnailKey.replace("/thumb_", "/").replace(/\.webp$/, "");
+
+    // List objects in the same folder
+    const params = {
+      Bucket: process.env.S3_BUCKET_NAME,
+      Prefix: baseKey, // list all variations of the image
+    };
+
+    const data = await s3.listObjectsV2(params).promise();
+    const Contents = data.Contents || [];
+
+    if (!Contents.length) {
+      return res.status(404).json({ message: "Original image not found" });
+    }
+
+    // Find the original image (skip the .webp one)
+    const originalFile = Contents.find((file) => !file.Key.endsWith(".webp"));
+
+    if (!originalFile) {
+      return res.status(404).json({ message: "Original image not found" });
+    }
+
+    // Construct the original image URL
+    const originalImageUrl = `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${originalFile.Key}`;
+
+    return res.status(200).json({ originalImageUrl });
+  } catch (error) {
+    console.error("Error fetching original image:", error);
+    return res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
+router.post("/deleteImage", async (req, res) => {
+  try {
+    const { thumbnailKey } = req.body;
+
+    if (!thumbnailKey) {
+      return res.status(400).json({ message: "Thumbnail key is required." });
+    }
+
+    // Derive the original image key
+    const originalKey = thumbnailKey
+      .replace("/thumb_", "/")
+      .replace(/_thumbnail\.webp$|\.webp$/i, "");
+
+    const objectsToDelete = [{ Key: thumbnailKey }, { Key: originalKey }];
+
+    const params = {
+      Bucket: process.env.S3_BUCKET_NAME,
+      Delete: {
+        Objects: objectsToDelete,
+      },
+    };
+
+    const deleteResponse = await s3.deleteObjects(params).promise();
+
+    res.status(200).json({
+      message: "Thumbnail and original image deleted successfully.",
+      deleted: deleteResponse.Deleted,
+      errors: deleteResponse.Errors,
+    });
+  } catch (error) {
+    console.error("Error deleting image pair:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 });

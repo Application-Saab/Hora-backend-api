@@ -11,7 +11,6 @@ const decorationModel = require('../models/decoration');
 const NodeCache = require('node-cache');
 const cache = new NodeCache({ stdTTL: 60 * 10 }); // Cache TTL: 5 minutes
 
-// ............ not used api ............
 router.post('/add', async (req, res) => {
     const {
         name,
@@ -62,69 +61,6 @@ router.post('/add', async (req, res) => {
     }
 });
 
-router.get('/details/:id', async (req, res) => {
-    try {
-        const result = await decorationModel.findByIdAndUpdate(id, updatedData, options);
-
-        if (result) {
-            return res.json({
-                error: false,
-                status: 200,
-                message: 'Updated Successfully',
-                data: result
-            });
-        } else {
-            return res.json({
-                error: true,
-                status: 404,
-                message: 'Decoration not found.'
-            });
-        }
-    } catch (error) {
-        return res.status(400).json({
-            error: true,
-            message: error.message
-        });
-    }
-    catch (error) {
-        res.status(400).json({ message: error.message, error: true })
-    }
-})
-
-router.post('/update_decoration_status', async (req, res) => {
-    const { _id, status } = req.body;
-
-    if (!_id) {
-        return res.json({
-            error: true,
-            status: 422,
-            data: [
-                { path: '_id', message: 'Id is required.' }
-            ]
-        });
-    }
-
-    try {
-        const decoration = await decorationModel.findById(_id);
-
-        if (decoration) {
-            const update = {
-                status: 0
-            };
-
-            const result = await decorationModel.findByIdAndUpdate(_id, { $set: update });
-
-            return res.json({ error: false, status: 200, message: 'Status Update Successfully' });
-        } else {
-            return res.json({ error: true, status: 404, message: 'Decoration Not Found' });
-        }
-    } catch (error) {
-        res.status(400).json({ error: true, message: error.message });
-    }
-});
-
-//  ............used and tested api ..........
-
 router.post('/edit', async (req, res) => {
     const id = req.body._id;
     const updatedData = req.body;
@@ -152,6 +88,38 @@ router.post('/edit', async (req, res) => {
             error: true,
             message: error.message
         });
+    }
+});
+
+router.post('/update_decoration_status', async (req, res) => {
+    const { _id, status } = req.body;
+
+    if (!_id) {
+        return res.json({
+            error: true,
+            status: 422,
+            data: [
+                { path: '_id', message: 'Id is required.' }
+            ]
+        });
+    }
+
+    try {
+        const decoration = await decorationModel.findById(_id);
+
+        if (decoration) {
+            const update = {
+                status: status
+            };
+
+            const result = await decorationModel.findByIdAndUpdate(_id, { $set: update });
+
+            return res.json({ error: false, status: 200, message: 'Status Update Successfully' });
+        } else {
+            return res.json({ error: true, status: 404, message: 'Decoration Not Found' });
+        }
+    } catch (error) {
+        res.status(400).json({ error: true, message: error.message });
     }
 });
 
@@ -184,6 +152,7 @@ router.get('/searchByName/:name', async (req, res) => {
         });
     }
 });
+
 
 router.get('/searchByTag/:tag', async (req, res) => {
     const { tag } = req.params;
@@ -228,8 +197,12 @@ router.get('/details/:id', async (req, res) => {
         const data = await decorationModel.findById(req.params.id).populate({
             path: "tag"
         });
+        return res.json({ error: false, status: 200, message: 'Details Fetch Successfully', data: data })
     }
-});
+    catch (error) {
+        res.status(400).json({ message: error.message, error: true })
+    }
+})
 
 router.get('/searchByTag/v2/:tag', async (req, res) => {
     const { tag } = req.params;
@@ -244,6 +217,7 @@ router.get('/searchByTag/v2/:tag', async (req, res) => {
     // Step 1: Return Cached Response if exists
     const cachedData = cache.get(cacheKey);
     if (cachedData) {
+        console.log("returning cached data with key " + cacheKey);
         return res.json({
             ...cachedData,
             cached: true
@@ -324,6 +298,9 @@ router.get('/searchByTag/v2/:tag', async (req, res) => {
         });
     }
 });
+
+
+
 
 
 module.exports = router;

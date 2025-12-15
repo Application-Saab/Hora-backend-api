@@ -329,9 +329,8 @@ async function deleteFromS3(key) {
 
 const deleteFileWithRetry = async (filePath, retries = 3, delay = 100) => {
   for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      // await fs.unlink(filePath); 
-      await fs.promises.unlink(filePath);
+    try { 
+      await fs.unlinkSync(filePath);
       console.log(`Successfully deleted file: ${filePath}`);
       return;
     } catch (err) {

@@ -5,33 +5,42 @@ const mongoose = require("mongoose");
 async function computeUnreadCountsForUser(userId) {
   if (!mongoose.Types.ObjectId.isValid(userId)) return {};
 
-  // Convert userId once
   const userObjectId = new mongoose.Types.ObjectId(userId);
 
-  // Find rooms where user is member
-  const rooms = await ChatRoom.find({ members: userObjectId }).lean();
+  // UPDATED QUERY members.userId
+  const rooms = await ChatRoom.find({ "members.userId": userObjectId }).lean();
+  // const rooms = await ChatRoom.find({ members: userObjectId }).lean();
 
   const counts = {};
 
   await Promise.all(
     rooms.map(async (room) => {
-      const roomId = room._id;
+      const groupId = room._id;
+
+      // Handle Map vs Object
       const lastReadMap = room.lastReadAt || {};
 
-      // lastReadAt stored as Map or object
-      const lastReadForUser =
-        lastReadMap.get?.(String(userId)) || lastReadMap[String(userId)];
+      let lastReadForUser = null;
+
+      if (typeof lastReadMap.get === "function") {
+        // When not using .lean()
+        lastReadForUser = lastReadMap.get(String(userId));
+      } else {
+        // lean() converts Map to plain object
+        lastReadForUser = lastReadMap[String(userId)];
+      }
 
       const since = lastReadForUser ? new Date(lastReadForUser) : new Date(0);
 
-      const q = {
-        roomId: roomId,
+      const query = {
+        // roomId: groupId,
+        groupId: groupId,
         senderId: { $ne: userObjectId },
         createdAt: { $gt: since },
       };
 
-      const c = await ChatMessage.countDocuments(q);
-      counts[String(roomId)] = c;
+      const count = await ChatMessage.countDocuments(query);
+      counts[String(groupId)] = count;
     })
   );
 

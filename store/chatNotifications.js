@@ -2,6 +2,7 @@ const webpush = require("web-push");
 const PushSub = require("../models/pushSubscription");
 const admin = require("firebase-admin");
 const serviceAccount = require("../wonderlandServices.json");
+const ChatRoom = require("../models/eventChatRoom");
 require("dotenv").config();
 
 if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
@@ -71,30 +72,38 @@ async function sendToFcmToken(fcmToken, payloadObj) {
   }
 }
 
-// send to all subs for a room (either web-push or fcm tokens)
-async function sendPushToRoom(roomId, messageText, options = {}) {
-  // subs stored may include web push subscription docs and optionally fcm tokens linked to user
+async function sendPushToRoom(groupId, messageText, options = {}) {
+  // get room + members
+  const room = await ChatRoom.findById(groupId).lean();
+  if (!room) return;
+
+  const memberUserIds = room.members.map(m => String(m.userId));
+
+  // get only those subscriptions whose userId is in room members
   const subs = await PushSub.find({
-    $or: [{ roomId }, { roomId: null }],
+    userId: { $in: memberUserIds },
   }).lean();
 
   const payloadBase = {
-    title: options.title || `New message in ${options.roomName || "room"}`,
+    title: options.title || room.roomName || "New message",
     body: options.body || String(messageText).slice(0, 120),
     icon: options.icon || "",
-    data: Object.assign({ roomId: String(roomId) }, options.data || {}),
+    data: {
+      groupId: String(groupId),
+      ...(options.data || {}),
+    }
   };
 
+  // send
   const promises = subs.map(async (s) => {
-    // if this doc contains fcmToken field (we store that option), send via FCM
     if (s.fcmToken) {
       return sendToFcmToken(s.fcmToken, payloadBase);
     }
-    // else webpush subscription object
     return sendToWebPushSubscription(s, payloadBase);
   });
 
   return Promise.all(promises);
 }
+
 
 module.exports = { sendPushToRoom, sendToWebPushSubscription, sendToFcmToken };

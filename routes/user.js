@@ -257,8 +257,9 @@ router.post('/otp_verify', async (req, res) => {
     }
 });
 
-router.get('/user_details', async (req, res) => {
+router.get('/user_details/:id', async (req, res) => {
     try {
+        let { id } = req.params;
         const totalPersonalField = 9;
         const totalProfessionalField = 6;
 
@@ -266,7 +267,7 @@ router.get('/user_details', async (req, res) => {
         let doneProfessionalField = 0;
 
         // Fetch user
-        const data = await UserModel.findById(req.user._id).populate({
+        const data = await UserModel.findById(id).populate({
             path: "userServedLocalities",
             populate: { path: "cityId" }
         });
@@ -676,8 +677,8 @@ router.put(
 
 
 
-router.post('/user_update', async(req, res) => {
-    const id = req.user._id;
+router.post('/user_update/:id', async(req, res) => {
+    const { id } = req.params;
     const updatedData = req.body;
     console.log("updatedData>>>>>>",updatedData);
     const options = { new: true };
@@ -691,8 +692,8 @@ router.post('/user_update', async(req, res) => {
     }
 })
 
-router.post('/supplier_personal_details_update', async (req, res) => {
-    const id = req.user._id;
+router.post('/supplier_personal_details_update/:id', async (req, res) => {
+      let { id } = req.params;
 
     // Prepare updated data cleanly (only keys that exist in req.body)
     const updatedData = {
@@ -730,8 +731,8 @@ router.post('/supplier_personal_details_update', async (req, res) => {
     }
 });
 
-router.post('/supplier_professional_details_update', async(req, res) => {
-    const id = req.user._id;
+router.post('/supplier_professional_details_update/:id', async(req, res) => {
+      let { id } = req.params;
     const updatedData = {};
     updatedData.userAppliance = req.body.userAppliance;
     updatedData.userRestaurant = req.body.userRestaurant;
@@ -803,7 +804,8 @@ router.post('/supplier_professional_details_update', async(req, res) => {
 //     }
 // })
 
-router.get('/my_account', async(req, res) => {
+router.get('/my_account/:id', async(req, res) => {
+    let { id } = req.params;
     try {
         var responseObject={
             resumeProfilePercentage:0,
@@ -811,7 +813,7 @@ router.get('/my_account', async(req, res) => {
             worksPercentage:0,
             appliancePercentage:0,
         }
-        const data = await UserModel.findById(req.user._id);
+        const data = await UserModel.findById(id);
         const totalResumeProfileField = 3;const totalCuisinesField = 2;const totalWorksField = 1;const totalHandsApplianceField = 1;
         var doneResumeProfileField = 0; var doneCuisinesField = 0; var doneWorksField = 0; var doneHandsApplianceField = 0;
         // Count 1
@@ -851,7 +853,7 @@ router.get('/my_account', async(req, res) => {
 
 router.post('/update_resume_profile', async (req, res) => {
     try {
-        const id = req.user._id;
+        const id = req.body._id;
 
         const {
             resume,
@@ -893,8 +895,8 @@ router.post('/update_resume_profile', async (req, res) => {
     }
 });
 
-router.post('/update_work_details', async(req, res) => {
-    const id = req.user._id;
+router.post('/update_work_details/:id', async(req, res) => {
+    const id = req.params.id;
     const updatedData = {};
     updatedData.job_type = req.body.job_type;
     updatedData.userRestaurant = req.body.userRestaurant;
@@ -909,8 +911,8 @@ router.post('/update_work_details', async(req, res) => {
     }
 })
 
-router.post('/update_cuisioness', async(req, res) => {
-    const id = req.user._id;
+router.post('/update_cuisioness/:id', async(req, res) => {
+    const id = req.params.id;
     const updatedData = {};
     updatedData.is_veg = req.body.is_veg;
     updatedData.userCuisioness = req.body.userCuisioness;
@@ -926,8 +928,8 @@ router.post('/update_cuisioness', async(req, res) => {
     }
 })
 
-router.post('/update_special_appliance', async(req, res) => {
-    const id = req.user._id;
+router.post('/update_special_appliance/:id', async(req, res) => {
+    const id = req.params.id;
     const updatedData = {};
     updatedData.userAppliance = req.body.userAppliance;
     const options = { new: true };

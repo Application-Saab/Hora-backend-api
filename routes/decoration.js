@@ -241,22 +241,40 @@ router.get('/searchByTag/v2/:tag', async (req, res) => {
 
     try {
         // Step 3: Build Sort Criteria Safely (Fixing undefined error)
-        let sortOrder =
-            sortBy === 'asc' ? 1 :
-            sortBy === 'desc' ? -1 :
-            null;
+        // let sortOrder =
+        //     sortBy === 'asc' ? 1 :
+        //     sortBy === 'desc' ? -1 :
+        //     null;
 
-        let sortCriteria;
+        // let sortCriteria;
 
-        if (sortOrder !== null) {
-            if (priceFilter === 'all' || priceFilter === 'All' || query.price !== undefined || query.price !== null) {
-                sortCriteria = { popularity_score: -1, price: sortOrder };
-            } else {
-                sortCriteria = { price: sortOrder, popularity_score: -1 };
-            }
-        } else {
-            sortCriteria = { popularity_score: -1 };
-        }
+        // if (sortOrder !== null) {
+        //     if (priceFilter === 'all' || priceFilter === 'All' || query.price !== undefined || query.price !== null) {
+        //         sortCriteria = { popularity_score: -1, price: sortOrder };
+        //     } else {
+        //         sortCriteria = { price: sortOrder, popularity_score: -1 };
+        //     }
+        // } else {
+        //     sortCriteria = { popularity_score: -1 };
+        // }
+        // Step 3: Build Sort Criteria Safely (FIXED)
+let sortOrder =
+    sortBy === 'asc' ? 1 :
+    sortBy === 'desc' ? -1 :
+    null;
+
+let sortCriteria;
+
+if (sortOrder !== null) {
+    if (query.price !== undefined && query.price !== null) {
+        sortCriteria = { popularity_score: -1, price: sortOrder };
+    } else {
+        sortCriteria = { price: sortOrder, popularity_score: -1 };
+    }
+} else {
+    sortCriteria = { popularity_score: -1 };
+}
+
 
         // Step 4: Execute Query Safely
         const decorationsQuery = decorationModel

@@ -302,7 +302,7 @@ router.get('/searchByTag/v2/:tag', async (req, res) => {
 });
 
 //get decoration by name and all orders individual product actual images 
-router.get('/:name/orders', async (req, res) => {
+router.get('/decorations/:name/orders', async (req, res) => {
   try {
     const { name } = req.params;
 

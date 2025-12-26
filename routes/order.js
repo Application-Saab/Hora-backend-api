@@ -15,6 +15,7 @@ const photographyModel = require('../models/photography')
 // Load the full build.
 var _ = require('lodash');
 const AddressModel = require('../models/address');
+const mongoose = require('mongoose');
 
 
 //................used api ..................
@@ -3045,6 +3046,77 @@ router.get('/order_details_photography/:id', async (req, res) => {
             message: error?.message || "Something went wrong"
         });
     }
+});
+
+// PUT /api/order/updateImageTags  (images on website, not on the website)
+router.put("/updateImageTags", async (req, res) => {
+  try {
+    const { orderId, images } = req.body;
+
+    if (!orderId || !Array.isArray(images)) {
+      return res.status(400).json({
+        error: true,
+        status: 400,
+        message: "orderId and images array are required",
+      });
+    }
+
+    const order = await orderModel.findOne({ order_id: orderId });
+    if (!order) {
+      return res.status(404).json({
+        error: true,
+        status: 404,
+        message: "Order not found",
+      });
+    }
+
+    // map frontend images by image name (SAFE)
+    const tagMap = new Map();
+    images.forEach(img => {
+      if (img.image) {
+        tagMap.set(img.image, img.is_tagged);
+      }
+    });
+
+    order.userOrderDishImageArray = order.userOrderDishImageArray.map(dbImg => {
+
+      if (typeof dbImg === "string") {
+        if (tagMap.has(dbImg)) {
+          return {
+            id: new mongoose.Types.ObjectId(),
+            image: dbImg,
+            is_tagged: tagMap.get(dbImg)
+          };
+        }
+        return dbImg;
+      }
+
+      if (dbImg.image && tagMap.has(dbImg.image)) {
+        return {
+          ...dbImg,
+          is_tagged: tagMap.get(dbImg.image)
+        };
+      }
+
+      return dbImg;
+    });
+
+    await order.save();
+
+    return res.status(200).json({
+      error: false,
+      status: 200,
+      message: "Image tag updated successfully",
+      data: order.userOrderDishImageArray,
+    });
+
+  } catch (err) {
+    return res.status(500).json({
+      error: true,
+      status: 500,
+      message: err.message,
+    });
+  }
 });
 
 module.exports = router;

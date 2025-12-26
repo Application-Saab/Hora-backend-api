@@ -10,6 +10,8 @@ const AddressModel = require('../models/address');
 const decorationModel = require('../models/decoration');
 const NodeCache = require('node-cache');
 const cache = new NodeCache({ stdTTL: 60 * 10 }); // Cache TTL: 5 minutes
+const path = require("path");
+const fs = require("fs");
 
 router.post('/add', async (req, res) => {
     const {
@@ -299,9 +301,115 @@ router.get('/searchByTag/v2/:tag', async (req, res) => {
     }
 });
 
+//get decoration by name and all orders individual product actual images 
+router.get('/decorations/:name/orders', async (req, res) => {
+  try {
+    const { name } = req.params;
+
+    const decoration = await decorationModel.findOne({
+      name: { $regex: new RegExp(name, 'i') }
+    }).lean();
+
+    if (!decoration) {
+      return res.status(404).json({
+        error: true,
+        status: 404,
+        message: 'Decoration not found'
+      });
+    }
+
+    // Find orders that include this decoration
+    const orders = await orderModel.find({
+      $or: [
+        { items: decoration._id },
+        { items: decoration._id.toString() },
+        { "items.itemId": decoration._id },
+        { "items.itemId": decoration._id.toString() }
+      ],
+      userOrderDishImageArray: { $exists: true, $ne: [] }
+    })
+      .select('_id order_id order_date userOrderDishImageArray')
+      .lean();
+
+    // Normalize images: convert strings to objects, keep objects as-is
+    const updatedOrders = orders.map(order => {
+      const images = order.userOrderDishImageArray.map(img => {
+        if (typeof img === 'string') {
+          return {
+            image: img,
+            is_tagged: false,
+          };
+        }
+        return {
+          ...img,
+        };
+      });
+
+      return {
+        ...order,
+        userOrderDishImageArray: images
+      };
+    });
+
+    return res.json({
+      error: false,
+      status: 200,
+      message: 'Decoration details fetched successfully',
+      data: {
+        decoration,
+        orders: updatedOrders // will be empty array if no orders exist
+      }
+    });
+
+  } catch (err) {
+    return res.status(500).json({
+      error: true,
+      status: 500,
+      message: err.message
+    });
+  }
+});
+
+// delete images by iamge name 
+router.post("/delete-image", async (req, res) => {
+  try {
+    const { imageName } = req.body;
+    if (!imageName) {
+      return res.status(400).json({ message: "Image name is required" });
+    }
+
+    const filePath = path.join(process.cwd(), "uploads", imageName);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    const r1 = await orderModel.collection.updateMany(
+      { userOrderDishImageArray: imageName },
+      { $pull: { userOrderDishImageArray: imageName } }
+    );
+
+    const r2 = await orderModel.collection.updateMany(
+      { "userOrderDishImageArray.image": imageName },
+      { $pull: { userOrderDishImageArray: { image: imageName } } }
+    );
+
+    return res.json({ 
+      success: true,
+      message: "Image deleted from server & database",
+      imageName,
+      modifiedCount: (r1.modifiedCount || 0) + (r2.modifiedCount || 0)
+    });
+
+  } catch (err) {
+    console.error("DELETE IMAGE ERROR", err);
+    return res.status(500).json({
+      message: "Error deleting image",
+      error: err.message
+    });
+  }
+});
 
 
 
 
 module.exports = router;
-

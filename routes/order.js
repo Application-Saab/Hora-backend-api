@@ -16,6 +16,8 @@ const photographyModel = require('../models/photography')
 var _ = require('lodash');
 const AddressModel = require('../models/address');
 const mongoose = require('mongoose');
+const path = require("path");
+const fs = require("fs"); 
 
 router.post('/add_backup1', async(req, res) => {
     const otp = commonFunction.OTP();
@@ -2418,6 +2420,53 @@ router.put("/edit-call-checklist/:orderId", async (req, res) => {
   } catch (error) {
     console.error("Error updating checklist:", error);
     return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// DELETE TEH UPLOAD CALLCHECKLIST IMAGE 
+router.post("/delete-callchecklist-image", async (req, res) => {
+  try {
+    const { orderId, imageName, itemKey } = req.body;
+
+    if (!orderId || !imageName || !itemKey) {
+      return res.status(400).json({ message: "orderId, imageName and itemKey are required" });
+    }
+
+    //  Delete file from uploads folder
+    const filePath = path.join(process.cwd(), "uploads", imageName);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    // Remove image from itemsVerifiedImages in MongoDB
+    const order = await orderModel.findById(orderId);
+    if (!order || !order.call_checklist?.itemsVerifiedImages) {
+      return res.status(404).json({ message: "Order or checklist not found" });
+    }
+
+    const images = order.call_checklist.itemsVerifiedImages[itemKey] || [];
+    const updatedImages = images.filter(img => img !== imageName);
+
+    // Important: Update and markModified
+    order.call_checklist.itemsVerifiedImages[itemKey] = updatedImages;
+    order.markModified('call_checklist.itemsVerifiedImages');
+
+    await order.save();
+
+    return res.json({
+      success: true,
+      message: "Image deleted successfully from checklist & server",
+      orderId,
+      itemKey,
+      imageName
+    });
+
+  } catch (err) {
+    console.error("DELETE CALL CHECKLIST IMAGE ERROR", err);
+    return res.status(500).json({
+      message: "Error deleting image",
+      error: err.message
+    });
   }
 });
 

@@ -2282,7 +2282,148 @@ router.put("/updateImageTags", async (req, res) => {
       message: err.message,
     });
   }
+}); 
+// SAVE CALL CHECKLIST (POST API)
+router.post("/save-call-checklist", async (req, res) => {
+  try {
+    const { orderId, call_checklist, eventName } = req.body;
+
+    const call_checklist_exists = true;
+
+    const {
+      designType = {},
+      ...orderChecklist
+    } = call_checklist;
+
+    const updatedOrder = await orderModel.findByIdAndUpdate(
+      orderId,
+      {
+        $set: {
+          call_checklist: orderChecklist,
+          eventName,
+          call_checklist_exists
+        }
+      },
+      { new: true }
+    );
+
+    if (updatedOrder?.items?.length) {
+      await Promise.all(
+        updatedOrder.items.map(itemId =>
+          decorationModel.findByIdAndUpdate(
+            itemId,
+            {
+              $set: {
+                designType,
+              }
+            },
+            { new: true }
+          )
+        )
+      );
+    }
+
+    res.json({
+      success: true,
+      message: "Call checklist saved. Decoration fields updated successfully."
+    });
+
+  } catch (error) {
+    console.error("Error saving checklist:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
 });
+
+// EDIT CALL CHECKLIST (PUT API)
+router.put("/edit-call-checklist/:orderId", async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { eventName, call_checklist } = req.body;
+
+    if (!orderId) {
+      return res.status(400).json({ success: false, message: "Order ID is required" });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      return res.status(400).json({ success: false, message: "Invalid Order ID" });
+    }
+
+    // Fetch existing order
+    const existingOrder = await orderModel.findById(orderId);
+    if (!existingOrder) {
+      return res.status(404).json({ success: false, message: "Order not found" });
+    }
+
+    // Merge checklist fields
+    const updatedChecklist = { ...existingOrder.call_checklist };
+
+    if (call_checklist) {
+      // Merge designType
+      if (call_checklist.designType) {
+        updatedChecklist.designType = {
+          ...updatedChecklist.designType,
+          ...call_checklist.designType
+        };
+      }
+      // Merge other checklist fields (booleans, etc.)
+      Object.keys(call_checklist).forEach(key => {
+        if (!["designType"].includes(key)) {
+          updatedChecklist[key] = call_checklist[key];
+        }
+      });
+    }
+
+    // Update the order
+    const updatedOrder = await orderModel.findByIdAndUpdate(
+      orderId,
+      { 
+        $set: { 
+          call_checklist: updatedChecklist,
+          eventName: eventName || existingOrder.eventName
+        } 
+      },
+      { new: true }
+    );
+
+    // Update decorations for each item
+    if (updatedOrder.items?.length) {
+      const decorationUpdateFields = {};
+      if (call_checklist?.designType) decorationUpdateFields.designType = call_checklist.designType;
+     
+      await Promise.all(
+        updatedOrder.items.map(itemId => {
+          if (mongoose.Types.ObjectId.isValid(itemId)) {
+            return decorationModel.findByIdAndUpdate(
+              itemId,
+              { $set: decorationUpdateFields },
+              { new: true }
+            );
+          } else {
+            console.warn(`Invalid itemId skipped: ${itemId}`);
+            return null;
+          }
+        })
+      );
+    }
+
+    return res.json({
+      success: true,
+      message: "Call checklist and decorations updated successfully",
+      data: updatedOrder,
+    });
+
+  } catch (error) {
+    console.error("Error updating checklist:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+
+
+
 
 module.exports = router;
 

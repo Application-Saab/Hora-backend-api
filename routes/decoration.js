@@ -301,7 +301,8 @@ router.get('/searchByTag/v2/:tag', async (req, res) => {
     }
 });
 
-router.get('/order_details_decoration_all/:name', async (req, res) => {
+//get decoration by name and all orders individual product actual images 
+router.get('/:name/orders', async (req, res) => {
   try {
     const { name } = req.params;
 
@@ -369,6 +370,7 @@ router.get('/order_details_decoration_all/:name', async (req, res) => {
   }
 });
 
+// delete images by iamge name 
 router.post("/delete-image", async (req, res) => {
   try {
     const { imageName } = req.body;
@@ -411,4 +413,3 @@ router.post("/delete-image", async (req, res) => {
 
 
 module.exports = router;
-

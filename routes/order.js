@@ -2213,7 +2213,7 @@ router.get('/order_details_photography/:id', async (req, res) => {
     }
 });
 
-// PUT /api/order/updateImageTags
+// PUT /api/order/updateImageTags  (images on website, not on the website)
 router.put("/updateImageTags", async (req, res) => {
   try {
     const { orderId, images } = req.body;

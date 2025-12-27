@@ -54,7 +54,7 @@ const photographySchema = new mongoose.Schema({
     ],
     tag : [{
         type: mongoose.Schema.Types.ObjectId,
-        ref: "meal"
+        ref: "meals"
     }],
     duration: { type : String, default : '' },
     advance_amount : { type : String, default : '' },

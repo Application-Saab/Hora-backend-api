@@ -15,13 +15,17 @@ webpush.setVapidDetails(
 );
 
 try {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    projectId: "wonderland-hora",
-  });
+  admin.initializeApp(
+    {
+      credential: admin.credential.cert(serviceAccount),
+    },
+    "app2"
+  );
+
 } catch (e) {
   console.warn("Firebase admin init error", e);
 }
+
 
 async function sendToWebPushSubscription(subscriptionDoc, payloadObj) {
   try {
@@ -64,7 +68,7 @@ async function sendToFcmToken(fcmToken, payloadObj) {
         payload: { aps: { sound: "default" } },
       },
     };
-    const res = await admin.messaging().send(message);
+    const res = await admin.app("app2").messaging().send(message);
     return { ok: true, result: res };
   } catch (err) {
     console.error("FCM send error", err);

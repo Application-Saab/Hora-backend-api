@@ -1,10 +1,16 @@
 require('dotenv').config();
 const admin = require('firebase-admin');
 const serviceAccount = require("../serviceAccount.json");
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
-  });
+try {
+  admin.initializeApp(
+    {
+      credential: admin.credential.cert(serviceAccount),
+    },
+    "app1"
+  );
+
+} catch (e) {
+  console.warn("Firebase admin init error", e);
 }
 
 const notificationModel = require('../models/notifications');
@@ -27,7 +33,7 @@ exports.sendNotifications = function(deviceToken, user_id, title, MsgBody, ID, T
     }
   };
 
-  return admin.messaging().send(message)
+  return admin.app("app1").messaging().send(message)
     .then(function(response) {
       var data = new notificationModel({
         title: title,
@@ -44,4 +50,3 @@ exports.sendNotifications = function(deviceToken, user_id, title, MsgBody, ID, T
       // throw error;
     });
 };
-

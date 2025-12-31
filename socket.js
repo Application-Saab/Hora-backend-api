@@ -8,8 +8,9 @@ let ioInstance = null;
 
 function initSocket(server) {
   const io = new Server(server, {
+    path: "/socket.io",
     cors: {
-      origin: "http://localhost:3000",
+      origin: ["https://horaservices.com", "http://localhost:3000"],
       methods: ["GET", "POST"],
       credentials: true,
     },

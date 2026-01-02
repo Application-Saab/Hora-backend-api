@@ -206,100 +206,98 @@ router.get('/details/:id', async (req, res) => {
     }
 })
 
-router.get('/searchByTag/v2/:tag', async (req, res) => {
-    const { tag } = req.params;
-    const limit = parseInt(req.query.limit) || 10;
-    const page = parseInt(req.query.page) || 1;
-    const priceFilter = req.query.priceFilter;
-    const sortBy = req.query.sortBy;
-    const theme = req.query.theme;
+router.get("/searchByTag/v2/:tag", async (req, res) => {
+  const { tag } = req.params;
+  const limit = parseInt(req.query.limit) || 10;
+  const page = parseInt(req.query.page) || 1;
+  const priceFilter = req.query.priceFilter;
+  const sortBy = req.query.sortBy;
+  const theme = req.query.theme;
 
-    const cacheKey = `search_${tag}_${limit}_${page}_${priceFilter}_${sortBy}_${theme}`;
+  const cacheKey = `search_${tag}_${limit}_${page}_${priceFilter}_${sortBy}_${theme}`;
 
-    // Step 1: Return Cached Response if exists
-    const cachedData = cache.get(cacheKey);
-    if (cachedData) {
-        console.log("returning cached data with key " + cacheKey);
-        return res.json({
-            ...cachedData,
-            cached: true
-        });
-    }
+  // Step 1: Return Cached Response if exists
+  const cachedData = cache.get(cacheKey);
+  if (cachedData) {
+    console.log("returning cached data with key " + cacheKey);
+    return res.json({
+      ...cachedData,
+      cached: true,
+    });
+  }
 
-    const query = { tag }; 
+  const query = { tag };
 
-    if (priceFilter === 'under2000') {
-        query.price = { $lt: 2000 };
-    } else if (priceFilter === '2000to5000') {
-        query.price = { $gte: 2000, $lte: 5000 };
-    } else if (priceFilter === 'above5000') {
-        query.price = { $gt: 5000 };
-    }
+  if (priceFilter === "under2000") {
+    query.price = { $lt: 2000 };
+  } else if (priceFilter === "2000to5000") {
+    query.price = { $gte: 2000, $lte: 5000 };
+  } else if (priceFilter === "above5000") {
+    query.price = { $gt: 5000 };
+  }
 
-    if (theme && theme !== 'all') {
-        const formattedThemeFilter = theme.toLowerCase().split('-')[0];
-        query.name = { $regex: formattedThemeFilter, $options: 'i' };
-    }
+  if (theme && theme !== "all") {
+    const formattedThemeFilter = theme.toLowerCase().split("-")[0];
+    query.name = { $regex: formattedThemeFilter, $options: "i" };
+  }
 
-    try {
-        // Step 3: Build Sort Criteria Safely (Fixing undefined error)
-        let sortOrder =
-            sortBy === 'asc' ? 1 :
-            sortBy === 'desc' ? -1 :
-            null;
+  try {
+    // Step 3: Build Sort Criteria Safely (FIXED)
+    let sortOrder = sortBy === "asc" ? 1 : sortBy === "desc" ? -1 : null;
 
-        let sortCriteria;
+    const sortCriteria =
+      sortOrder !== null
+        ? priceFilter == "all" ||
+          priceFilter == "All" ||
+          query.price != null ||
+          query.price != undefined
+          ? { popularity_score: -1, price: sortOrder }
+          : { price: sortOrder, popularity_score: -1 }
+        : { popularity_score: -1 };
 
-        if (sortOrder !== null) {
-            if (priceFilter === 'all' || priceFilter === 'All' || query.price !== undefined || query.price !== null) {
-                sortCriteria = { popularity_score: -1, price: sortOrder };
-            } else {
-                sortCriteria = { price: sortOrder, popularity_score: -1 };
-            }
-        } else {
-            sortCriteria = { popularity_score: -1 };
-        }
+    // Step 4: Execute Query Safely
+    const decorationsQuery = decorationModel
+      .find(query)
+      .collation({ locale: "en", numericOrdering: true })
+      .sort(sortCriteria)
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean();
 
-        // Step 4: Execute Query Safely
-        const decorationsQuery = decorationModel
-            .find(query)
-            .collation({ locale: "en", numericOrdering: true })
-            .sort(sortCriteria)
-            .skip((page - 1) * limit)
-            .limit(limit)
-            .lean(); 
+    const [decorations, totalDecorations] = await Promise.all([
+      decorationsQuery,
+      decorationModel.countDocuments(query),
+    ]);
 
-        const [decorations, totalDecorations] = await Promise.all([
-            decorationsQuery,
-            decorationModel.countDocuments(query)
-        ]);
+    const response = {
+      error: false,
+      status: 200,
+      ok: "ok",
+      message:
+        decorations.length > 0
+          ? "Search Successful"
+          : "No matching decorations found.",
+      data: decorations,
+      pagination: {
+        totalItems: totalDecorations,
+        totalPages: Math.ceil(totalDecorations / limit),
+        currentPage: page,
+        limit,
+      },
+    };
 
-        const response = {
-            error: false,
-            status: 200,
-            ok: "ok",
-            message: decorations.length > 0 ? 'Search Successful' : 'No matching decorations found.',
-            data: decorations,
-            pagination: {
-                totalItems: totalDecorations,
-                totalPages: Math.ceil(totalDecorations / limit),
-                currentPage: page,
-                limit
-            }
-        };
+    // Step 5: Save to Cache
+    cache.set(cacheKey, response);
 
-        // Step 5: Save to Cache
-        cache.set(cacheKey, response);
-
-        return res.json(response);
-
-    } catch (error) {
-        return res.status(500).json({
-            error: true,
-            message: 'Server Error: ' + error.message
-        });
-    }
+    return res.json(response);
+  } catch (error) {
+    return res.status(500).json({
+      error: true,
+      message: "Server Error: " + error.message,
+    });
+  }
 });
+
 
 //get decoration by name and all orders individual product actual images 
 router.get('/decorations/:name/orders', async (req, res) => {

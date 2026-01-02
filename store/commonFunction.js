@@ -198,69 +198,97 @@ const Order = require('../models/order'); // adjust path as needed
 const Decoration = require('../models/decoration');
 const { default: mongoose } = require('mongoose');
 
+
+let popularityJobRunning = false;
+
 exports.updateDecorationPopularity = async () => {
-    try {
-        await Decoration.updateMany({}, { popularity_score: -100000 })
-        // Step 1: Fetch all completed orders (order_status = 3)
-        const completedOrders = await Order.find({ order_status: { $in: [1, 2, 3, 5, 6] } });
+  if (popularityJobRunning) {
+    console.warn("Popularity job already running, skipping...");
+    return;
+  }
 
-        const usageMap = {};
-        try {
+  popularityJobRunning = true;
+  console.time("PopularityJob");
 
-            // Step 2: Count how many times each decoration ID appears in orders
-            completedOrders.forEach(order => {
-                if (Array.isArray(order.items)) {
-                    order.items.forEach(itemId => {
-                        if (mongoose.Types.ObjectId.isValid(itemId)) {
-                            const idStr = String(itemId);
-                            usageMap[idStr] = (usageMap[idStr] || 0) + 1;
-                        } else if (itemId.item_id && mongoose.Types.ObjectId.isValid(itemId.item_id)) {
-                            const idStr = String(itemId.item_id);
-                            usageMap[idStr] = (usageMap[idStr] || 0) + 1;
-                        } else {
-                            console.error(`Invalid MongoDB ObjectId: ${JSON.stringify(itemId)} in order: ${order._id}`);
-                        }
-                    });
-                }
-            });
+  try {
+    // Reset popularity scores safely
+    await Decoration.updateMany({}, { $set: { popularity_score: -100000 } });
 
-        } catch (error) {
-        console.log('Error:', error);
-        }
-        // Step 3: Calculate popularity score and update each decoration
-        const decorationIds = Object.keys(usageMap);
+    // Fetch valid orders
+    const orders = await Order.find(
+      { order_status: { $in: [1, 2, 3, 5, 6] } },
+      { items: 1 }
+    ).lean();
 
-        const now = new Date();
+    const usageMap = {};
 
-        for (const id of decorationIds) {
-            try {
-                
-                console.log(JSON.stringify(id,null,4))
-                const decoration = await Decoration.findById(id);
-                if (!decoration || !decoration.createdAt) {
-                    console.log(`Decoration not found: ${id}`);
-                    continue;
-                }
-                
-                
-                const createdAt = new Date(decoration.createdAt);
-            const diffInTime = now.getTime() - createdAt.getTime();
-            const ageInDays = Math.floor(diffInTime / (1000 * 60 * 60 * 24));
-            
-            const orderCount = usageMap[id];
-            const score = (500 + (orderCount * 300)) - (ageInDays * 5);
-            const popularity_score = score // Ensure no negative scores
-            console.log(`${id}: orderCount=${orderCount}, ageInDays=${ageInDays}, score=${score}, popularity_score=${popularity_score}`)
-            await Decoration.findByIdAndUpdate(id, { popularity_score });
-        } catch (error) {
-        console.error(`Error updating decoration ${id}: ${error.message}`);
-        }
-        }
+    // SAFE ID extractor
+    const extractDecorationId = (item) => {
+      if (!item) return null;
 
-        console.log('? Popularity scores updated without date libraries.');
-    } catch (err) {
-        console.error('? Error updating popularity scores:', err);
+      if (mongoose.Types.ObjectId.isValid(item)) return String(item);
+      if (item.item_id && mongoose.Types.ObjectId.isValid(item.item_id))
+        return String(item.item_id);
+      if (item._id && mongoose.Types.ObjectId.isValid(item._id))
+        return String(item._id);
+
+      return null;
+    };
+
+    // Count usage
+    for (const order of orders) {
+      if (!Array.isArray(order.items)) continue;
+
+      for (const item of order.items) {
+        const id = extractDecorationId(item);
+        if (!id) continue;
+
+        usageMap[id] = (usageMap[id] || 0) + 1;
+      }
     }
-};
 
-// 2100 - 500 - 2245 
+    const decorationIds = Object.keys(usageMap);
+    const BATCH_SIZE = 25;
+    const now = Date.now();
+
+    // Batch + parallel update
+    for (let i = 0; i < decorationIds.length; i += BATCH_SIZE) {
+      const batch = decorationIds.slice(i, i + BATCH_SIZE);
+
+      await Promise.allSettled(
+        batch.map(async (id) => {
+          try {
+            if (!mongoose.Types.ObjectId.isValid(id)) return;
+
+            const decoration = await Decoration.findById(id)
+              .select("createdAt")
+              .lean();
+
+            if (!decoration?.createdAt) return;
+
+            const ageInDays = Math.floor(
+              (now - new Date(decoration.createdAt).getTime()) / 86400000
+            );
+
+            const orderCount = usageMap[id];
+            const score = 500 + orderCount * 300 - ageInDays * 5;
+
+            await Decoration.updateOne(
+              { _id: id },
+              { $set: { popularity_score: Math.max(score, 0) } }
+            );
+          } catch (err) {
+            console.error(`Popularity update failed for ${id}`, err.message);
+          }
+        })
+      );
+    }
+
+    console.log("Decoration popularity updated successfully");
+  } catch (err) {
+    console.error("Popularity job failed", err);
+  } finally {
+    popularityJobRunning = false;
+    console.timeEnd("PopularityJob");
+  }
+};

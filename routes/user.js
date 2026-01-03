@@ -335,43 +335,33 @@ const sendResponse = (res, status, error, message, data = null) =>
 
 
 //  Get user details by ID
+// Updated
 router.get("/user-details/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Validate ObjectId
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return sendResponse(res, 400, true, "Invalid user id");
     }
 
-    // Fetch user
-    const user = await UserModel.findById(id).lean();
+    const user = await UserModel.findById(id)
+      .select("name phone avatar")
+      .lean();
+
     if (!user) {
       return sendResponse(res, 404, true, "User not found");
     }
-
-    const respData = {
-      _id: user._id,
-      name: user.name ?? "",
-      phone: user.phone ?? "",
-      avatar: user.avatar ?? "",
-    };
 
     return sendResponse(
       res,
       200,
       false,
       "User fetched successfully",
-      respData
+      user
     );
   } catch (err) {
-    console.error("Fetch user error:", {
-      message: err.message,
-      stack: err.stack,
-      eventId: req.params.id,
-    });
-
-    return sendResponse(res, 500, true, `Server error: ${err.message}`);
+    console.error("Fetch user error:", err.message);
+    return sendResponse(res, 500, true, "Server error");
   }
 });
 
@@ -456,58 +446,6 @@ function isS3Url(str) {
   );
   return regex.test(str);
 }
-
-
-// Update user details by id
-// router.put("/user-details/:id", async (req, res) => {
-//   try {
-//     const { id } = req.params;
-
-//     if (!mongoose.Types.ObjectId.isValid(id)) {
-//       return sendResponse(res, 400, true, "Invalid user id");
-//     }
-
-//     const { name, phone, avatar } = req.body;
-
-//     // Agar kuch bhi update fields nahi bheji
-//     if (!name && !phone && !avatar) {
-//       return sendResponse(res, 400, true, "No fields provided to update");
-//     }
-
-//     // Update object prepare karo
-//     let updateData = {};
-//     if (name) updateData.name = name;
-//     if (phone) updateData.phone = phone;
-//     if (avatar) updateData.avatar = avatar;
-
-//     const updatedUser = await UserModel.findByIdAndUpdate(
-//       id,
-//       { $set: updateData },
-//       { new: true, lean: true }
-//     );
-
-//     if (!updatedUser) {
-//       return sendResponse(res, 404, true, "User not found");
-//     }
-
-//     let respData = {
-//       name: updatedUser.name,
-//       _id: updatedUser._id,
-//       phone: updatedUser.phone,
-//       avatar: updatedUser.avatar,
-//     };
-
-//     return sendResponse(res, 200, false, "User updated successfully", respData);
-//   } catch (err) {
-//     console.error("Update user error:", {
-//       message: err.message,
-//       stack: err.stack,
-//       userId: req.params.id,
-//     });
-//     return sendResponse(res, 500, true, `Server error ${err.message}`);
-//   }
-// });
-
 
 //  Update user details (Name) and also update name in guest models for RSVP
 router.put("/user-details/:id", async (req, res) => {

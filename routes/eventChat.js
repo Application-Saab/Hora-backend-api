@@ -16,77 +16,109 @@ router.post("/create-direct-room", async (req, res) => {
   try {
     const { members, eventId } = req.body;
 
-    if (!members || !Array.isArray(members) || members.length !== 2) {
-      return res.status(400).send({
+    // Validation
+    if (!Array.isArray(members) || members.length !== 2) {
+      return res.status(400).json({
         success: false,
         message: "Direct chat must contain exactly 2 userIds.",
       });
     }
 
-    const [userId1, userId2] = members;
+    // Normalize + sort (for uniqueness)
+    const memberIds = members.map(String).sort();
+    const [userId1, userId2] = memberIds;
 
+    if (
+      !mongoose.Types.ObjectId.isValid(userId1) ||
+      !mongoose.Types.ObjectId.isValid(userId2)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid userId",
+      });
+    }
+
+    // directKey
+    const directKey = `direct::${eventId || "global"}::${userId1}_${userId2}`;
+
+    // Fast existing check
     const existingRoom = await ChatRoom.findOne({
       roomType: "direct",
-      "members.userId": { $all: [userId1, userId2] },
-      $expr: { $eq: [{ $size: "$members" }, 2] },
-    });
+      directKey,
+    }).lean();
 
     if (existingRoom) {
-      return res.status(200).send({
+      return res.status(200).json({
         success: true,
         message: "Direct room already exists",
         room: existingRoom,
       });
     }
 
-    // Fetch details from User DB for both users
-    const user1 = await User.findById(userId1);
-    const user2 = await User.findById(userId2);
+    // Fetch both users in one query
+    const users = await User.find({
+      _id: { $in: memberIds },
+    }).lean();
 
-    if (!user1 || !user2) {
-      return res.status(404).send({
+    if (users.length !== 2) {
+      return res.status(404).json({
         success: false,
         message: "One or both users not found",
       });
     }
 
-    const membersArr = [
-      {
-        userId: user1._id,
-        name: user1.name || "",
-        phone: user1.phone || "",
-        profileImageUrl: user1.avatar || "",
-      },
-      {
-        userId: user2._id,
-        name: user2.name || "",
-        phone: user2.phone || "",
-        profileImageUrl: user2.avatar || "",
-      },
-    ];
-
-    // create new room
-    const newRoom = new ChatRoom({
-      roomName: `${user1.name || "User"} & ${user2.name || "User"}`,
-      createdBy: userId1,
-      roomType: "direct",
-      members: membersArr,
-      eventId,
+    // Map users
+    const userMap = {};
+    users.forEach((u) => {
+      userMap[String(u._id)] = u;
     });
 
-    const savedRoom = await newRoom.save();
+    const membersArr = memberIds.map((id) => {
+      const u = userMap[id];
+      return {
+        userId: u._id,
+        name: u.name || "",
+        phone: u.phone || "",
+        profileImageUrl: u.avatar || "",
+      };
+    });
 
-    return res.status(200).send({
+    // Create room
+    const newRoom = await ChatRoom.create({
+      roomType: "direct",
+      directKey,
+      eventId,
+      createdBy: members[0], // starter user (frontend order)
+      roomName: `${userMap[userId1].name || "User"} & ${
+        userMap[userId2].name || "User"
+      }`,
+      members: membersArr,
+    });
+
+    return res.status(200).json({
       success: true,
       message: "Direct chat room created successfully",
-      data: savedRoom,
+      data: newRoom,
     });
   } catch (error) {
-    console.error("Create Direct Room Error:", error);
+    // Handle duplicate race condition safely
+    if (error.code === 11000) {
+      const room = await ChatRoom.findOne({
+        roomType: "direct",
+        directKey: error.keyValue?.directKey,
+      }).lean();
 
-    return res.status(500).send({
+      return res.status(200).json({
+        success: true,
+        message: "Direct room already exists",
+        room,
+      });
+    }
+
+    console.error("Create Direct Room Error:", error);
+    return res.status(500).json({
       success: false,
-      message: error.message,
+      message: "Server error",
     });
   }
 });
@@ -100,12 +132,23 @@ router.get("/chatrooms/user/:userId", async (req, res) => {
       return sendResponse(res, 400, true, "Invalid user ID");
     }
 
-    // updated query for new members schema
-    const rooms = await ChatRoom.find({ "members.userId": userId })
-      .select(
-        "roomId eventId roomName members createdAt roomProfileUrl roomType"
-      )
-      .lean();
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
+    const rooms = await ChatRoom.find(
+      { "members.userId": userObjectId },
+      {
+        roomId: 1,
+        eventId: 1,
+        roomName: 1,
+        members: 1,
+        createdAt: 1,
+        roomProfileUrl: 1,
+        roomType: 1,
+      }
+    )
+      .sort({ createdAt: -1 })
+      .lean()
+      .hint({ "members.userId": 1 });
 
     return sendResponse(res, 200, false, "Rooms fetched successfully", rooms);
   } catch (err) {
@@ -122,8 +165,8 @@ router.get("/chatrooms/user/:userId", async (req, res) => {
 router.get("/messages/:groupId", async (req, res) => {
   try {
     const { groupId } = req.params;
-    const limit = parseInt(req.query.limit) || 10000; // default 10000 messages
-    const page = parseInt(req.query.page) || 1; // page number
+    const limit = parseInt(req.query.limit) || 10000;
+    const page = parseInt(req.query.page) || 1;
 
     if (!mongoose.Types.ObjectId.isValid(groupId)) {
       return sendResponse(res, 400, true, "Invalid room ID");

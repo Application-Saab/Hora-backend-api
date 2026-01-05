@@ -691,57 +691,6 @@ router.post('/supplier_professional_details_update/:id', async(req, res) => {
     }
 })
 
-// router.post('/getMealDish', async(req, res) => {
-//     let finder = { status: 1 };
-//     let dishfinder = { status: 1 };
-//     if (req.body.cuisineId.length>0) {
-//         dishfinder[`cuisineId`] = {
-//            $in: []
-//         };
-//         req.body.cuisineId.forEach(item => dishfinder[`cuisineId`].$in.push(
-//             new ObjectId(item))
-//         );
-//     }
-//     if (req.body.is_dish == 1) { 
-//         dishfinder[`is_dish`] = 1 
-//     }else if(req.body.is_dish == 2){
-//         dishfinder[`is_dish`] = {
-//             $in: [1,2]
-//          }
-//     }else{
-//         delete dishfinder[`is_dish`];
-//     }
-//     console.log("dishfinder>>>>",dishfinder);
-//     try {
-//         var newArray=[];
-//         var i = 0;
-//         mealModel.find(finder).exec((err, students) => {
-//             console.log("students>>>>>>>",students);
-//             async.eachSeries(students, function (rec2, loop2){
-//                 let responseobject={};
-//                 dishfinder['mealId']=new ObjectId(rec2._id);
-//                 responseobject.mealObject=rec2;
-//                 (async () => {
-//                     await dishModel.find(dishfinder).exec(function(err, dishResponse) {
-//                         responseobject.dish=dishResponse;
-//                         loop2();
-//                         i = i + 1;
-//                     });
-//                 })();
-//                 newArray.push(responseobject);
-//             }, function(errSelPro) {
-//                 if(errSelPro){
-//                     return res.json({ error: true, status: 503, message: errSelPro })  
-//                 }else{
-//                     return res.json({ error: false, status: 200, message: 'Fetch Data Successfully', data: newArray })
-//                 }
-//             })
-//         });
-//     } catch (error) {
-//         res.status(400).json({ message: error.message, error: true })
-//     }
-// })
-
 router.get('/my_account/:id', async(req, res) => {
     let { id } = req.params;
     try {

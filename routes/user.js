@@ -335,43 +335,33 @@ const sendResponse = (res, status, error, message, data = null) =>
 
 
 //  Get user details by ID
+// Updated
 router.get("/user-details/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Validate ObjectId
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return sendResponse(res, 400, true, "Invalid user id");
     }
 
-    // Fetch user
-    const user = await UserModel.findById(id).lean();
+    const user = await UserModel.findById(id)
+      .select("name phone avatar")
+      .lean();
+
     if (!user) {
       return sendResponse(res, 404, true, "User not found");
     }
-
-    const respData = {
-      _id: user._id,
-      name: user.name ?? "",
-      phone: user.phone ?? "",
-      avatar: user.avatar ?? "",
-    };
 
     return sendResponse(
       res,
       200,
       false,
       "User fetched successfully",
-      respData
+      user
     );
   } catch (err) {
-    console.error("Fetch user error:", {
-      message: err.message,
-      stack: err.stack,
-      eventId: req.params.id,
-    });
-
-    return sendResponse(res, 500, true, `Server error: ${err.message}`);
+    console.error("Fetch user error:", err.message);
+    return sendResponse(res, 500, true, "Server error");
   }
 });
 
@@ -456,58 +446,6 @@ function isS3Url(str) {
   );
   return regex.test(str);
 }
-
-
-// Update user details by id
-// router.put("/user-details/:id", async (req, res) => {
-//   try {
-//     const { id } = req.params;
-
-//     if (!mongoose.Types.ObjectId.isValid(id)) {
-//       return sendResponse(res, 400, true, "Invalid user id");
-//     }
-
-//     const { name, phone, avatar } = req.body;
-
-//     // Agar kuch bhi update fields nahi bheji
-//     if (!name && !phone && !avatar) {
-//       return sendResponse(res, 400, true, "No fields provided to update");
-//     }
-
-//     // Update object prepare karo
-//     let updateData = {};
-//     if (name) updateData.name = name;
-//     if (phone) updateData.phone = phone;
-//     if (avatar) updateData.avatar = avatar;
-
-//     const updatedUser = await UserModel.findByIdAndUpdate(
-//       id,
-//       { $set: updateData },
-//       { new: true, lean: true }
-//     );
-
-//     if (!updatedUser) {
-//       return sendResponse(res, 404, true, "User not found");
-//     }
-
-//     let respData = {
-//       name: updatedUser.name,
-//       _id: updatedUser._id,
-//       phone: updatedUser.phone,
-//       avatar: updatedUser.avatar,
-//     };
-
-//     return sendResponse(res, 200, false, "User updated successfully", respData);
-//   } catch (err) {
-//     console.error("Update user error:", {
-//       message: err.message,
-//       stack: err.stack,
-//       userId: req.params.id,
-//     });
-//     return sendResponse(res, 500, true, `Server error ${err.message}`);
-//   }
-// });
-
 
 //  Update user details (Name) and also update name in guest models for RSVP
 router.put("/user-details/:id", async (req, res) => {
@@ -752,57 +690,6 @@ router.post('/supplier_professional_details_update/:id', async(req, res) => {
         res.status(400).json({ message: error.message, error: true })
     }
 })
-
-// router.post('/getMealDish', async(req, res) => {
-//     let finder = { status: 1 };
-//     let dishfinder = { status: 1 };
-//     if (req.body.cuisineId.length>0) {
-//         dishfinder[`cuisineId`] = {
-//            $in: []
-//         };
-//         req.body.cuisineId.forEach(item => dishfinder[`cuisineId`].$in.push(
-//             new ObjectId(item))
-//         );
-//     }
-//     if (req.body.is_dish == 1) { 
-//         dishfinder[`is_dish`] = 1 
-//     }else if(req.body.is_dish == 2){
-//         dishfinder[`is_dish`] = {
-//             $in: [1,2]
-//          }
-//     }else{
-//         delete dishfinder[`is_dish`];
-//     }
-//     console.log("dishfinder>>>>",dishfinder);
-//     try {
-//         var newArray=[];
-//         var i = 0;
-//         mealModel.find(finder).exec((err, students) => {
-//             console.log("students>>>>>>>",students);
-//             async.eachSeries(students, function (rec2, loop2){
-//                 let responseobject={};
-//                 dishfinder['mealId']=new ObjectId(rec2._id);
-//                 responseobject.mealObject=rec2;
-//                 (async () => {
-//                     await dishModel.find(dishfinder).exec(function(err, dishResponse) {
-//                         responseobject.dish=dishResponse;
-//                         loop2();
-//                         i = i + 1;
-//                     });
-//                 })();
-//                 newArray.push(responseobject);
-//             }, function(errSelPro) {
-//                 if(errSelPro){
-//                     return res.json({ error: true, status: 503, message: errSelPro })  
-//                 }else{
-//                     return res.json({ error: false, status: 200, message: 'Fetch Data Successfully', data: newArray })
-//                 }
-//             })
-//         });
-//     } catch (error) {
-//         res.status(400).json({ message: error.message, error: true })
-//     }
-// })
 
 router.get('/my_account/:id', async(req, res) => {
     let { id } = req.params;

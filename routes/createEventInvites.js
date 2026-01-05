@@ -57,6 +57,7 @@ const sendResponse = (res, status, error, message, data = null) =>
   res.status(status).json({ error, status, message, data });
 
 // Combined route: Create event + register host as guest + create new room
+// Updated
 router.post("/create-event-invite", async (req, res) => {
   try {
     const {
@@ -69,105 +70,88 @@ router.post("/create-event-invite", async (req, res) => {
       googleMapLink,
     } = req.body;
 
-    // Generate wonderland_id
-    const lastWonderlandId = await EventInvite.findOne()
-      .sort({ wonderland_id: -1 })
-      .select("wonderland_id");
-
-    const nextWonderlandId =
-      lastWonderlandId && lastWonderlandId.wonderland_id
-        ? Number(lastWonderlandId.wonderland_id) + 1
-        : 2206;
-
-    // Count user’s existing events
-    const existingEventsCount = await EventInvite.countDocuments({ userId });
-
-    // If first event, update user name from hostName
-    let user = await User.findById(userId);
-    if (existingEventsCount === 0 && hostName) {
-      if (user) {
-        user.name = hostName;
-        await user.save();
-      }
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return sendResponse(res, 400, true, "Invalid userId");
     }
 
-    // Create event
-    const eventInvite = new EventInvite({
+    // Parallel Fetch
+    const [user, counter] = await Promise.all([
+      User.findById(userId),
+      TicketCounter.findOneAndUpdate(
+        { _id: "wonderland_event_id" },
+        { $inc: { sequenceValue: 1 } },
+        { new: true, upsert: true }
+      ),
+    ]);
+
+    if (!user) {
+      return sendResponse(res, 404, true, "User not found");
+    }
+
+    // User name logic
+    if (!user.name && hostName) {
+      user.name = hostName;
+      await user.save();
+    }
+
+    const finalUserName = user.name || hostName || "";
+
+    // Create event invite
+    const event = await EventInvite.create({
       userId,
       eventType,
-      hostName,
-      eventDate: eventDate ? new Date(eventDate) : "",
+      hostName: hostName,
+      eventDate: eventDate ? new Date(eventDate) : null,
       eventTime,
       location,
-      wonderland_id: Number(nextWonderlandId),
       googleMapLink,
+      wonderland_id: counter.sequenceValue,
     });
 
-    // Save event
-    const savedInvite = await eventInvite.save();
-
-    // Check if host already exists as a guest for this event
-    const existingGuest = await EventGuest.findOne({
-      userId,
-      eventId: savedInvite._id,
-    });
-
-    // Determine which name to use for guest
-    let guestNameToUse = "";
-    if (existingEventsCount === 0 && hostName) {
-      guestNameToUse = hostName;
-    } else if (user && user.name) {
-      guestNameToUse = user.name;
-    }
-
-    // Create guest entry with RSVP = "will Come" if not already exists
-    if (!existingGuest) {
-      const guest = new EventGuest({
+    try {
+      // Create host to as guest
+      await EventGuest.create({
         userId,
-        eventId: savedInvite._id,
-        name: guestNameToUse,
+        eventId: event._id,
+        name: finalUserName,
         rsvpStatus: "will Come",
         isHost: true,
       });
-      savedGuest = await guest.save();
+
+      // Create chat room according to event
+      await ChatRoom.create({
+        eventId: event._id,
+        roomName: hostName,
+        createdBy: userId,
+        members: [
+          {
+            userId,
+            name: finalUserName,
+            phone: user.phone,
+            profileImageUrl: user.avatar,
+          },
+        ],
+      });
+    } catch (innerErr) {
+      // If any one operation will fails
+      await Promise.all([
+        EventGuest.deleteMany({ eventId: event._id }),
+        ChatRoom.deleteMany({ eventId: event._id }),
+        EventInvite.findByIdAndDelete(event._id),
+      ]);
+
+      throw innerErr;
     }
 
-    // Create chat room for the event
-    const newRoom = new ChatRoom({
-      eventId: savedInvite._id,
-      roomName: hostName,
-      createdBy: userId,
-      members: [
-        {
-          userId: userId,
-          name: guestNameToUse,
-          phone: user.phone,
-          profileImageUrl: user.avatar,
-        },
-      ],
-    });
-
-    await newRoom.save();
-
-    // Final response
-    return sendResponse(
-      res,
-      201,
-      false,
-      "Event created & host registered as guest",
-      savedInvite
-    );
+    return sendResponse(res, 201, false, "Event created successfully", event);
   } catch (err) {
-    console.error("Create Invite+Guest Error:", {
-      message: err.message,
-      stack: err.stack,
-      requestBody: req.body,
-    });
+    console.error("Create Event Error:", err);
     return sendResponse(res, 500, true, "Server error");
   }
 });
 
 // Fetch event details by eventId(_id)
+// Updated
 router.get("/event-invites/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -176,40 +160,25 @@ router.get("/event-invites/:id", async (req, res) => {
       return sendResponse(res, 400, true, "Invalid event ID");
     }
 
-    const invite = await EventInvite.findById(id).lean();
+    const invite = await EventInvite.findById(id)
+      .select(
+        "userId eventType hostName eventDate eventTime location googleMapLink externalTemplateImageUrl"
+      )
+      .lean();
+
     if (!invite) {
       return sendResponse(res, 404, true, "Event invite not found");
     }
-
-    const userId = invite.userId;
-    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
-      return sendResponse(
-        res,
-        400,
-        true,
-        "Invalid or missing user ID in event invite"
-      );
-    }
-
-    const eventImage = await EventImages.findOne({
-      eventId: id,
-      userId,
-    }).lean();
-    const luckyDrawImages = eventImage
-      ? eventImage.luckyDrawImages.sort(
-          (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-        )
-      : [];
 
     return sendResponse(
       res,
       200,
       false,
-      "Event invite and lucky draw images fetched successfully",
-      { ...invite, luckyDraws: luckyDrawImages }
+      "Event invite fetched successfully",
+      invite
     );
   } catch (err) {
-    console.error("Fetch Invite and Lucky Draw Images Error:", {
+    console.error("Fetch Invite Error:", {
       message: err.message,
       stack: err.stack,
       eventId: req.params.id,
@@ -219,6 +188,7 @@ router.get("/event-invites/:id", async (req, res) => {
 });
 
 // Fetch all event invites for a user as a guest or host
+// Updated
 router.get("/event-invites/all/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
@@ -227,36 +197,82 @@ router.get("/event-invites/all/:userId", async (req, res) => {
       return sendResponse(res, 400, true, "Invalid user ID");
     }
 
-    // Fetch all events hosted by user
-    const hostedEvents = await EventInvite.find({ userId }).lean();
+    const userObjectId = new mongoose.Types.ObjectId(userId);
 
-    // Fetch all guest entries by user
-    const guestEntries = await EventGuest.find({ userId }).lean();
+    const events = await EventInvite.aggregate([
+      // Hosted events
+      {
+        $match: {
+          userId: userObjectId,
+          hostName: { $exists: true, $ne: "" },
+        },
+      },
+      {
+        $addFields: {
+          eventRole: "host",
+        },
+      },
 
-    const guestEventIds = guestEntries.map((guest) => guest.eventId.toString());
-    const hostedEventIds = hostedEvents.map((event) => event._id.toString());
+      // Combine with guest events
+      {
+        $unionWith: {
+          coll: "eventguests",
+          pipeline: [
+            {
+              $match: {
+                userId: userObjectId,
+              },
+            },
+            {
+              $lookup: {
+                from: "eventinvites",
+                localField: "eventId",
+                foreignField: "_id",
+                as: "event",
+              },
+            },
+            { $unwind: "$event" },
+            {
+              $match: {
+                "event.hostName": { $exists: true, $ne: "" },
+              },
+            },
+            {
+              $replaceRoot: {
+                newRoot: {
+                  $mergeObjects: ["$event", { eventRole: "guest" }],
+                },
+              },
+            },
+          ],
+        },
+      },
 
-    // Fetch event details for guest entries (excluding those that user hosted)
-    const asAGuestEvents = await EventInvite.find({
-      _id: { $in: guestEventIds.filter((id) => !hostedEventIds.includes(id)) },
-    }).lean();
+      // Remoce duplicates if same event is already exists as host
+      {
+        $group: {
+          _id: "$_id",
+          doc: { $first: "$$ROOT" },
+        },
+      },
+      { $replaceRoot: { newRoot: "$doc" } },
 
-    // Filter only valid events
-    const isValidEvent = (event) => event.hostName;
+      // Sorting for latest first
+      { $sort: { createdAt: -1 } },
 
-    const filteredHosted = (hostedEvents || []).filter(isValidEvent);
-    const filteredGuest = (asAGuestEvents || []).filter(isValidEvent);
+      // projection only required fields in response
+      {
+        $project: {
+          hostName: 1,
+          eventDate: 1,
+          eventRole: 1,
+        },
+      },
+    ]);
 
-    return sendResponse(res, 200, false, "Events fetched successfully", {
-      hostedEvents: filteredHosted,
-      asAGuestEvents: filteredGuest,
-    });
+    return sendResponse(res, 200, false, "Events fetched successfully", events);
   } catch (err) {
-    console.error("Fetch Events Error:", {
-      message: err.message,
-      stack: err.stack,
-      userId: req.params.userId,
-    });
+    console.error("Fetch Events Error:", err);
     return sendResponse(res, 500, true, "Server error");
   }
 });
@@ -339,7 +355,7 @@ router.post("/event-guest", async (req, res) => {
       return sendResponse(res, 422, true, "Validation failed", details);
     }
 
-    const { userId, eventId, name, rsvpStatus } = value;
+    const { userId, eventId, name, rsvpStatus, phone } = value;
 
     // Check for existing guest with same userId and eventId
     const existingGuest = await EventGuest.findOne({ userId, eventId }).lean();
@@ -373,76 +389,88 @@ router.post("/event-guest", async (req, res) => {
 });
 
 //  Get all Guest details by event and user id for a particular event
+// Updated
 router.get("/event-guest/:eventId/user/:userId", async (req, res) => {
   try {
     const { eventId, userId } = req.params;
 
     // Validate eventId and userId
-    if (!mongoose.Types.ObjectId.isValid(eventId)) {
-      return sendResponse(res, 400, true, "Invalid event ID");
-    }
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return sendResponse(res, 400, true, "Invalid user ID");
+    if (
+      !mongoose.Types.ObjectId.isValid(eventId) ||
+      !mongoose.Types.ObjectId.isValid(userId)
+    ) {
+      return sendResponse(res, 400, true, "Invalid eventId or userId");
     }
 
-    // Find the guest details by userId and eventId
-    const guest = await EventGuest.findOne({ userId, eventId }).lean();
+    // Query to get details
+    const guest = await EventGuest.findOne(
+      { eventId, userId },
+      {
+        userId: 1,
+        eventId: 1,
+        name: 1,
+        phone: 1,
+        rsvpStatus: 1,
+        isHost: 1,
+      }
+    ).lean();
+
     if (!guest) {
       return sendResponse(
         res,
         200,
         false,
         "User not registered to this event",
-        []
+        null
       );
     }
-
-    // Find lucky draw images for the user and event
-    const eventImage = await EventImages.findOne({ eventId, userId }).lean();
-    const luckyDrawImages = eventImage
-      ? eventImage.luckyDrawImages.sort(
-          (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-        )
-      : [];
 
     return sendResponse(
       res,
       200,
       false,
-      "User details and lucky draw images fetched successfully",
-      { ...guest, luckyDraws: luckyDrawImages }
+      "Guest details fetched successfully",
+      guest
     );
   } catch (err) {
-    console.error("Fetch User and Lucky Draw Images Error:", {
-      message: err.message,
-      stack: err.stack,
-      eventId: req.params.eventId,
-      userId: req.params.userId,
-    });
+    console.error("Fetch Event Guest Error:", err.message);
     return sendResponse(res, 500, true, "Server error");
   }
 });
 
 // Get all guests details for an event by eventId
+// Updated
 router.get("/event-guests/all/:eventId", async (req, res) => {
   try {
     const { eventId } = req.params;
+
+    // Validate eventId
     if (!mongoose.Types.ObjectId.isValid(eventId)) {
       return sendResponse(res, 400, true, "Invalid event ID");
     }
 
-    const guests = await EventGuest.find({ eventId }).lean();
-    if (!guests || guests.length === 0) {
-      return sendResponse(res, 404, true, "No guests found for this event");
-    }
+    // Get guest using projection to limit fields
+    const guests = await EventGuest.find(
+      { eventId },
+      {
+        name: 1,
+        rsvpStatus: 1,
+        isHost: 1,
+        userId: 1,
+        eventId: 1,
+        phone: 1,
+      }
+    ).lean();
 
-    return sendResponse(res, 200, false, "Guests fetched successfully", guests);
+    return sendResponse(
+      res,
+      200,
+      false,
+      "Guests fetched successfully",
+      guests || []
+    );
   } catch (err) {
-    console.error("Fetch Guests Error:", {
-      message: err.message,
-      stack: err.stack,
-      eventId: req.params.eventId,
-    });
+    console.error("Fetch Guests Error:", err.message);
     return sendResponse(res, 500, true, "Server error");
   }
 });
@@ -493,7 +521,7 @@ router.put("/event-guest", async (req, res) => {
     }
 
     // Update guest & user name
-    if (name !== undefined) {
+    if (name !== undefined && name !== "" && user.name !== name) {
       updatedGuest.name = name;
       user.name = name;
       await user.save();
@@ -885,6 +913,11 @@ router.put(
         existing.externalTemplateImageUrl = uploadResult.Location;
         existing.externalTemplateImageKey = uploadResult.Key;
         existing.templateId = null;
+
+        await ChatRoom.findOneAndUpdate(
+          { eventId },
+          { roomProfileUrl: uploadResult.Location }
+        );
 
         // Cleanup local files with retry
         await Promise.all([

@@ -206,10 +206,6 @@ router.post('/otp_verify', async (req, res) => {
                 });
             }
 
-            // Check account status
-            if (user.status === 0) {
-                return res.status(503).json({ error: true, status: 503, message: 'Account Blocked' });
-            }
             if (user.status === 2) {
                 return res.status(503).json({ error: true, status: 503, message: 'Account Deleted' });
             }
@@ -234,9 +230,7 @@ router.post('/otp_verify', async (req, res) => {
                 });
             }
 
-            if (user.status === 0) {
-                return res.status(503).json({ error: true, status: 503, message: 'Account Blocked' });
-            }
+            
             if (user.status === 2) {
                 return res.status(503).json({ error: true, status: 503, message: 'Account Deleted' });
             }

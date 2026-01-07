@@ -40,5 +40,6 @@ const eventMessageSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+eventMessageSchema.index({ senderId: 1 });
 
 module.exports = mongoose.model("EventMessage", eventMessageSchema);

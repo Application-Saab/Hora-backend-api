@@ -943,6 +943,32 @@ router.post('/completeOrder', async (req, res) => {
     }
 });
 
+router.get('/order_details/:id', async(req, res) => {
+    try {
+        const order = await orderModel.findById(req.params.id).populate('addressId');
+        order.items.forEach(element => {
+            var obj = element;
+            dishModel.findById(obj.item_id, function(err, result) {
+                if (err) {
+                    res.send(err);
+                } else {
+                    Object.assign(element, { result: result });
+                }
+            });
+        });
+        setTimeout(() => {
+            if (Object.keys(order).length > 0) {
+                return res.json({ error: false, status: 200, message: 'Fetch Data Successfully', data: order })
+            } else {
+                return res.json({ error: true, status: 503, message: 'No Record Found' })
+            }
+        }, 1000);
+    } catch (error) {
+        res.status(400).json({ message: error.message, error: true })
+    }
+})
+
+//not used
 router.post('/publicOrderList/v2', async(req, res) => {
     let finder = { status: 1 };
     finder['toId'] = "";
@@ -1002,6 +1028,7 @@ router.post('/publicOrderList/v2', async(req, res) => {
         res.status(400).json({ message: error.message, error: true })
     }
 })
+
 
 router.get('/order_view_details/:id', async(req, res) => {
     let responseobject={};
@@ -1146,6 +1173,7 @@ router.get('/order_view_details/:id', async(req, res) => {
     }
 })
 
+// not used in admin
 router.post('/getInProgressOrderList', async(req, res) => {
     let finder = {fromId:req.body.userId};
     finder[`order_status`] = {
@@ -1219,6 +1247,7 @@ router.post('/getInProgressOrderList', async(req, res) => {
     }
 })
 
+
 router.post('/add-order-feedback', async (req, res) => {
     const data = new orderFeedbackModel({
         slabPicture: req.body.slabPicture,
@@ -1248,6 +1277,7 @@ router.post('/add-order-feedback', async (req, res) => {
         res.status(400).json({ message: error.message ,error: true })
     }
 })
+
 
 router.post('/order_status_list', async(req, res) => {
     if (!req.body._id) {
@@ -1324,6 +1354,7 @@ router.post('/order_status_list', async(req, res) => {
     }
 })
 
+
 router.post('/updateBookingDetails', async(req, res) => {
     if (!req.body._id) {
         return res.json({
@@ -1350,6 +1381,7 @@ router.post('/updateBookingDetails', async(req, res) => {
         res.status(400).json({ message: error.message, error: true })
     }
 })
+
 
 router.post('/createCustomerFeedback', async(req, res) => {
     if (!req.body._id) {
@@ -1389,6 +1421,7 @@ router.post('/createCustomerFeedback', async(req, res) => {
         res.status(400).json({ message: error.message, error: true })
     }
 })
+
 
 router.post('/user_review_list', async(req, res) => {
     if (!req.body._id) {
@@ -1777,6 +1810,7 @@ router.post('/publicOrderList/v1', async(req, res) => {
     }
 })
 
+
 router.post('/publicOrderList/v2', async(req, res) => {
     const userId  = req.body.userId;
     if (!userId) {
@@ -1849,6 +1883,7 @@ router.post('/publicOrderList/v2', async(req, res) => {
     }
 })
 
+//not used
 router.post('/getOrderCityCheck', async(req, res) => {
     let finder ={ status: 1 };
     try {

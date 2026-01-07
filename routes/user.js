@@ -257,8 +257,9 @@ router.post('/otp_verify', async (req, res) => {
     }
 });
 
-router.get('/user_details', async (req, res) => {
+router.get('/user_details/:id', async (req, res) => {
     try {
+        let { id } = req.params;
         const totalPersonalField = 9;
         const totalProfessionalField = 6;
 
@@ -266,7 +267,7 @@ router.get('/user_details', async (req, res) => {
         let doneProfessionalField = 0;
 
         // Fetch user
-        const data = await UserModel.findById(req.user._id).populate({
+        const data = await UserModel.findById(id).populate({
             path: "userServedLocalities",
             populate: { path: "cityId" }
         });
@@ -334,43 +335,33 @@ const sendResponse = (res, status, error, message, data = null) =>
 
 
 //  Get user details by ID
+// Updated
 router.get("/user-details/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Validate ObjectId
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return sendResponse(res, 400, true, "Invalid user id");
     }
 
-    // Fetch user
-    const user = await UserModel.findById(id).lean();
+    const user = await UserModel.findById(id)
+      .select("name phone avatar")
+      .lean();
+
     if (!user) {
       return sendResponse(res, 404, true, "User not found");
     }
-
-    const respData = {
-      _id: user._id,
-      name: user.name ?? "",
-      phone: user.phone ?? "",
-      avatar: user.avatar ?? "",
-    };
 
     return sendResponse(
       res,
       200,
       false,
       "User fetched successfully",
-      respData
+      user
     );
   } catch (err) {
-    console.error("Fetch user error:", {
-      message: err.message,
-      stack: err.stack,
-      eventId: req.params.id,
-    });
-
-    return sendResponse(res, 500, true, `Server error: ${err.message}`);
+    console.error("Fetch user error:", err.message);
+    return sendResponse(res, 500, true, "Server error");
   }
 });
 
@@ -455,58 +446,6 @@ function isS3Url(str) {
   );
   return regex.test(str);
 }
-
-
-// Update user details by id
-// router.put("/user-details/:id", async (req, res) => {
-//   try {
-//     const { id } = req.params;
-
-//     if (!mongoose.Types.ObjectId.isValid(id)) {
-//       return sendResponse(res, 400, true, "Invalid user id");
-//     }
-
-//     const { name, phone, avatar } = req.body;
-
-//     // Agar kuch bhi update fields nahi bheji
-//     if (!name && !phone && !avatar) {
-//       return sendResponse(res, 400, true, "No fields provided to update");
-//     }
-
-//     // Update object prepare karo
-//     let updateData = {};
-//     if (name) updateData.name = name;
-//     if (phone) updateData.phone = phone;
-//     if (avatar) updateData.avatar = avatar;
-
-//     const updatedUser = await UserModel.findByIdAndUpdate(
-//       id,
-//       { $set: updateData },
-//       { new: true, lean: true }
-//     );
-
-//     if (!updatedUser) {
-//       return sendResponse(res, 404, true, "User not found");
-//     }
-
-//     let respData = {
-//       name: updatedUser.name,
-//       _id: updatedUser._id,
-//       phone: updatedUser.phone,
-//       avatar: updatedUser.avatar,
-//     };
-
-//     return sendResponse(res, 200, false, "User updated successfully", respData);
-//   } catch (err) {
-//     console.error("Update user error:", {
-//       message: err.message,
-//       stack: err.stack,
-//       userId: req.params.id,
-//     });
-//     return sendResponse(res, 500, true, `Server error ${err.message}`);
-//   }
-// });
-
 
 //  Update user details (Name) and also update name in guest models for RSVP
 router.put("/user-details/:id", async (req, res) => {
@@ -676,8 +615,8 @@ router.put(
 
 
 
-router.post('/user_update', async(req, res) => {
-    const id = req.user._id;
+router.post('/user_update/:id', async(req, res) => {
+    const { id } = req.params;
     const updatedData = req.body;
     console.log("updatedData>>>>>>",updatedData);
     const options = { new: true };
@@ -691,8 +630,8 @@ router.post('/user_update', async(req, res) => {
     }
 })
 
-router.post('/supplier_personal_details_update', async (req, res) => {
-    const id = req.user._id;
+router.post('/supplier_personal_details_update/:id', async (req, res) => {
+      let { id } = req.params;
 
     // Prepare updated data cleanly (only keys that exist in req.body)
     const updatedData = {
@@ -730,8 +669,8 @@ router.post('/supplier_personal_details_update', async (req, res) => {
     }
 });
 
-router.post('/supplier_professional_details_update', async(req, res) => {
-    const id = req.user._id;
+router.post('/supplier_professional_details_update/:id', async(req, res) => {
+      let { id } = req.params;
     const updatedData = {};
     updatedData.userAppliance = req.body.userAppliance;
     updatedData.userRestaurant = req.body.userRestaurant;
@@ -752,58 +691,8 @@ router.post('/supplier_professional_details_update', async(req, res) => {
     }
 })
 
-// router.post('/getMealDish', async(req, res) => {
-//     let finder = { status: 1 };
-//     let dishfinder = { status: 1 };
-//     if (req.body.cuisineId.length>0) {
-//         dishfinder[`cuisineId`] = {
-//            $in: []
-//         };
-//         req.body.cuisineId.forEach(item => dishfinder[`cuisineId`].$in.push(
-//             new ObjectId(item))
-//         );
-//     }
-//     if (req.body.is_dish == 1) { 
-//         dishfinder[`is_dish`] = 1 
-//     }else if(req.body.is_dish == 2){
-//         dishfinder[`is_dish`] = {
-//             $in: [1,2]
-//          }
-//     }else{
-//         delete dishfinder[`is_dish`];
-//     }
-//     console.log("dishfinder>>>>",dishfinder);
-//     try {
-//         var newArray=[];
-//         var i = 0;
-//         mealModel.find(finder).exec((err, students) => {
-//             console.log("students>>>>>>>",students);
-//             async.eachSeries(students, function (rec2, loop2){
-//                 let responseobject={};
-//                 dishfinder['mealId']=new ObjectId(rec2._id);
-//                 responseobject.mealObject=rec2;
-//                 (async () => {
-//                     await dishModel.find(dishfinder).exec(function(err, dishResponse) {
-//                         responseobject.dish=dishResponse;
-//                         loop2();
-//                         i = i + 1;
-//                     });
-//                 })();
-//                 newArray.push(responseobject);
-//             }, function(errSelPro) {
-//                 if(errSelPro){
-//                     return res.json({ error: true, status: 503, message: errSelPro })  
-//                 }else{
-//                     return res.json({ error: false, status: 200, message: 'Fetch Data Successfully', data: newArray })
-//                 }
-//             })
-//         });
-//     } catch (error) {
-//         res.status(400).json({ message: error.message, error: true })
-//     }
-// })
-
-router.get('/my_account', async(req, res) => {
+router.get('/my_account/:id', async(req, res) => {
+    let { id } = req.params;
     try {
         var responseObject={
             resumeProfilePercentage:0,
@@ -811,7 +700,7 @@ router.get('/my_account', async(req, res) => {
             worksPercentage:0,
             appliancePercentage:0,
         }
-        const data = await UserModel.findById(req.user._id);
+        const data = await UserModel.findById(id);
         const totalResumeProfileField = 3;const totalCuisinesField = 2;const totalWorksField = 1;const totalHandsApplianceField = 1;
         var doneResumeProfileField = 0; var doneCuisinesField = 0; var doneWorksField = 0; var doneHandsApplianceField = 0;
         // Count 1
@@ -851,7 +740,7 @@ router.get('/my_account', async(req, res) => {
 
 router.post('/update_resume_profile', async (req, res) => {
     try {
-        const id = req.user._id;
+        const id = req.body._id;
 
         const {
             resume,
@@ -893,8 +782,8 @@ router.post('/update_resume_profile', async (req, res) => {
     }
 });
 
-router.post('/update_work_details', async(req, res) => {
-    const id = req.user._id;
+router.post('/update_work_details/:id', async(req, res) => {
+    const id = req.params.id;
     const updatedData = {};
     updatedData.job_type = req.body.job_type;
     updatedData.userRestaurant = req.body.userRestaurant;
@@ -909,8 +798,8 @@ router.post('/update_work_details', async(req, res) => {
     }
 })
 
-router.post('/update_cuisioness', async(req, res) => {
-    const id = req.user._id;
+router.post('/update_cuisioness/:id', async(req, res) => {
+    const id = req.params.id;
     const updatedData = {};
     updatedData.is_veg = req.body.is_veg;
     updatedData.userCuisioness = req.body.userCuisioness;
@@ -926,8 +815,8 @@ router.post('/update_cuisioness', async(req, res) => {
     }
 })
 
-router.post('/update_special_appliance', async(req, res) => {
-    const id = req.user._id;
+router.post('/update_special_appliance/:id', async(req, res) => {
+    const id = req.params.id;
     const updatedData = {};
     updatedData.userAppliance = req.body.userAppliance;
     const options = { new: true };

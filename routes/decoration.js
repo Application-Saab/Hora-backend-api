@@ -206,104 +206,208 @@ router.get('/details/:id', async (req, res) => {
     }
 })
 
-router.get('/searchByTag/v2/:tag', async (req, res) => {
-    const { tag } = req.params;
-    const limit = parseInt(req.query.limit) || 10;
-    const page = parseInt(req.query.page) || 1;
-    const priceFilter = req.query.priceFilter;
-    const sortBy = req.query.sortBy;
-    const theme = req.query.theme;
+router.get("/searchByTag/v2/:tag", async (req, res) => {
+  const { tag } = req.params;
+  const limit = parseInt(req.query.limit) || 10;
+  const page = parseInt(req.query.page) || 1;
+  const priceFilter = req.query.priceFilter;
+  const sortBy = req.query.sortBy;
+  const theme = req.query.theme;
 
-    const cacheKey = `search_${tag}_${limit}_${page}_${priceFilter}_${sortBy}_${theme}`;
+  const cacheKey = `search_${tag}_${limit}_${page}_${priceFilter}_${sortBy}_${theme}`;
 
-    // Step 1: Return Cached Response if exists
-    const cachedData = cache.get(cacheKey);
-    if (cachedData) {
-        console.log("returning cached data with key " + cacheKey);
-        return res.json({
-            ...cachedData,
-            cached: true
-        });
+  // Step 1: Return Cached Response if exists
+  const cachedData = cache.get(cacheKey);
+  if (cachedData) {
+    console.log("returning cached data with key " + cacheKey);
+    return res.json({
+      ...cachedData,
+      cached: true,
+    });
+  }
+
+  const query = { tag };
+
+  if (priceFilter === "under2000") {
+    query.price = { $lt: 2000 };
+  } else if (priceFilter === "2000to5000") {
+    query.price = { $gte: 2000, $lte: 5000 };
+  } else if (priceFilter === "above5000") {
+    query.price = { $gt: 5000 };
+  }
+
+  if (theme && theme !== "all") {
+    const formattedThemeFilter = theme.toLowerCase().split("-")[0];
+    query.name = { $regex: formattedThemeFilter, $options: "i" };
+  }
+
+  try {
+    // Step 3: Build Sort Criteria Safely (FIXED)
+    let sortOrder = sortBy === "asc" ? 1 : sortBy === "desc" ? -1 : null;
+
+    const sortCriteria =
+      sortOrder !== null
+        ? priceFilter == "all" ||
+          priceFilter == "All" ||
+          query.price != null ||
+          query.price != undefined
+          ? { popularity_score: -1, price: sortOrder }
+          : { price: sortOrder, popularity_score: -1 }
+        : { popularity_score: -1 };
+
+    // Step 4: Execute Query Safely
+    const decorationsQuery = decorationModel
+      .find(query)
+      .collation({ locale: "en", numericOrdering: true })
+      .sort(sortCriteria)
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean();
+
+    const [decorations, totalDecorations] = await Promise.all([
+      decorationsQuery,
+      decorationModel.countDocuments(query),
+    ]);
+
+    const response = {
+      error: false,
+      status: 200,
+      ok: "ok",
+      message:
+        decorations.length > 0
+          ? "Search Successful"
+          : "No matching decorations found.",
+      data: decorations,
+      pagination: {
+        totalItems: totalDecorations,
+        totalPages: Math.ceil(totalDecorations / limit),
+        currentPage: page,
+        limit,
+      },
+    };
+
+    // Step 5: Save to Cache
+    cache.set(cacheKey, response);
+
+    return res.json(response);
+  } catch (error) {
+    return res.status(500).json({
+      error: true,
+      message: "Server Error: " + error.message,
+    });
+  }
+});
+
+
+//get decoration by name and all orders individual product actual images 
+router.get('/decorations/:name/orders', async (req, res) => {
+  try {
+    const { name } = req.params;
+
+    const decoration = await decorationModel.findOne({
+      name: { $regex: new RegExp(name, 'i') }
+    }).lean();
+
+    if (!decoration) {
+      return res.status(404).json({
+        error: true,
+        status: 404,
+        message: 'Decoration not found'
+      });
     }
 
-    const query = { tag }; 
+    // Find orders that include this decoration
+    const orders = await orderModel.find({
+      $or: [
+        { items: decoration._id },
+        { items: decoration._id.toString() },
+        { "items.itemId": decoration._id },
+        { "items.itemId": decoration._id.toString() }
+      ],
+      userOrderDishImageArray: { $exists: true, $ne: [] }
+    })
+      .select('_id order_id order_date userOrderDishImageArray')
+      .lean();
 
-    if (priceFilter === 'under2000') {
-        query.price = { $lt: 2000 };
-    } else if (priceFilter === '2000to5000') {
-        query.price = { $gte: 2000, $lte: 5000 };
-    } else if (priceFilter === 'above5000') {
-        query.price = { $gt: 5000 };
-    }
-
-    if (theme && theme !== 'all') {
-        const formattedThemeFilter = theme.toLowerCase().split('-')[0];
-        query.name = { $regex: formattedThemeFilter, $options: 'i' };
-    }
-
-    try {
-        // Step 3: Build Sort Criteria Safely (Fixing undefined error)
-        let sortOrder =
-            sortBy === 'asc' ? 1 :
-            sortBy === 'desc' ? -1 :
-            null;
-
-        let sortCriteria;
-
-        if (sortOrder !== null) {
-            if (priceFilter === 'all' || priceFilter === 'All' || query.price !== undefined || query.price !== null) {
-                sortCriteria = { popularity_score: -1, price: sortOrder };
-            } else {
-                sortCriteria = { price: sortOrder, popularity_score: -1 };
-            }
-        } else {
-            sortCriteria = { popularity_score: -1 };
+    // Normalize images: convert strings to objects, keep objects as-is
+    const updatedOrders = orders.map(order => {
+      const images = order.userOrderDishImageArray.map(img => {
+        if (typeof img === 'string') {
+          return {
+            image: img,
+            is_tagged: false,
+          };
         }
-
-        // Step 4: Execute Query Safely
-        const decorationsQuery = decorationModel
-            .find(query)
-            .collation({ locale: "en", numericOrdering: true })
-            .sort(sortCriteria)
-            .skip((page - 1) * limit)
-            .limit(limit)
-            .lean(); 
-
-        const [decorations, totalDecorations] = await Promise.all([
-            decorationsQuery,
-            decorationModel.countDocuments(query)
-        ]);
-
-        const response = {
-            error: false,
-            status: 200,
-            ok: "ok",
-            message: decorations.length > 0 ? 'Search Successful' : 'No matching decorations found.',
-            data: decorations,
-            pagination: {
-                totalItems: totalDecorations,
-                totalPages: Math.ceil(totalDecorations / limit),
-                currentPage: page,
-                limit
-            }
+        return {
+          ...img,
         };
+      });
 
-        // Step 5: Save to Cache
-        cache.set(cacheKey, response);
+      return {
+        ...order,
+        userOrderDishImageArray: images
+      };
+    });
 
-        return res.json(response);
+    return res.json({
+      error: false,
+      status: 200,
+      message: 'Decoration details fetched successfully',
+      data: {
+        decoration,
+        orders: updatedOrders // will be empty array if no orders exist
+      }
+    });
 
-    } catch (error) {
-        return res.status(500).json({
-            error: true,
-            message: 'Server Error: ' + error.message
-        });
+  } catch (err) {
+    return res.status(500).json({
+      error: true,
+      status: 500,
+      message: err.message
+    });
+  }
+});
+
+// delete images by iamge name 
+router.post("/delete-image", async (req, res) => {
+  try {
+    const { imageName } = req.body;
+    if (!imageName) {
+      return res.status(400).json({ message: "Image name is required" });
     }
+
+    const filePath = path.join(process.cwd(), "uploads", imageName);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    const r1 = await orderModel.collection.updateMany(
+      { userOrderDishImageArray: imageName },
+      { $pull: { userOrderDishImageArray: imageName } }
+    );
+
+    const r2 = await orderModel.collection.updateMany(
+      { "userOrderDishImageArray.image": imageName },
+      { $pull: { userOrderDishImageArray: { image: imageName } } }
+    );
+
+    return res.json({ 
+      success: true,
+      message: "Image deleted from server & database",
+      imageName,
+      modifiedCount: (r1.modifiedCount || 0) + (r2.modifiedCount || 0)
+    });
+
+  } catch (err) {
+    console.error("DELETE IMAGE ERROR", err);
+    return res.status(500).json({
+      message: "Error deleting image",
+      error: err.message
+    });
+  }
 });
 
 
 
 
-
 module.exports = router;
-

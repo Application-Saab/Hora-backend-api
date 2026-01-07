@@ -1,5 +1,4 @@
 const fs = require("fs");
-const fsPromises = fs.promises;
 
 /**
  * Delay helper
@@ -16,7 +15,7 @@ async function deleteFileWithRetry(filePath, retries = 3, delay = 300) {
     try {
       await fsPromises.access(filePath);
       await fsPromises.unlink(filePath);
-      console.log(`🗑️ Deleted: ${filePath}`);
+      console.log(`Deleted: ${filePath}`);
       return true;
     } catch (err) {
       if (attempt < retries) {

@@ -164,7 +164,6 @@ router.post('/add', async (req, res) => {
     }
 });
 
-
 router.post('/edit', async (req, res) => {
     const id = req.body?._id;
     const updatedData = req.body;

@@ -12,7 +12,7 @@ const dishSchema = new mongoose.Schema({
     }],
     mealId: [{
         type: mongoose.Schema.Types.ObjectId,
-        ref: "meal"
+        ref: "meals"
     }],
     dish_rate: {type: String,default: ''},
     is_preparation: {type: Boolean,default: false /* 1-yes 0-No  */},

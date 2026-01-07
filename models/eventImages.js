@@ -56,8 +56,6 @@ const eventImagesSchema = new mongoose.Schema({
       selfUploadedImageKey: { type: String, required: true },
       selfUploadedThumbnailUrl: { type: String, required: false },
       selfUploadedThumbnailKey: { type: String, required: false },
-      // selfUploadedCompressedUrl: { type: String, required: false },
-      // selfUploadedCompressedKey: { type: String, required: false },
       imageType: { type: String, required: true, default: "selfUploaded" },
       createdAt: { type: Date, default: Date.now },
     },

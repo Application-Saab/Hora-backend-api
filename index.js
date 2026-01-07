@@ -13,14 +13,8 @@ const cron = require('node-cron');
 // Database Connection Start
 mongoose.set("strictQuery", true);
 mongoose.connect(
-  `mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASS}@${process.env.MONGO_CLUSTER}/${process.env.MONGO_DATABASE}?retryWrites=true&w=majority`,
-//  { useNewUrlParser: true, useUnifiedTopology: true }
-).then(() => {
-  console.log("MongoDB Connected");
-}).catch((error) => {
-  console.log("MongoDB connection error:", error);
-});
-
+  `mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASS}@${process.env.MONGO_CLUSTER}/${process.env.MONGO_DATABASE}?retryWrites=true&w=majority`
+);
 const database = mongoose.connection;
 // Database Connection End
 
@@ -28,7 +22,7 @@ const database = mongoose.connection;
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+// app.use(express.json());
 app.use(bodyParser.json({ limit: "50mb" }));
 app.use(
   bodyParser.urlencoded({
@@ -36,7 +30,7 @@ app.use(
     extended: true,
     parameterLimit: 1000000,
   })
-);
+);   
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, "public")));
 app.use(async (req, res, next) => {
@@ -112,7 +106,7 @@ cron.schedule('0 0 * * 0', () => {
 setTimeout(async()=>{
   console.log("Updating scores")
   await commonFunction.updateDecorationPopularity()
-},10000)
+}, 1.5 * 60 * 1000);
 
 database.on("error", (error) => {
   console.log(error);
@@ -125,6 +119,7 @@ database.once("connected", () => {
 const AdminRoutes = require("./routes/admin");
 const UserRoutes = require("./routes/user");
 const EventInviteRoutes = require("./routes/createEventInvites");
+const EventChatRoutes = require("./routes/eventChat");
 const EventBadgeRoutes = require("./routes/event-badge");
 const ConfigurationRoutes = require("./routes/configuration");
 const IngredientRoutes = require("./routes/ingredient");
@@ -147,8 +142,9 @@ let passportAuth = require("./store/passportAuth").passportAuth;
 
 app.use("/api/admin", AdminRoutes);
 app.use("/api/user", UserRoutes);
-app.use("/api/customer/event", passportAuth, EventInviteRoutes);
-app.use("/api/users", passportAuth, UserRoutes);
+app.use("/api/customer/event", EventInviteRoutes);
+app.use("/api/customer/event/chat", EventChatRoutes);
+app.use("/api/users", UserRoutes);
 app.use("/api/configuration", ConfigurationRoutes);
 app.use("/api/ingredient", IngredientRoutes);
 app.use("/api/ingredient_type", ingredientTypeRoutes);
@@ -264,6 +260,7 @@ const compressImageToWebP = async (buffer, outputPath, targetMaxKB = 40) => {
 };
 
 // API: Upload and compress to WebP
+//fixed
 app.post('/api/decoration_image_upload', compressedUpload.single('file'), async (req, res) => {
   try {
     const file = req.file;
@@ -301,6 +298,7 @@ app.post('/api/decoration_image_upload', compressedUpload.single('file'), async 
     return res.status(500).json({ error: true, message: 'Image compression failed' });
   }
 });
+
 
 
 app.post("/firebase/notification", async (req, res) => {
@@ -371,9 +369,18 @@ app.get('/test-s3', async (req, res) => {
 
 
 // Not Found Error
-app.use(function (req, res) {
+// app.use(function (req, res) {
+//   res.status(404).json({ message: "Api Not Exits In Server.", error: true });
+// });
+
+app.use((req, res, next) => {
+  if (req.path.startsWith("/socket.io")) {
+    return next(); // let socket.io handle it
+  }
+
   res.status(404).json({ message: "Api Not Exits In Server.", error: true });
 });
+
 
 // error handler
 app.use(function (err, req, res, next) {

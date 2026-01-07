@@ -61,10 +61,11 @@ const decorationSchema = new mongoose.Schema({
     popularity_score: {
         type: Number,
         default: 500
-    }
+    },
+    designType: { type: Object, default: {} },
 },{
     strict: false,
-    timestamps: true
+    timestamps: true 
 });
 
 decorationSchema.index({ tag: 1, name:1 });

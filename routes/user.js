@@ -205,6 +205,9 @@ router.post('/otp_verify', async (req, res) => {
                     message: `The number is already used for ${commonFunction.capitalizeFirstLetter(user.role)} login. Please use a different number.`
                 });
             }
+             if (user.status === 0 && user.role !== 'supplier') {
+                return res.status(503).json({ error: true, status: 503, message: 'Account Blocked' });
+            }
 
             if (user.status === 2) {
                 return res.status(503).json({ error: true, status: 503, message: 'Account Deleted' });
@@ -230,7 +233,11 @@ router.post('/otp_verify', async (req, res) => {
                 });
             }
 
-            
+             // Check account status
+            if (user.status === 0 && user.role !== 'supplier') {
+                return res.status(503).json({ error: true, status: 503, message: 'Account Blocked' });
+            }
+
             if (user.status === 2) {
                 return res.status(503).json({ error: true, status: 503, message: 'Account Deleted' });
             }

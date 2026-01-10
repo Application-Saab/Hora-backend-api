@@ -124,6 +124,44 @@ router.post("/create-direct-room", async (req, res) => {
 });
 
 // Get all rooms joined by a user
+// router.get("/chatrooms/user/:userId", async (req, res) => {
+//   try {
+//     const { userId } = req.params;
+
+//     if (!mongoose.Types.ObjectId.isValid(userId)) {
+//       return sendResponse(res, 400, true, "Invalid user ID");
+//     }
+
+//     const userObjectId = new mongoose.Types.ObjectId(userId);
+
+//     const rooms = await ChatRoom.find(
+//       { "members.userId": userObjectId },
+//       {
+//         roomId: 1,
+//         eventId: 1,
+//         roomName: 1,
+//         members: 1,
+//         createdAt: 1,
+//         roomProfileUrl: 1,
+//         roomType: 1,
+//       }
+//     )
+//       .sort({ createdAt: -1 })
+//       .lean()
+//       .hint({ "members.userId": 1 });
+
+//     return sendResponse(res, 200, false, "Rooms fetched successfully", rooms);
+//   } catch (err) {
+//     console.error("Fetch Rooms Error:", {
+//       message: err.message,
+//       stack: err.stack,
+//       userId: req.params.userId,
+//     });
+//     return sendResponse(res, 500, true, "Server error");
+//   }
+// });
+
+// Get all rooms joined by a user
 router.get("/chatrooms/user/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
@@ -134,21 +172,54 @@ router.get("/chatrooms/user/:userId", async (req, res) => {
 
     const userObjectId = new mongoose.Types.ObjectId(userId);
 
-    const rooms = await ChatRoom.find(
-      { "members.userId": userObjectId },
+    // Use aggregation to join latest message and sort
+    const rooms = await ChatRoom.aggregate([
       {
-        roomId: 1,
-        eventId: 1,
-        roomName: 1,
-        members: 1,
-        createdAt: 1,
-        roomProfileUrl: 1,
-        roomType: 1,
-      }
-    )
-      .sort({ createdAt: -1 })
-      .lean()
-      .hint({ "members.userId": 1 });
+        $match: { "members.userId": userObjectId },
+      },
+      {
+        $lookup: {
+          from: "eventmessages", // Your EventMessage collection name (lowercase mongoose default)
+          localField: "_id",
+          foreignField: "groupId",
+          as: "latestMessages",
+          pipeline: [
+            { $sort: { createdAt: -1 } },
+            { $limit: 1 },
+          ],
+        },
+      },
+      {
+        $addFields: {
+          lastMessageAt: {
+            $arrayElemAt: ["$latestMessages.createdAt", 0],
+          },
+        },
+      },
+      {
+        $project: {
+          // Include all needed fields
+          roomId: 1,
+          eventId: 1,
+          roomProfileUrl: 1,
+          roomName: 1,
+          createdBy: 1,
+          roomType: 1,
+          directKey : 1,
+          members: 1,
+          createdAt: 1,
+          lastReadAt: 1,
+          lastMessageAt: 1, // Add this to response
+          // Add any other fields if needed, like lastReadAt
+        },
+      },
+      {
+        $sort: {
+          lastMessageAt: -1, // Latest message first
+          createdAt: -1, // Fallback to room creation if no messages
+        },
+      },
+    ]);
 
     return sendResponse(res, 200, false, "Rooms fetched successfully", rooms);
   } catch (err) {

@@ -142,4 +142,15 @@ function initSocket(server) {
   ioInstance = io;
 }
 
-module.exports = { initSocket, ioInstance };
+// module.exports = { initSocket, ioInstance };
+// Export both function and getter
+module.exports = {
+  initSocket,
+  ioInstance,
+  getIO: () => {
+    if (!ioInstance) {
+      throw new Error("Socket.IO not initialized yet! Call initSocket first.");
+    }
+    return ioInstance;
+  },
+};

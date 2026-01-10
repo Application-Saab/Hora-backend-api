@@ -7,6 +7,7 @@ const EventInvite = require("../models/event-invite");
 const EventGuest = require("../models/event-guest");
 const TicketCounter = require("../models/ticket-counter-luckydraw");
 const EventImages = require("../models/eventImages");
+const EventMessage = require("../models/eventMessage");
 const multer = require("multer");
 const fs = require("fs");
 
@@ -17,6 +18,8 @@ const postComment = require("../models/post-comment");
 const ChatRoom = require("../models/eventChatRoom");
 const User = require("../models/user");
 const { s3, S3_BUCKET } = require("../utils/awsConfigs");
+// const { ioInstance } = require("../socket");
+const { getIO } = require("../socket");
 
 // Helper: Delete image from S3
 async function deleteFromS3(key) {
@@ -476,10 +479,133 @@ router.get("/event-guests/all/:eventId", async (req, res) => {
 });
 
 // Update RSVP status or name of a guest + Join to event chat room
+// router.put("/event-guest", async (req, res) => {
+//   try {
+//     const { eventId, userId, name, rsvpStatus } = req.body;
+
+//     const schema = Joi.object({
+//       eventId: Joi.string().required(),
+//       userId: Joi.string().required(),
+//       name: Joi.string().trim().allow("").optional(),
+//       rsvpStatus: Joi.string()
+//         .valid("will Come", "Sure, will try", "")
+//         .optional(),
+//     });
+
+//     const { error } = schema.validate(
+//       { eventId, userId, name, rsvpStatus },
+//       { abortEarly: false }
+//     );
+
+//     if (error) {
+//       const details = error.details.map((err) => ({
+//         path: err.path.join("."),
+//         message: err.message,
+//       }));
+//       return sendResponse(res, 422, true, "Validation failed", details);
+//     }
+
+//     if (
+//       !mongoose.Types.ObjectId.isValid(eventId) ||
+//       !mongoose.Types.ObjectId.isValid(userId)
+//     ) {
+//       return sendResponse(res, 400, true, "Invalid event ID or user ID");
+//     }
+
+//     // GET USER ONLY ONCE
+//     const user = await User.findById(userId);
+//     if (!user) {
+//       return sendResponse(res, 404, true, "User not found");
+//     }
+//     // FIND GUEST ENTRY
+//     const updatedGuest = await EventGuest.findOne({ eventId, userId });
+//     if (!updatedGuest) {
+//       return sendResponse(res, 404, true, "Guest not found");
+//     }
+
+//     // Update guest & user name
+//     if (name !== undefined && name !== "" && user.name !== name) {
+//       updatedGuest.name = name;
+//       user.name = name;
+//       await user.save();
+//     }
+
+//     if (rsvpStatus !== undefined) {
+//       updatedGuest.rsvpStatus = rsvpStatus;
+//       updatedGuest.name = name;
+//     }
+
+//     const savedGuest = await updatedGuest.save();
+
+//     // Create member object for ChatRoom
+//     const memberObject = {
+//       userId,
+//       name: name || user.name,
+//       phone: user.phone || "",
+//       profileImageUrl: user.avatar || "",
+//     };
+
+//     // ADD MEMBER TO ROOM (avoid duplicates)
+//     await ChatRoom.findOneAndUpdate(
+//       { eventId: eventId },
+//       { $addToSet: { members: memberObject } }
+//     );
+
+//     if (rsvpStatus && rsvpStatus !== "") {
+//       // Find group room
+//       const groupRoom = await ChatRoom.findOne({ eventId, roomType: "group" });
+//       if (groupRoom && ioInstance) {
+//         const infoMessage = `${name || user.name} joined the group`;
+
+//         const savedInfo = await EventMessage.create({
+//           groupId: groupRoom._id,
+//           senderId: userId,
+//           message: infoMessage,
+//           type: "info",
+//           senderName: name || user.name,
+//           senderPhone: user.phone || "",
+//         });
+
+//         const finalInfoMsg = {
+//           _id: savedInfo._id,
+//           groupId: groupRoom._id,
+//           senderId: userId,
+//           message: infoMessage,
+//           type: "info",
+//           createdAt: savedInfo.createdAt,
+//           senderName: name || user.name,
+//           senderPhone: user.phone || "",
+//         };
+
+//         ioInstance
+//           .to(groupRoom._id.toString())
+//           .emit("message:new", finalInfoMsg);
+//       }
+//     }
+
+//     return sendResponse(
+//       res,
+//       200,
+//       false,
+//       "Guest updated & added to chat room",
+//       savedGuest
+//     );
+//   } catch (err) {
+//     console.error("Update Guest Error:", {
+//       message: err.message,
+//       stack: err.stack,
+//       requestBody: req.body,
+//     });
+//     return sendResponse(res, 500, true, "Server error");
+//   }
+// });
+
+
 router.put("/event-guest", async (req, res) => {
   try {
     const { eventId, userId, name, rsvpStatus } = req.body;
 
+    // 1. Fix: rsvpStatus values match exactly with frontend constants
     const schema = Joi.object({
       eventId: Joi.string().required(),
       userId: Joi.string().required(),
@@ -487,13 +613,12 @@ router.put("/event-guest", async (req, res) => {
       rsvpStatus: Joi.string()
         .valid("will Come", "Sure, will try", "")
         .optional(),
+      phone: Joi.string().trim().allow("").optional(),
     });
 
-    const { error } = schema.validate(
-      { eventId, userId, name, rsvpStatus },
-      { abortEarly: false }
-    );
+    // Example: .valid(RSVP_STATUS.WILL_COME, RSVP_STATUS.WILL_TRY, "")
 
+    const { error } = schema.validate(req.body, { abortEarly: false });
     if (error) {
       const details = error.details.map((err) => ({
         path: err.path.join("."),
@@ -502,6 +627,7 @@ router.put("/event-guest", async (req, res) => {
       return sendResponse(res, 422, true, "Validation failed", details);
     }
 
+    // 2. Fix: ObjectId validation
     if (
       !mongoose.Types.ObjectId.isValid(eventId) ||
       !mongoose.Types.ObjectId.isValid(userId)
@@ -509,44 +635,86 @@ router.put("/event-guest", async (req, res) => {
       return sendResponse(res, 400, true, "Invalid event ID or user ID");
     }
 
-    // GET USER ONLY ONCE
     const user = await User.findById(userId);
     if (!user) {
       return sendResponse(res, 404, true, "User not found");
     }
-    // FIND GUEST ENTRY
+
     const updatedGuest = await EventGuest.findOne({ eventId, userId });
     if (!updatedGuest) {
       return sendResponse(res, 404, true, "Guest not found");
     }
 
-    // Update guest & user name
-    if (name !== undefined && name !== "" && user.name !== name) {
-      updatedGuest.name = name;
-      user.name = name;
+    let finalName = name || user.name;
+
+    // Update name if provided and different
+    if (name && name.trim() !== "" && user.name !== name.trim()) {
+      updatedGuest.name = name.trim();
+      user.name = name.trim();
       await user.save();
+      finalName = name.trim();
     }
 
-    if (rsvpStatus !== undefined) {
+    // Update RSVP status
+    if (rsvpStatus !== undefined && rsvpStatus !== "") {
       updatedGuest.rsvpStatus = rsvpStatus;
-      updatedGuest.name = name;
+      updatedGuest.name = finalName; // Ensure guest name is up to date
     }
 
     const savedGuest = await updatedGuest.save();
 
-    // Create member object for ChatRoom
+    // Add to chat room members
     const memberObject = {
       userId,
-      name: name || user.name,
+      name: finalName,
       phone: user.phone || "",
       profileImageUrl: user.avatar || "",
     };
 
-    // ADD MEMBER TO ROOM (avoid duplicates)
     await ChatRoom.findOneAndUpdate(
-      { eventId: eventId },
-      { $addToSet: { members: memberObject } }
+      { eventId },
+      { $addToSet: { members: memberObject } },
+      { upsert: false }
     );
+
+    const wasNotConfirmed = !updatedGuest.rsvpStatus || updatedGuest.rsvpStatus === "";
+    const isNowConfirmed = rsvpStatus && rsvpStatus !== "";
+
+    // if (wasNotConfirmed && isNowConfirmed) {
+      const ioInstance = getIO();
+      console.log('RSVP Change:', { wasNotConfirmed, isNowConfirmed });
+      const groupRoom = await ChatRoom.findOne({ eventId, roomType: "group" });
+      if (groupRoom) {
+        const infoMessage = `${finalName} joined the group`;
+
+        const savedInfo = await EventMessage.create({
+          groupId: groupRoom._id,
+          senderId: userId,
+          message: infoMessage,
+          type: "info",
+          senderName: finalName,
+          senderPhone: user.phone || "",
+        });
+
+        // Update lastMessageAt for sorting (important!)
+        await ChatRoom.findByIdAndUpdate(groupRoom._id, {
+          lastMessageAt: savedInfo.createdAt,
+        });
+
+        const finalInfoMsg = {
+          _id: savedInfo._id,
+          groupId: groupRoom._id,
+          senderId: userId,
+          message: infoMessage,
+          type: "info",
+          createdAt: savedInfo.createdAt,
+          senderName: finalName,
+          senderPhone: user.phone || "",
+        };
+
+        ioInstance.to(groupRoom._id.toString()).emit("message:new", finalInfoMsg);
+      }
+    // }
 
     return sendResponse(
       res,

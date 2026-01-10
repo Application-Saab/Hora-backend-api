@@ -9,7 +9,7 @@ const eventMessageSchema = new mongoose.Schema(
     },
     groupId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "ChatRoom"
+      ref: "ChatRoom",
     },
     senderId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -41,5 +41,6 @@ const eventMessageSchema = new mongoose.Schema(
   { timestamps: true }
 );
 eventMessageSchema.index({ senderId: 1 });
+eventMessageSchema.index({ groupId: 1, createdAt: -1 }); // For fast latest message per group
 
 module.exports = mongoose.model("EventMessage", eventMessageSchema);

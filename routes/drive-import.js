@@ -111,64 +111,76 @@ async function handleDriveFolderUpload(folderUrl, vendorId) {
 
   // process files
   const uploadPromises = files.map(async (file) => {
-    try {
-      const originalName = file.name;
-      const fileName = `${Date.now()}_${originalName}`;
-      const filePath = path.join(tempDir, fileName);
-      const thumbnailPath = path.join(
-        tempDir,
-        `thumb_${fileName.replace(/\.(png|jpeg|jpg)$/i, "")}.webp`
-      );
+  let filePath;
+  let thumbnailPath;
 
-      const downloadUrl = `https://drive.google.com/uc?export=download&id=${file.id}`;
-      await downloadFile(downloadUrl, filePath);
+  try {
+    const originalName = file.name;
+    const fileName = `${Date.now()}_${originalName}`;
 
-      console.log(`Processing file: ${fileName}`);
+    filePath = path.join(tempDir, fileName);
+    thumbnailPath = path.join(
+      tempDir,
+      `thumb_${fileName.replace(/\.(png|jpeg|jpg)$/i, "")}.webp`
+    );
 
-      const thumbnailPromise = generateThumbnail(filePath, thumbnailPath);
-      const s3UploadPromise = uploadFileToS3(
-        filePath,
-        fileName,
-        folderPath,
-        phoneNo
-      );
+    const downloadUrl = `https://drive.google.com/uc?export=download&id=${file.id}`;
 
-      await thumbnailPromise;
+    // DOWNLOAD
+    await downloadFile(downloadUrl, filePath);
 
-      const thumbnailFileName = `thumb_${fileName.replace(
-        /\.(png|jpeg|jpg)$/i,
-        ""
-      )}.webp`;
-      const s3ThumbPromise = uploadFileToS3(
-        thumbnailPath,
-        thumbnailFileName,
-        folderPath,
-        phoneNo
-      );
+    console.log(`Processing file: ${fileName}`);
 
-      const [s3Response, s3ThumbResponse] = await Promise.all([
-        s3UploadPromise,
-        s3ThumbPromise,
-      ]);
+    // UPLOAD ORIGINAL
+    const s3UploadPromise = uploadFileToS3(
+      filePath,
+      fileName,
+      folderPath,
+      phoneNo
+    );
 
-      // cleanup
+    // THUMBNAIL
+    await generateThumbnail(filePath, thumbnailPath);
+
+    const thumbFileName = `thumb_${fileName.replace(
+      /\.(png|jpeg|jpg)$/i,
+      ""
+    )}.webp`;
+
+    const s3ThumbPromise = uploadFileToS3(
+      thumbnailPath,
+      thumbFileName,
+      folderPath,
+      phoneNo
+    );
+
+    const [s3Response, s3ThumbResponse] = await Promise.all([
+      s3UploadPromise,
+      s3ThumbPromise,
+    ]);
+
+    return {
+      fileName: originalName,
+      fileUrl: s3Response.Location,
+      thumbnailUrl: s3ThumbResponse.Location,
+    };
+  } catch (err) {
+    console.error(`Error processing ${file?.name}:`, err.message);
+    return { fileName: file?.name, error: err.message };
+  } finally {
+    if (filePath && fs.existsSync(filePath)) {
       try {
         await fsp.unlink(filePath);
       } catch {}
+    }
+    if (thumbnailPath && fs.existsSync(thumbnailPath)) {
       try {
         await fsp.unlink(thumbnailPath);
       } catch {}
-
-      return {
-        fileName: originalName,
-        fileUrl: s3Response.Location,
-        thumbnailUrl: s3ThumbResponse.Location,
-      };
-    } catch (err) {
-      console.error(`Error processing ${file.name}:`, err);
-      return { fileName: file.name, error: err.message };
     }
-  });
+  }
+});
+
 
   const uploadedFiles = await Promise.all(uploadPromises);
 
@@ -218,43 +230,61 @@ router.post("/import-drive-folder", async (req, res) => {
 router.post("/add-order-drive-link", async (req, res) => {
   try {
     const { folderUrl, order_id } = req.body;
+
     if (!folderUrl || !order_id) {
-      return res
-        .status(400)
-        .json({ message: "Folder URL and order_id are required." });
+      return res.status(400).json({
+        message: "Folder URL and order_id are required",
+      });
     }
 
     const folderId = getFolderIdFromUrl(folderUrl);
     if (!folderId) throw new Error("Invalid Google Drive folder URL");
     if (!apiKey) throw new Error("Google Drive API key not configured");
 
-    // check access
+    // Order check
+    const order = await OrderModel.findOne({ order_id });
+    if (!order) throw new Error("Order not found");
+
+    // Drive public check
     const isPublic = await isFolderPubliclyAccessible(folderId, apiKey);
     if (!isPublic)
-      throw new Error("Google Drive folder link is not publicly accessible");
+      throw new Error("Google Drive folder is not publicly accessible");
 
-    // find order
-    const order = await OrderModel.findOne({ order_id: order_id });
-    if (!order) throw new Error(`Order not found for order_id : ${order_id}`);
+    // WebLink generate
+    const folderName = order_id + 10800;
+    const customerId = order.fromId;
 
-    // update order
-    let result = await OrderModel.updateOne(
-      { order_id: order_id },
-      { $set: { orderDriveLink: folderUrl } }
+    const webLink = `https://horaservices.com/photo-gallery?folderName=${folderName}&customerId=${customerId}`;
+
+    // MongoDB update (IMMEDIATE)
+    await OrderModel.updateOne(
+      { order_id },
+      {
+        $set: {
+          orderDriveLink: folderUrl,
+          orderWebLink: webLink,
+        },
+      }
     );
 
-    if (result.modifiedCount > 0) {
-      res.status(201).json({
-        message: `Drive link successfully added for Order_id: ${order_id}`,
-      });
-    } else {
-      throw new Error("Order update failed");
-    }
+    // Frontend ko turant response
+    res.status(201).json({
+      message: "Drive link added successfully",
+      webLink,
+    });
+
+    // Background me images upload
+    process.nextTick(async () => {
+      try {
+        await handleDriveFolderUpload(folderUrl, folderName);
+      } catch (err) {
+        console.error("Background upload failed:", err.message);
+      }
+    });
+
   } catch (error) {
-    console.error("Error on adding google drive link to :", error.message);
-    res
-      .status(500)
-      .json({ error: error.message});
+    console.error("add-order-drive-link error:", error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 

@@ -492,6 +492,27 @@ router.post("/adminOrderList", async (req, res) => {
           as: "addressId",
         },
       },
+      //add this field for get the designType from decoration model
+      {
+  $lookup: {
+    from: "decorations",
+    let: { itemIds: "$items" },
+    pipeline: [
+      {
+        $match: {
+          $expr: { $in: [{ $toString: "$_id" }, "$$itemIds"] }
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          designType: 1,
+        }
+      }
+    ],
+    as: "decorationsData"
+  }
+      },
       { $sort: { order_id: -1 } },
       { $match: { _id: { $nin: [] } } },
       { $skip: (Number(page) - 1) * Number(per_page) },

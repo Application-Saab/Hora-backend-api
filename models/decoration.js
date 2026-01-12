@@ -54,17 +54,18 @@ const decorationSchema = new mongoose.Schema({
     ],
     tag : [{
         type: mongoose.Schema.Types.ObjectId,
-        ref: "meal"
+        ref: "meals"
     }],
     status: {  type: Number, default: 1 /* 1-active 0-inactive 2-delete  */ },
     discount: Number,
     popularity_score: {
         type: Number,
         default: 500
-    }
+    },
+    designType: { type: Object, default: {} },
 },{
     strict: false,
-    timestamps: true
+    timestamps: true 
 });
 
 decorationSchema.index({ tag: 1, name:1 });

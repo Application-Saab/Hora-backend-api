@@ -43,6 +43,16 @@ function initSocket(server) {
       console.log(`User ${userId} left event room ${eventId}`);
     });
 
+    socket.on("joinRoom", (data) => {
+      const { groupId } = data;
+      if (groupId) {
+        socket.join(groupId.toString());
+        console.log(
+          `User ${socket.userId} joined room ${groupId} via joinRoom event`
+        );
+      }
+    });
+
     // Send authoritative unread counts to this socket on connect
     try {
       const unread = await computeUnreadCountsForUser(userId);
@@ -142,8 +152,7 @@ function initSocket(server) {
   ioInstance = io;
 }
 
-// module.exports = { initSocket, ioInstance };
-// Export both function and getter
+
 module.exports = {
   initSocket,
   ioInstance,

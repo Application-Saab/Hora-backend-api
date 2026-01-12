@@ -55,14 +55,20 @@ const chatRoomSchema = new mongoose.Schema(
       of: Date,
       default: {},
     },
+
+    lastMessageAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
   },
   { timestamps: true }
 );
 
 // INDEXES
 
-// Get all rooms of a user
-chatRoomSchema.index({ "members.userId": 1 });
+chatRoomSchema.index({ lastMessageAt: -1 });
+chatRoomSchema.index({ "members.userId": 1, lastMessageAt: -1 });
 
 // Direct room lookup
 chatRoomSchema.index({

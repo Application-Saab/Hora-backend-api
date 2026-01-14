@@ -67,8 +67,11 @@ async function isFolderPubliclyAccessible(folderId, apiKey) {
 
 // =================== Main Upload Logic ===================
 async function handleDriveFolderUpload(folderUrl, vendorId) {
+   console.log(`handleDriveFolderUpload START for ${vendorId}`, { folderUrl, vendorId });
   const folderId = getFolderIdFromUrl(folderUrl);
+  console.log(`Extracted folderId: ${vendorId}`, folderId);
   if (!folderId) throw new Error("Invalid Google Drive folder URL");
+  console.log(`Checking Google Drive API key ${vendorId}`);
   if (!apiKey) throw new Error("Google Drive API key not configured");
 
   // check access
@@ -82,9 +85,12 @@ async function handleDriveFolderUpload(folderUrl, vendorId) {
   const customerId = order.fromId;
   const phoneNo = order.phone_no;
   const folderName = `${vendorId}`;
+  console.log(`FolderName: ${vendorId}`, folderName);
 
   let existingFolder = await FolderModel.findOne({ folderName, customerId });
+   console.log(`Existing folder found: ${vendorId}`, !!existingFolder);
   if (!existingFolder) {
+    console.log("Creating new folder record for Id:", vendorId);
     const folder = new FolderModel({ folderName, customerId, vendorId });
     await folder.save();
     existingFolder = folder;
@@ -92,25 +98,32 @@ async function handleDriveFolderUpload(folderUrl, vendorId) {
 
   // temp dir
   const tempDir = path.join(__dirname, "uploads");
-  if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+  console.log(`Temp dir: ${vendorId}`, tempDir);
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+    console.log("Temp dir created");
+  }
 
   // list files
   let files = [];
   let pageToken = null;
+  console.log(`Fetching images from Google Drive ${vendorId}`);
   do {
     let listUrl = `https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and trashed=false and mimeType contains 'image/'&key=${apiKey}&fields=nextPageToken,files(id,name,mimeType)`;
     if (pageToken) listUrl += `&pageToken=${pageToken}`;
     const listRes = await axios.get(listUrl);
+    console.log(`Files fetched:${vendorId}`, listRes.data.files.length);
     files = files.concat(listRes.data.files);
     pageToken = listRes.data.nextPageToken;
   } while (pageToken);
-
+console.log(`Total images found: ${vendorId}`, files.length);
   if (files.length === 0) throw new Error("No images found in the folder");
 
   const folderPath = `${folderName}_${customerId}`;
 
   // process files
-  const uploadPromises = files.map(async (file) => {
+  const uploadPromises = files.map(async (file, index) => {
+    console.log(`id - ${vendorId} [${index + 1}/${files.length}] Start processing`, file.name);
   let filePath;
   let thumbnailPath;
 
@@ -125,6 +138,8 @@ async function handleDriveFolderUpload(folderUrl, vendorId) {
     );
 
     const downloadUrl = `https://drive.google.com/uc?export=download&id=${file.id}`;
+
+     console.log(`Downloading from Drive: ${vendorId}`, downloadUrl);
 
     // DOWNLOAD
     await downloadFile(downloadUrl, filePath);
@@ -165,26 +180,41 @@ async function handleDriveFolderUpload(folderUrl, vendorId) {
       thumbnailUrl: s3ThumbResponse.Location,
     };
   } catch (err) {
-    console.error(`Error processing ${file?.name}:`, err.message);
+     console.error(`❌ Error processing id - ${vendorId}, ${file?.name}`, {
+      message: err.message,
+    });
     return { fileName: file?.name, error: err.message };
   } finally {
     if (filePath && fs.existsSync(filePath)) {
       try {
         await fsp.unlink(filePath);
-      } catch {}
+      } catch (err) {
+        console.log(`filepath unlink error id - ${vendorId}, `,err.message);
+      }
     }
     if (thumbnailPath && fs.existsSync(thumbnailPath)) {
       try {
         await fsp.unlink(thumbnailPath);
-      } catch {}
+      } catch (err) {
+        console.log(`thumbnail unlink error id - ${vendorId}, `,err.message);
+      }
     }
   }
 });
 
 
   const uploadedFiles = await Promise.all(uploadPromises);
+ console.log(" All uploads completed");
+ const successCount = uploadedFiles.filter(f => !f.error).length;
+const errorCount = uploadedFiles.filter(f => f.error).length;
 
+console.log(`Upload summary for ${vendorId}`, {
+  total: uploadedFiles.length,
+  success: successCount,
+  failed: errorCount
+});
   const orderGalleryLink = `https://horaservices.com/photo-gallery?folderName=${folderName}&customerId=${customerId}`;
+  console.log("Updating order with gallery link");
   await OrderModel.updateOne(
     { order_id: vendorId - 10800 },
     { $set: { orderGalleryLink, orderDriveLink: folderUrl } }
@@ -213,10 +243,14 @@ router.post("/import-drive-folder", async (req, res) => {
 
     // Background processing
     process.nextTick(async () => {
+      console.log(`⚙️ Background upload START for vendorId: ${vendorId}`);
       try {
         await handleDriveFolderUpload(folderUrl, vendorId);
+        console.log(`✅ Background upload SUCCESS for vendorId: ${vendorId}`);
       } catch (err) {
-        console.error("Background upload failed:", err);
+        console.error(`❌ Background upload FAILED for vendorId: ${vendorId}`, {
+      message: err.message
+    });
       }
     });
   } catch (error) {
@@ -275,10 +309,12 @@ router.post("/add-order-drive-link", async (req, res) => {
 
     // Background me images upload
     process.nextTick(async () => {
+      console.log(`Background upload started `);
       try {
         await handleDriveFolderUpload(folderUrl, folderName);
+        console.log(`Background upload finished`);
       } catch (err) {
-        console.error("Background upload failed:", err.message);
+        console.error(`Background upload failed`, err.message);
       }
     });
 

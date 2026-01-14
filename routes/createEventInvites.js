@@ -2,11 +2,11 @@ const express = require("express");
 const router = express.Router();
 const mongoose = require("mongoose");
 const Joi = require("joi");
-const AWS = require("aws-sdk");
 const EventInvite = require("../models/event-invite");
 const EventGuest = require("../models/event-guest");
 const TicketCounter = require("../models/ticket-counter-luckydraw");
 const EventImages = require("../models/eventImages");
+const EventMessage = require("../models/eventMessage");
 const multer = require("multer");
 const fs = require("fs");
 
@@ -17,6 +17,7 @@ const postComment = require("../models/post-comment");
 const ChatRoom = require("../models/eventChatRoom");
 const User = require("../models/user");
 const { s3, S3_BUCKET } = require("../utils/awsConfigs");
+const { getIO } = require("../socket");
 
 // Helper: Delete image from S3
 async function deleteFromS3(key) {
@@ -474,8 +475,7 @@ router.get("/event-guests/all/:eventId", async (req, res) => {
     return sendResponse(res, 500, true, "Server error");
   }
 });
-
-// Update RSVP status or name of a guest + Join to event chat room
+// Update guest details for an event
 router.put("/event-guest", async (req, res) => {
   try {
     const { eventId, userId, name, rsvpStatus } = req.body;
@@ -487,13 +487,10 @@ router.put("/event-guest", async (req, res) => {
       rsvpStatus: Joi.string()
         .valid("will Come", "Sure, will try", "")
         .optional(),
+      phone: Joi.string().trim().allow("").optional(),
     });
 
-    const { error } = schema.validate(
-      { eventId, userId, name, rsvpStatus },
-      { abortEarly: false }
-    );
-
+    const { error } = schema.validate(req.body, { abortEarly: false });
     if (error) {
       const details = error.details.map((err) => ({
         path: err.path.join("."),
@@ -502,6 +499,7 @@ router.put("/event-guest", async (req, res) => {
       return sendResponse(res, 422, true, "Validation failed", details);
     }
 
+    // Fix ObjectId validation
     if (
       !mongoose.Types.ObjectId.isValid(eventId) ||
       !mongoose.Types.ObjectId.isValid(userId)
@@ -509,44 +507,79 @@ router.put("/event-guest", async (req, res) => {
       return sendResponse(res, 400, true, "Invalid event ID or user ID");
     }
 
-    // GET USER ONLY ONCE
     const user = await User.findById(userId);
     if (!user) {
       return sendResponse(res, 404, true, "User not found");
     }
-    // FIND GUEST ENTRY
+
     const updatedGuest = await EventGuest.findOne({ eventId, userId });
     if (!updatedGuest) {
       return sendResponse(res, 404, true, "Guest not found");
     }
 
-    // Update guest & user name
-    if (name !== undefined && name !== "" && user.name !== name) {
-      updatedGuest.name = name;
-      user.name = name;
+    let finalName = name || user.name;
+
+    // Update name if provided and different
+    if (name && name.trim() !== "" && user.name !== name.trim()) {
+      updatedGuest.name = name.trim();
+      user.name = name.trim();
       await user.save();
+      finalName = name.trim();
     }
 
-    if (rsvpStatus !== undefined) {
+    // Update RSVP status
+    if (rsvpStatus !== undefined && rsvpStatus !== "") {
       updatedGuest.rsvpStatus = rsvpStatus;
-      updatedGuest.name = name;
+      updatedGuest.name = finalName;
     }
 
     const savedGuest = await updatedGuest.save();
 
-    // Create member object for ChatRoom
+    // Add to chat room members
     const memberObject = {
       userId,
-      name: name || user.name,
+      name: finalName,
       phone: user.phone || "",
       profileImageUrl: user.avatar || "",
     };
 
-    // ADD MEMBER TO ROOM (avoid duplicates)
     await ChatRoom.findOneAndUpdate(
-      { eventId: eventId },
-      { $addToSet: { members: memberObject } }
+      { eventId },
+      { $addToSet: { members: memberObject } },
+      { upsert: false }
     );
+      const ioInstance = getIO();
+      const groupRoom = await ChatRoom.findOne({ eventId, roomType: "group" });
+      if (groupRoom) {
+        const infoMessage = `${finalName} joined the group`;
+
+        const savedInfo = await EventMessage.create({
+          groupId: groupRoom._id,
+          senderId: userId,
+          message: infoMessage,
+          type: "info",
+          senderName: finalName,
+          senderPhone: user.phone || "",
+        });
+
+        // Update lastMessageAt for sorting
+        await ChatRoom.findByIdAndUpdate(groupRoom._id, {
+          lastMessageAt: savedInfo.createdAt,
+        });
+
+        const finalInfoMsg = {
+          _id: savedInfo._id,
+          groupId: groupRoom._id,
+          senderId: userId,
+          message: infoMessage,
+          type: "info",
+          createdAt: savedInfo.createdAt,
+          senderName: finalName,
+          senderPhone: user.phone || "",
+        };
+
+        ioInstance.to(groupRoom._id.toString()).emit("message:new", finalInfoMsg);
+      }
 
     return sendResponse(
       res,

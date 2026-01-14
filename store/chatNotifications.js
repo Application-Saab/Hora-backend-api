@@ -95,6 +95,7 @@ async function sendPushToRoom(groupId, messageText, options = {}) {
     data: {
       groupId: String(groupId),
       ...(options.data || {}),
+      url: options.url || `/chat/room?groupId=${String(groupId) || ""}&id=${String(options.data.senderId || "")}`,
     }
   };
 

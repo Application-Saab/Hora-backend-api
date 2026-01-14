@@ -4,7 +4,7 @@ const mongoose = require("mongoose");
 const ChatRoom = require("../models/eventChatRoom");
 const ChatMessage = require("../models/eventMessage");
 const PushSub = require("../models/pushSubscription");
-const { ioInstance } = require("../socket");
+const { ioInstance, getIO } = require("../socket");
 const { computeUnreadCountsForUser } = require("../utils/chatUnread");
 const User = require("../models/user");
 
@@ -15,6 +15,7 @@ const sendResponse = (res, status, error, message, data = null) =>
 router.post("/create-direct-room", async (req, res) => {
   try {
     const { members, eventId } = req.body;
+    const ioInstance = getIO();
 
     // Validation
     if (!Array.isArray(members) || members.length !== 2) {
@@ -48,10 +49,24 @@ router.post("/create-direct-room", async (req, res) => {
     }).lean();
 
     if (existingRoom) {
+      // Emit to both users to join the room
+      if (ioInstance) {
+        // Emit "joinRoom" to both users' sockets (if connected)
+        ioInstance
+          .to(userId1.toString())
+          .emit("joinRoom", { groupId: newRoom._id.toString() });
+        ioInstance
+          .to(userId2.toString())
+          .emit("joinRoom", { groupId: newRoom._id.toString() });
+
+        console.log(
+          `Emitted joinRoom to both users for new direct room: ${newRoom._id}`
+        );
+      }
       return res.status(200).json({
         success: true,
         message: "Direct room already exists",
-        room: existingRoom,
+        data: existingRoom,
       });
     }
 
@@ -95,6 +110,21 @@ router.post("/create-direct-room", async (req, res) => {
       members: membersArr,
     });
 
+    // Emit to both users to join the room
+    if (ioInstance) {
+      // Emit "joinRoom" to both users' sockets (if connected)
+      ioInstance
+        .to(userId1.toString())
+        .emit("joinRoom", { groupId: newRoom._id.toString() });
+      ioInstance
+        .to(userId2.toString())
+        .emit("joinRoom", { groupId: newRoom._id.toString() });
+
+      console.log(
+        `Emitted joinRoom to both users for new direct room: ${newRoom._id}`
+      );
+    }
+
     return res.status(200).json({
       success: true,
       message: "Direct chat room created successfully",
@@ -124,6 +154,7 @@ router.post("/create-direct-room", async (req, res) => {
 });
 
 // Get all rooms joined by a user
+
 router.get("/chatrooms/user/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
@@ -134,21 +165,48 @@ router.get("/chatrooms/user/:userId", async (req, res) => {
 
     const userObjectId = new mongoose.Types.ObjectId(userId);
 
-    const rooms = await ChatRoom.find(
-      { "members.userId": userObjectId },
+    const rooms = await ChatRoom.aggregate([
       {
-        roomId: 1,
-        eventId: 1,
-        roomName: 1,
-        members: 1,
-        createdAt: 1,
-        roomProfileUrl: 1,
-        roomType: 1,
-      }
-    )
-      .sort({ createdAt: -1 })
-      .lean()
-      .hint({ "members.userId": 1 });
+        $match: { "members.userId": userObjectId },
+      },
+      {
+        $lookup: {
+          from: "eventmessages",
+          localField: "_id",
+          foreignField: "groupId",
+          as: "latestMessages",
+          pipeline: [{ $sort: { createdAt: -1 } }, { $limit: 1 }],
+        },
+      },
+      {
+        $addFields: {
+          lastMessageAt: {
+            $arrayElemAt: ["$latestMessages.createdAt", 0],
+          },
+        },
+      },
+      {
+        $project: {
+          roomId: 1,
+          eventId: 1,
+          roomProfileUrl: 1,
+          roomName: 1,
+          createdBy: 1,
+          roomType: 1,
+          directKey: 1,
+          members: 1,
+          createdAt: 1,
+          lastReadAt: 1,
+          lastMessageAt: 1,
+        },
+      },
+      {
+        $sort: {
+          lastMessageAt: -1,
+          createdAt: -1,
+        },
+      },
+    ]);
 
     return sendResponse(res, 200, false, "Rooms fetched successfully", rooms);
   } catch (err) {

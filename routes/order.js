@@ -15,14 +15,9 @@ const photographyModel = require('../models/photography')
 // Load the full build.
 var _ = require('lodash');
 const AddressModel = require('../models/address');
-
-
-//................used api ..................
-
-
-
-//.........................not used api .............
-
+const mongoose = require('mongoose');
+const path = require("path");
+const fs = require("fs"); 
 
 router.post('/add_backup1', async(req, res) => {
     const otp = commonFunction.OTP();
@@ -2254,6 +2249,266 @@ router.get('/order_details_photography/:id', async (req, res) => {
         });
     }
 });
+ 
+// SAVE CALL CHECKLIST (POST API)
+router.post("/save-call-checklist", async (req, res) => {
+  try {
+    const { orderId, call_checklist, eventName } = req.body;
+
+    const call_checklist_exists = true;
+
+    const {
+      designType = {},
+      ...orderChecklist
+    } = call_checklist;
+
+    const updatedOrder = await orderModel.findByIdAndUpdate(
+      orderId,
+      {
+        $set: {
+          call_checklist: orderChecklist,
+          eventName,
+          call_checklist_exists
+        }
+      },
+      { new: true }
+    );
+
+    if (updatedOrder?.items?.length) {
+      await Promise.all(
+        updatedOrder.items.map(itemId =>
+          decorationModel.findByIdAndUpdate(
+            itemId,
+            {
+              $set: {
+                designType,
+              }
+            },
+            { new: true }
+          )
+        )
+      );
+    }
+
+    res.json({
+      success: true,
+      message: "Call checklist saved. Decoration fields updated successfully."
+    });
+
+  } catch (error) {
+    console.error("Error saving checklist:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// EDIT CALL CHECKLIST (PUT API)
+router.put("/edit-call-checklist/:orderId", async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { eventName, call_checklist } = req.body;
+
+    if (!orderId) {
+      return res.status(400).json({ success: false, message: "Order ID is required" });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      return res.status(400).json({ success: false, message: "Invalid Order ID" });
+    }
+
+    // Fetch existing order
+    const existingOrder = await orderModel.findById(orderId);
+    if (!existingOrder) {
+      return res.status(404).json({ success: false, message: "Order not found" });
+    }
+
+    // Merge checklist fields
+    const updatedChecklist = { ...existingOrder.call_checklist };
+
+    if (call_checklist) {
+      // Merge designType
+      if (call_checklist.designType) {
+        updatedChecklist.designType = {
+          ...updatedChecklist.designType,
+          ...call_checklist.designType
+        };
+      }
+      // Merge other checklist fields (booleans, etc.)
+      Object.keys(call_checklist).forEach(key => {
+        if (!["designType"].includes(key)) {
+          updatedChecklist[key] = call_checklist[key];
+        }
+      });
+    }
+
+    // Update the order
+    const updatedOrder = await orderModel.findByIdAndUpdate(
+      orderId,
+      { 
+        $set: { 
+          call_checklist: updatedChecklist,
+          eventName: eventName || existingOrder.eventName
+        } 
+      },
+      { new: true }
+    );
+
+    // Update decorations for each item
+    if (updatedOrder.items?.length) {
+      const decorationUpdateFields = {};
+      if (call_checklist?.designType) decorationUpdateFields.designType = call_checklist.designType;
+     
+      await Promise.all(
+        updatedOrder.items.map(itemId => {
+          if (mongoose.Types.ObjectId.isValid(itemId)) {
+            return decorationModel.findByIdAndUpdate(
+              itemId,
+              { $set: decorationUpdateFields },
+              { new: true }
+            );
+          } else {
+            console.warn(`Invalid itemId skipped: ${itemId}`);
+            return null;
+          }
+        })
+      );
+    }
+
+    return res.json({
+      success: true,
+      message: "Call checklist and decorations updated successfully",
+      data: updatedOrder,
+    });
+
+  } catch (error) {
+    console.error("Error updating checklist:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// DELETE TEH UPLOAD CALLCHECKLIST IMAGE 
+router.post("/delete-callchecklist-image", async (req, res) => {
+  try {
+    const { orderId, imageName, itemKey } = req.body;
+
+    if (!orderId || !imageName || !itemKey) {
+      return res.status(400).json({ message: "orderId, imageName and itemKey are required" });
+    }
+
+    //  Delete file from uploads folder
+    const filePath = path.join(process.cwd(), "uploads", imageName);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    // Remove image from itemsVerifiedImages in MongoDB
+    const order = await orderModel.findById(orderId);
+    if (!order || !order.call_checklist?.itemsVerifiedImages) {
+      return res.status(404).json({ message: "Order or checklist not found" });
+    }
+
+    const images = order.call_checklist.itemsVerifiedImages[itemKey] || [];
+    const updatedImages = images.filter(img => img !== imageName);
+
+    // Important: Update and markModified
+    order.call_checklist.itemsVerifiedImages[itemKey] = updatedImages;
+    order.markModified('call_checklist.itemsVerifiedImages');
+
+    await order.save();
+
+    return res.json({
+      success: true,
+      message: "Image deleted successfully from checklist & server",
+      orderId,
+      itemKey,
+      imageName
+    });
+
+  } catch (err) {
+    console.error("DELETE CALL CHECKLIST IMAGE ERROR", err);
+    return res.status(500).json({
+      message: "Error deleting image",
+      error: err.message
+    });
+  }
+});
+
+// PUT /api/order/updateImageTags  (images on website, not on the website)
+router.put("/updateImageTags", async (req, res) => {
+  try {
+    const { orderId, images } = req.body;
+
+    if (!orderId || !Array.isArray(images)) {
+      return res.status(400).json({
+        error: true,
+        status: 400,
+        message: "orderId and images array are required",
+      });
+    }
+
+    const order = await orderModel.findOne({ order_id: orderId });
+    if (!order) {
+      return res.status(404).json({
+        error: true,
+        status: 404,
+        message: "Order not found",
+      });
+    }
+
+    // map frontend images by image name (SAFE)
+    const tagMap = new Map();
+    images.forEach(img => {
+      if (img.image) {
+        tagMap.set(img.image, img.is_tagged);
+      }
+    });
+
+    order.userOrderDishImageArray = order.userOrderDishImageArray.map(dbImg => {
+
+      if (typeof dbImg === "string") {
+        if (tagMap.has(dbImg)) {
+          return {
+            id: new mongoose.Types.ObjectId(),
+            image: dbImg,
+            is_tagged: tagMap.get(dbImg)
+          };
+        }
+        return dbImg;
+      }
+
+      if (dbImg.image && tagMap.has(dbImg.image)) {
+        return {
+          ...dbImg,
+          is_tagged: tagMap.get(dbImg.image)
+        };
+      }
+
+      return dbImg;
+    });
+
+    await order.save();
+
+    return res.status(200).json({
+      error: false,
+      status: 200,
+      message: "Image tag updated successfully",
+      data: order.userOrderDishImageArray,
+    });
+
+  } catch (err) {
+    return res.status(500).json({
+      error: true,
+      status: 500,
+      message: err.message,
+    });
+  }
+});
+
+
+
+
 
 module.exports = router;
 

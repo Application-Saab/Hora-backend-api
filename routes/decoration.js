@@ -72,6 +72,19 @@ router.post('/edit', async (req, res) => {
         const result = await decorationModel.findByIdAndUpdate(id, updatedData, options);
 
         if (result) {
+            // ----- NEW CACHE UPDATE -----
+            if (updatedData.tag && updatedData.tag.length > 0) {
+                const firstTag = updatedData.tag[0];
+                // fetch all decorations with this tag
+                const decorationsForTag = await decorationModel.find({ tag: { $in: [firstTag] } }).lean();
+                const cacheResponse = {
+                    error: false,
+                    status: 200,
+                    message: 'Search Successful',
+                    data: decorationsForTag
+                };
+                cache.set(`search_tag_${firstTag}`, cacheResponse);
+            }
             return res.json({
                 error: false,
                 status: 200,

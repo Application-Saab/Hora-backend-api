@@ -46,7 +46,8 @@ const orderSchema = new mongoose.Schema({
     vendor_amount: { type: String, default: '' },
     order_taken_by: { type: String, default: '' },
     eventName : { type: String, default: '' },
-
+    call_checklist: {type: Object, default: {}},
+    call_checklist_exists: {type: Boolean, default: false},
 }, {
     strict: false,
     timestamps: true

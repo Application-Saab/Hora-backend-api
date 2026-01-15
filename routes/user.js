@@ -213,22 +213,21 @@ router.post("/otp_verify", async (req, res) => {
   try {
     const user = await UserModel.findOne({ phone });
 
-    if (!user) {
-      return res
-        .status(404)
-        .json({ error: true, status: 404, message: "User not found" });
-    }
+        if (otp === '1234') { 
+            if (role !== user.role) {
+                return res.status(503).json({
+                    error: true,
+                    status: 503,
+                    message: `The number is already used for ${commonFunction.capitalizeFirstLetter(user.role)} login. Please use a different number.`
+                });
+            }
+             if (user.status === 0 && user.role !== 'supplier') {
+                return res.status(503).json({ error: true, status: 503, message: 'Account Blocked' });
+            }
 
-    if (otp === "1234") {
-      if (role !== user.role) {
-        return res.status(503).json({
-          error: true,
-          status: 503,
-          message: `The number is already used for ${commonFunction.capitalizeFirstLetter(
-            user.role
-          )} login. Please use a different number.`,
-        });
-      }
+            if (user.status === 2) {
+                return res.status(503).json({ error: true, status: 503, message: 'Account Deleted' });
+            }
 
       // Check account status
       if (user.status === 0) {
@@ -255,16 +254,14 @@ router.post("/otp_verify", async (req, res) => {
           .json({ error: true, status: 503, message: "OTP Mismatch" });
       }
 
-      // Check role again after OTP verification
-      if (role !== user.role) {
-        return res.status(503).json({
-          error: true,
-          status: 503,
-          message: `The number is already used for ${commonFunction.capitalizeFirstLetter(
-            user.role
-          )} login. Please use a different number.`,
-        });
-      }
+             // Check account status
+            if (user.status === 0 && user.role !== 'supplier') {
+                return res.status(503).json({ error: true, status: 503, message: 'Account Blocked' });
+            }
+
+            if (user.status === 2) {
+                return res.status(503).json({ error: true, status: 503, message: 'Account Deleted' });
+            }
 
       if (user.status === 0) {
         return res

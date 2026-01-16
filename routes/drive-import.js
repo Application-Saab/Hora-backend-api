@@ -170,12 +170,12 @@ async function handleDriveFolderUpload(folderUrl, vendorId) {
   } finally {
     if (filePath && fs.existsSync(filePath)) {
       try {
-        await fsp.unlink(filePath);
+        await fs.unlinkSync(filePath);
       } catch {}
     }
     if (thumbnailPath && fs.existsSync(thumbnailPath)) {
       try {
-        await fsp.unlink(thumbnailPath);
+        await fs.unlinkSync(thumbnailPath);
       } catch {}
     }
   }

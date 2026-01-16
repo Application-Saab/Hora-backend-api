@@ -120,7 +120,7 @@ router.post("/create-event-invite", async (req, res) => {
       });
 
       // Create chat room according to event
-      await ChatRoom.create({
+      let room = await ChatRoom.create({
         eventId: event._id,
         roomName: hostName,
         createdBy: userId,
@@ -133,12 +133,34 @@ router.post("/create-event-invite", async (req, res) => {
           },
         ],
       });
+      await EventMessage.insertMany([
+        {
+          groupId: room._id,
+          senderId: userId,
+          message:
+            "Welcome to Wonderland chat — where the fun begins even before the party!",
+          type: "text",
+          mediaUrl: '',
+          senderName: finalUserName || 'Wonderland',
+          senderPhone: user.phone || '',
+        },
+        {
+          groupId: room._id,
+          senderId: userId,
+          message: "What’s on your mind? !",
+          type: "text",
+          mediaUrl: '',
+          senderName: finalUserName || 'Wonderland',
+          senderPhone: user.phone || '',
+        },
+      ]);
     } catch (innerErr) {
       // If any one operation will fails
       await Promise.all([
         EventGuest.deleteMany({ eventId: event._id }),
         ChatRoom.deleteMany({ eventId: event._id }),
         EventInvite.findByIdAndDelete(event._id),
+        EventMessage.deleteMany({ groupId: room._id }),
       ]);
 
       throw innerErr;
@@ -548,38 +570,38 @@ router.put("/event-guest", async (req, res) => {
       { $addToSet: { members: memberObject } },
       { upsert: false }
     );
-      const ioInstance = getIO();
-      const groupRoom = await ChatRoom.findOne({ eventId, roomType: "group" });
-      if (groupRoom) {
-        const infoMessage = `${finalName} joined the group`;
+    const ioInstance = getIO();
+    const groupRoom = await ChatRoom.findOne({ eventId, roomType: "group" });
+    if (groupRoom) {
+      const infoMessage = `${finalName} joined the group`;
 
-        const savedInfo = await EventMessage.create({
-          groupId: groupRoom._id,
-          senderId: userId,
-          message: infoMessage,
-          type: "info",
-          senderName: finalName,
-          senderPhone: user.phone || "",
-        });
+      const savedInfo = await EventMessage.create({
+        groupId: groupRoom._id,
+        senderId: userId,
+        message: infoMessage,
+        type: "info",
+        senderName: finalName,
+        senderPhone: user.phone || "",
+      });
 
-        // Update lastMessageAt for sorting
-        await ChatRoom.findByIdAndUpdate(groupRoom._id, {
-          lastMessageAt: savedInfo.createdAt,
-        });
+      // Update lastMessageAt for sorting
+      await ChatRoom.findByIdAndUpdate(groupRoom._id, {
+        lastMessageAt: savedInfo.createdAt,
+      });
 
-        const finalInfoMsg = {
-          _id: savedInfo._id,
-          groupId: groupRoom._id,
-          senderId: userId,
-          message: infoMessage,
-          type: "info",
-          createdAt: savedInfo.createdAt,
-          senderName: finalName,
-          senderPhone: user.phone || "",
-        };
+      const finalInfoMsg = {
+        _id: savedInfo._id,
+        groupId: groupRoom._id,
+        senderId: userId,
+        message: infoMessage,
+        type: "info",
+        createdAt: savedInfo.createdAt,
+        senderName: finalName,
+        senderPhone: user.phone || "",
+      };
 
-        ioInstance.to(groupRoom._id.toString()).emit("message:new", finalInfoMsg);
-      }
+      ioInstance.to(groupRoom._id.toString()).emit("message:new", finalInfoMsg);
+    }
 
     return sendResponse(
       res,

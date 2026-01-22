@@ -110,7 +110,7 @@ router.post("/otp_generate", async (req, res) => {
       await UserModel.findByIdAndUpdate(user._id, { $set: update });
 
       // Send OTP via SMS using Fast2SMS API (with Axios)
-      const smsUrl = `https://www.fast2sms.com/dev/bulkV2?authorization=${process.env.FAST2SMS_API_KEY}&message=182194&variables_values=${otp}&route=dlt&numbers=${phone}&sender_id=HORASR`;
+      const smsUrl = `https://www.fast2sms.com/dev/bulkV2?authorization=${process.env.FAST2SMS_API_KEY}&route=dlt&sender_id=HORASR&message=207805&variables_values=${otp}|${otp}&numbers=${phone}`;
       try {
         await axios.get(smsUrl); // Send OTP SMS
       } catch (smsError) {
@@ -160,7 +160,7 @@ router.post("/otp_generate", async (req, res) => {
       });
 
       // Send OTP via SMS for new user
-      const newSmsUrl = `https://www.fast2sms.com/dev/bulkV2?authorization=${process.env.FAST2SMS_API_KEY}&variables_values=${otp}&route=otp&numbers=${phone}`;
+      const newSmsUrl = `https://www.fast2sms.com/dev/bulkV2?authorization=${process.env.FAST2SMS_API_KEY}&route=dlt&sender_id=HORASR&message=207805&variables_values=${otp}|${otp}&numbers=${phone}`;
 
       try {
         await axios.get(newSmsUrl); // Send OTP SMS

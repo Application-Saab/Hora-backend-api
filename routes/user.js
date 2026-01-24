@@ -68,7 +68,7 @@ router.post("/otp_generate_backup", async (req, res) => {
             } catch (error) {
               return res.json({ error: true, status: 503, message: error });
             }
-          }
+          },
         );
       }
     } else {
@@ -213,21 +213,25 @@ router.post("/otp_verify", async (req, res) => {
   try {
     const user = await UserModel.findOne({ phone });
 
-        if (otp === '1234') { 
-            if (role !== user.role) {
-                return res.status(503).json({
-                    error: true,
-                    status: 503,
-                    message: `The number is already used for ${commonFunction.capitalizeFirstLetter(user.role)} login. Please use a different number.`
-                });
-            }
-             if (user.status === 0 && user.role !== 'supplier') {
-                return res.status(503).json({ error: true, status: 503, message: 'Account Blocked' });
-            }
+    if (otp === "1234") {
+      if (role !== user.role) {
+        return res.status(503).json({
+          error: true,
+          status: 503,
+          message: `The number is already used for ${commonFunction.capitalizeFirstLetter(user.role)} login. Please use a different number.`,
+        });
+      }
+      if (user.status === 0 && user.role !== "supplier") {
+        return res
+          .status(503)
+          .json({ error: true, status: 503, message: "Account Blocked" });
+      }
 
-            if (user.status === 2) {
-                return res.status(503).json({ error: true, status: 503, message: 'Account Deleted' });
-            }
+      if (user.status === 2) {
+        return res
+          .status(503)
+          .json({ error: true, status: 503, message: "Account Deleted" });
+      }
 
       // Check account status
       if (user.status === 0) {
@@ -254,14 +258,18 @@ router.post("/otp_verify", async (req, res) => {
           .json({ error: true, status: 503, message: "OTP Mismatch" });
       }
 
-             // Check account status
-            if (user.status === 0 && user.role !== 'supplier') {
-                return res.status(503).json({ error: true, status: 503, message: 'Account Blocked' });
-            }
+      // Check account status
+      if (user.status === 0 && user.role !== "supplier") {
+        return res
+          .status(503)
+          .json({ error: true, status: 503, message: "Account Blocked" });
+      }
 
-            if (user.status === 2) {
-                return res.status(503).json({ error: true, status: 503, message: 'Account Deleted' });
-            }
+      if (user.status === 2) {
+        return res
+          .status(503)
+          .json({ error: true, status: 503, message: "Account Deleted" });
+      }
 
       if (user.status === 0) {
         return res
@@ -365,6 +373,29 @@ const sendResponse = (res, status, error, message, data = null) =>
   res.status(status).json({ error, status, message, data });
 
 //  Get user details by ID
+router.get("/user-details-by-phone/:phone", async (req, res) => {
+  try {
+    const { phone } = req.params;
+
+    if (phone.length < 10) {
+      return sendResponse(res, 400, true, "Invalid phone number");
+    }
+
+    const user = await UserModel.findOne({ phone })
+      .select("name phone _id")
+      .lean();
+
+    if (!user) {
+      return sendResponse(res, 404, true, "User not found");
+    }
+
+    return sendResponse(res, 200, false, "User fetched successfully", user);
+  } catch (err) {
+    console.error("Fetch user error:", err.message);
+    return sendResponse(res, 500, true, "Server error");
+  }
+});
+
 // Updated
 router.get("/user-details/:id", async (req, res) => {
   try {
@@ -418,7 +449,7 @@ const uploadImageToS3 = async (
   userId,
   eventId,
   mimeType,
-  folderName
+  folderName,
 ) => {
   const params = {
     Bucket: process.env.S3_BUCKET_NAME,
@@ -449,11 +480,11 @@ const deleteFileWithRetry = async (filePath, retries = 3, delay = 100) => {
     } catch (err) {
       console.error(
         `Attempt ${attempt} to delete file ${filePath} failed:`,
-        err.message
+        err.message,
       );
       if (attempt === retries) {
         console.error(
-          `Failed to delete file ${filePath} after ${retries} attempts`
+          `Failed to delete file ${filePath} after ${retries} attempts`,
         );
         return; // Don't throw error to avoid interrupting the response
       }
@@ -465,7 +496,7 @@ const deleteFileWithRetry = async (filePath, retries = 3, delay = 100) => {
 function isS3Url(str) {
   if (typeof str !== "string" || str.length === 0) return false;
   const regex = new RegExp(
-    `^${S3_BASE_URL}/event-invites/[^/]+/[^/]+\.[a-zA-Z]+$`
+    `^${S3_BASE_URL}/event-invites/[^/]+/[^/]+\.[a-zA-Z]+$`,
   );
   return regex.test(str);
 }
@@ -493,7 +524,7 @@ router.put("/user-details/:id", async (req, res) => {
     const updatedUser = await UserModel.findByIdAndUpdate(
       id,
       { $set: updateData },
-      { new: true, lean: true }
+      { new: true, lean: true },
     );
 
     if (!updatedUser) {
@@ -508,12 +539,12 @@ router.put("/user-details/:id", async (req, res) => {
           await ChatRoom.updateMany(
             { "members.userId": id },
             { $set: { "members.$[m].name": name } },
-            { arrayFilters: [{ "m.userId": new mongoose.Types.ObjectId(id) }] }
+            { arrayFilters: [{ "m.userId": new mongoose.Types.ObjectId(id) }] },
           );
 
           await EventMessage.updateMany(
             { senderId: id },
-            { $set: { senderName: name } }
+            { $set: { senderName: name } },
           );
         } catch (e) {
           console.error("Background sync failed:", e.message);
@@ -599,7 +630,7 @@ router.put(
           id,
           id,
           "image/webp",
-          "user-profile"
+          "user-profile",
         );
 
         const version = Date.now();
@@ -629,7 +660,7 @@ router.put(
           res,
           400,
           true,
-          "Avatar image, avatar URL, or clearAvatar is required"
+          "Avatar image, avatar URL, or clearAvatar is required",
         );
       }
 
@@ -649,7 +680,7 @@ router.put(
             },
             {
               arrayFilters: [{ "m.userId": user._id }],
-            }
+            },
           );
         } catch (err) {
           console.error("Background avatar sync failed:", err);
@@ -672,7 +703,7 @@ router.put(
       });
       return sendResponse(res, 500, true, "Server error");
     }
-  }
+  },
 );
 
 router.post("/user_update/:id", async (req, res) => {
@@ -802,20 +833,20 @@ router.get("/my_account/:id", async (req, res) => {
     responseObject.resumeProfilePercentage = Number(
       commonFunction.getPersonalStatus(
         doneResumeProfileField,
-        totalResumeProfileField
-      )
+        totalResumeProfileField,
+      ),
     );
     responseObject.cuisinesPercentage = Number(
-      commonFunction.getPersonalStatus(doneCuisinesField, totalCuisinesField)
+      commonFunction.getPersonalStatus(doneCuisinesField, totalCuisinesField),
     );
     responseObject.worksPercentage = Number(
-      commonFunction.getPersonalStatus(doneWorksField, totalWorksField)
+      commonFunction.getPersonalStatus(doneWorksField, totalWorksField),
     );
     responseObject.appliancePercentage = Number(
       commonFunction.getPersonalStatus(
         doneHandsApplianceField,
-        totalHandsApplianceField
-      )
+        totalHandsApplianceField,
+      ),
     );
     return res.json({
       error: false,
@@ -960,7 +991,7 @@ router.post("/getMealDish", async (req, res) => {
 
         const dishResponse = await query.exec();
         return { mealObject: meal, dish: dishResponse };
-      })
+      }),
     );
 
     return res.json({
@@ -1009,7 +1040,7 @@ router.get("/getCityServedLocalityList", async (req, res) => {
               data: newArray,
             });
           }
-        }
+        },
       );
     });
   } catch (error) {

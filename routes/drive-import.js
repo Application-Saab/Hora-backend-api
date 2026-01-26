@@ -185,7 +185,7 @@ async function handleDriveFolderUpload(folderUrl, vendorId) {
   const uploadedFiles = await Promise.all(uploadPromises);
 
   const orderGalleryLink = `https://horaservices.com/photo-gallery?folderName=${folderName}&customerId=${customerId}`;
-  await OrderModel.updateOne(
+  await OrderModel.updateOne( 
     { order_id: vendorId - 10800 },
     { $set: { orderGalleryLink, orderDriveLink: folderUrl } }
   );
@@ -251,10 +251,10 @@ router.post("/add-order-drive-link", async (req, res) => {
       throw new Error("Google Drive folder is not publicly accessible");
 
     // WebLink generate
-    const folderName = order_id + 10800;
-    const customerId = order.fromId;
+    // const folderName = order_id + 10800;
+    // const customerId = order.fromId;
 
-    const webLink = `https://horaservices.com/photo-gallery?folderName=${folderName}&customerId=${customerId}`;
+    // const webLink = `https://horaservices.com/photo-gallery?folderName=${folderName}&customerId=${customerId}`;
 
     // MongoDB update (IMMEDIATE)
     await OrderModel.updateOne(
@@ -262,7 +262,7 @@ router.post("/add-order-drive-link", async (req, res) => {
       {
         $set: {
           orderDriveLink: folderUrl,
-          orderWebLink: webLink,
+          // orderWebLink: webLink,
         },
       }
     );
@@ -270,17 +270,17 @@ router.post("/add-order-drive-link", async (req, res) => {
     // Frontend ko turant response
     res.status(201).json({
       message: "Drive link added successfully",
-      webLink,
+      // webLink,
     });
 
     // Background me images upload
-    process.nextTick(async () => {
-      try {
-        await handleDriveFolderUpload(folderUrl, folderName);
-      } catch (err) {
-        console.error("Background upload failed:", err.message);
-      }
-    });
+    // process.nextTick(async () => {
+    //   try {
+    //     await handleDriveFolderUpload(folderUrl, folderName);
+    //   } catch (err) {
+    //     console.error("Background upload failed:", err.message);
+    //   }
+    // });
 
   } catch (error) {
     console.error("add-order-drive-link error:", error.message);

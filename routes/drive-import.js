@@ -251,10 +251,18 @@ router.post("/add-order-drive-link", async (req, res) => {
       throw new Error("Google Drive folder is not publicly accessible");
 
     // WebLink generate
-    // const folderName = order_id + 10800;
-    // const customerId = order.fromId;
+    const folderName = order_id + 10800;
+    const customerId = order.fromId;
+    const vendorId = order_id + 10800;
+    const phoneNo = order.phone_no;
 
-    // const webLink = `https://horaservices.com/photo-gallery?folderName=${folderName}&customerId=${customerId}`;
+let existingFolder = await FolderModel.findOne({ folderName, customerId });
+    if (!existingFolder) {
+      const folder = new FolderModel({ folderName, customerId, vendorId });
+      await folder.save();
+    }
+
+     const webLink = `https://horaservices.com/photo-gallery?folderName=${folderName}&customerId=${customerId}`;
 
     // MongoDB update (IMMEDIATE)
     await OrderModel.updateOne(
@@ -262,7 +270,7 @@ router.post("/add-order-drive-link", async (req, res) => {
       {
         $set: {
           orderDriveLink: folderUrl,
-          // orderWebLink: webLink,
+          orderWebLink: webLink,
         },
       }
     );
@@ -270,17 +278,23 @@ router.post("/add-order-drive-link", async (req, res) => {
     // Frontend ko turant response
     res.status(201).json({
       message: "Drive link added successfully",
-      // webLink,
+       webLink,
     });
 
-    // Background me images upload
-    // process.nextTick(async () => {
-    //   try {
-    //     await handleDriveFolderUpload(folderUrl, folderName);
-    //   } catch (err) {
-    //     console.error("Background upload failed:", err.message);
-    //   }
-    // });
+ // Trigger EC2 worker to process media in background
+    axios
+      .post(`${process.env.MEDIA_WORKER_URL}/process-drive`, {
+        folderUrl,
+        order_id,      // so EC2 worker can know vendorId
+        customerId,    // optional for folder paths
+        phoneNo,
+      })
+      .catch((err) => {
+        console.error(
+          "Media worker API call failed:",
+          err.response?.data || err.message
+        );
+      });
 
   } catch (error) {
     console.error("add-order-drive-link error:", error.message);

@@ -25,6 +25,19 @@ const eventMessageSchema = new mongoose.Schema(
       enum: ["text", "image", "video", "info"],
       default: "text",
     },
+    infoType: {
+      type: String,
+      enum: ["user_joined", "user_left", "name_changed"],
+    },
+
+    actorId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+
+    actorSnapshot: {
+      name: String,
+    },
     mediaUrl: {
       type: String,
       default: "",
@@ -38,7 +51,7 @@ const eventMessageSchema = new mongoose.Schema(
       required: true,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 eventMessageSchema.index({ senderId: 1 });
 eventMessageSchema.index({ groupId: 1, createdAt: -1 }); // For fast latest message per group

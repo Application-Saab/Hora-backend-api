@@ -81,7 +81,7 @@ router.post("/create-event-invite", async (req, res) => {
       TicketCounter.findOneAndUpdate(
         { _id: "wonderland_event_id" },
         { $inc: { sequenceValue: 1 } },
-        { new: true, upsert: true }
+        { new: true, upsert: true },
       ),
     ]);
 
@@ -140,18 +140,18 @@ router.post("/create-event-invite", async (req, res) => {
           message:
             "Welcome to Wonderland chat — where the fun begins even before the party!",
           type: "text",
-          mediaUrl: '',
-          senderName: finalUserName || 'Wonderland',
-          senderPhone: user.phone || '',
+          mediaUrl: "",
+          senderName: finalUserName || "Wonderland",
+          senderPhone: user.phone || "",
         },
         {
           groupId: room._id,
           senderId: userId,
           message: "What’s on your mind? !",
           type: "text",
-          mediaUrl: '',
-          senderName: finalUserName || 'Wonderland',
-          senderPhone: user.phone || '',
+          mediaUrl: "",
+          senderName: finalUserName || "Wonderland",
+          senderPhone: user.phone || "",
         },
       ]);
     } catch (innerErr) {
@@ -185,7 +185,7 @@ router.get("/event-invites/:id", async (req, res) => {
 
     const invite = await EventInvite.findById(id)
       .select(
-        "userId eventType hostName eventDate eventTime location googleMapLink externalTemplateImageUrl"
+        "userId eventType hostName eventDate eventTime location googleMapLink externalTemplateImageUrl",
       )
       .lean();
 
@@ -198,7 +198,7 @@ router.get("/event-invites/:id", async (req, res) => {
       200,
       false,
       "Event invite fetched successfully",
-      invite
+      invite,
     );
   } catch (err) {
     console.error("Fetch Invite Error:", {
@@ -351,7 +351,7 @@ router.put("/event-invites/:id", async (req, res) => {
       200,
       false,
       "Invite updated successfully",
-      updated
+      updated,
     );
   } catch (err) {
     console.error("Update Invite Error:", {
@@ -387,7 +387,7 @@ router.post("/event-guest", async (req, res) => {
         res,
         409,
         true,
-        "User is already registered for this event"
+        "User is already registered for this event",
       );
     }
 
@@ -435,7 +435,7 @@ router.get("/event-guest/:eventId/user/:userId", async (req, res) => {
         phone: 1,
         rsvpStatus: 1,
         isHost: 1,
-      }
+      },
     ).lean();
 
     if (!guest) {
@@ -444,7 +444,7 @@ router.get("/event-guest/:eventId/user/:userId", async (req, res) => {
         200,
         false,
         "User not registered to this event",
-        null
+        null,
       );
     }
 
@@ -453,7 +453,7 @@ router.get("/event-guest/:eventId/user/:userId", async (req, res) => {
       200,
       false,
       "Guest details fetched successfully",
-      guest
+      guest,
     );
   } catch (err) {
     console.error("Fetch Event Guest Error:", err.message);
@@ -482,7 +482,7 @@ router.get("/event-guests/all/:eventId", async (req, res) => {
         userId: 1,
         eventId: 1,
         phone: 1,
-      }
+      },
     ).lean();
 
     return sendResponse(
@@ -490,7 +490,7 @@ router.get("/event-guests/all/:eventId", async (req, res) => {
       200,
       false,
       "Guests fetched successfully",
-      guests || []
+      guests || [],
     );
   } catch (err) {
     console.error("Fetch Guests Error:", err.message);
@@ -568,7 +568,7 @@ router.put("/event-guest", async (req, res) => {
     await ChatRoom.findOneAndUpdate(
       { eventId },
       { $addToSet: { members: memberObject } },
-      { upsert: false }
+      { upsert: false },
     );
     const ioInstance = getIO();
     const groupRoom = await ChatRoom.findOne({ eventId, roomType: "group" });
@@ -580,6 +580,11 @@ router.put("/event-guest", async (req, res) => {
         senderId: userId,
         message: infoMessage,
         type: "info",
+        infoType: "user_joined",
+        actorId: userId,
+        actorSnapshot: {
+          name: finalName,
+        },
         senderName: finalName,
         senderPhone: user.phone || "",
       });
@@ -595,21 +600,24 @@ router.put("/event-guest", async (req, res) => {
         senderId: userId,
         message: infoMessage,
         type: "info",
+        infoType: "user_joined",
+        actorId: userId,
+        actorSnapshot: {
+          name: finalName,
+        },
         createdAt: savedInfo.createdAt,
         senderName: finalName,
         senderPhone: user.phone || "",
       };
 
       ioInstance.to(groupRoom._id.toString()).emit("message:new", finalInfoMsg);
+      // ioInstance.to(eventId.toString()).emit("rsvp:update", { eventId });
     }
 
-    return sendResponse(
-      res,
-      200,
-      false,
-      "Guest updated & added to chat room",
-      savedGuest
-    );
+    return sendResponse(res, 200, false, "Guest updated & added to chat room", {
+      ...savedGuest.toObject(),
+      groupId: groupRoom ? groupRoom._id : null,
+    });
   } catch (err) {
     console.error("Update Guest Error:", {
       message: err.message,
@@ -639,7 +647,7 @@ const uploadImageToS3 = async (
   userId,
   eventId,
   mimeType,
-  folderName
+  folderName,
 ) => {
   const params = {
     Bucket: S3_BUCKET,
@@ -701,7 +709,7 @@ router.post("/event-posts/:eventId", async (req, res) => {
       return sendResponse(res, 400, true, "postUrl and postKey are required");
     if (
       !["selfUploaded", "thankYouNote", "postBadge", "luckyDraw"].includes(
-        postType
+        postType,
       )
     )
       return sendResponse(res, 400, true, "Invalid postType");
@@ -712,7 +720,7 @@ router.post("/event-posts/:eventId", async (req, res) => {
       const counter = await TicketCounter.findOneAndUpdate(
         { _id: "luckyDrawCounter" },
         { $inc: { sequenceValue: 1 } },
-        { new: true, upsert: true }
+        { new: true, upsert: true },
       ).lean();
       ticketNumber = counter.sequenceValue.toString();
     }
@@ -733,8 +741,8 @@ router.post("/event-posts/:eventId", async (req, res) => {
         taggedUserIds: Array.isArray(taggedUserIds)
           ? taggedUserIds
           : taggedUserIds
-          ? [taggedUserIds]
-          : [],
+            ? [taggedUserIds]
+            : [],
       }),
     });
 
@@ -759,7 +767,7 @@ router.post("/event-posts/:eventId", async (req, res) => {
       200,
       false,
       "Post uploaded successfully",
-      responseData
+      responseData,
     );
   } catch (err) {
     console.error("Upload Post Error:", err);
@@ -890,11 +898,11 @@ const deleteFileWithRetry = async (filePath, retries = 3, delay = 100) => {
     } catch (err) {
       console.error(
         `Attempt ${attempt} to delete file ${filePath} failed:`,
-        err.message
+        err.message,
       );
       if (attempt === retries) {
         console.error(
-          `Failed to delete file ${filePath} after ${retries} attempts`
+          `Failed to delete file ${filePath} after ${retries} attempts`,
         );
         return; // Don't throw error to avoid interrupting the response
       }
@@ -936,7 +944,7 @@ router.put(
           res,
           400,
           true,
-          "External template image is required or set clearImage to true"
+          "External template image is required or set clearImage to true",
         );
       }
 
@@ -961,7 +969,7 @@ router.put(
           userId,
           eventId,
           "image/webp",
-          "event-invites"
+          "event-invites",
         );
 
         // Update document with new image details
@@ -971,7 +979,7 @@ router.put(
 
         await ChatRoom.findOneAndUpdate(
           { eventId },
-          { roomProfileUrl: uploadResult.Location }
+          { roomProfileUrl: uploadResult.Location },
         );
 
         // Cleanup local files with retry
@@ -996,7 +1004,7 @@ router.put(
         200,
         false,
         "External template image updated successfully",
-        updated
+        updated,
       );
     } catch (err) {
       console.error("Update External Template Image Error:", {
@@ -1007,7 +1015,7 @@ router.put(
       });
       return sendResponse(res, 500, true, "Server error");
     }
-  }
+  },
 );
 
 module.exports = router;

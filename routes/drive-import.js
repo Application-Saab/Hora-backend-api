@@ -5,6 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const OrderModel = require("../models/order");
 const FolderModel = require("../models/folder");
+const userModel = require("../models/user")
 const {
   generateThumbnail,
   uploadFileToS3,
@@ -251,17 +252,20 @@ router.post("/add-order-drive-link", async (req, res) => {
       throw new Error("Google Drive folder is not publicly accessible");
 
     // WebLink generate
-    const folderName = order_id + 10800;
+    // const folderName = order_id + 10800;
     const customerId = order.fromId;
-    const vendorId = order_id + 10800;
+    const orderId = order_id;
     const phoneNo = order.phone_no;
 
-let existingFolder = await FolderModel.findOne({ folderName, customerId });
-    if (!existingFolder) {
-      const folder = new FolderModel({ folderName, customerId, vendorId });
+const folderName = `${order_id}_${customerId}_${phoneNo}`;
+
+let folder = await FolderModel.findOne({ folderName, customerId });
+
+    if (!folder) {
+      folder = new FolderModel({ folderName, customerId, orderId });
       await folder.save();
     }
-
+let mainFolderId = folder._id;
      const webLink = `https://horaservices.com/photo-gallery?folderName=${folderName}&customerId=${customerId}`;
 
     // MongoDB update (IMMEDIATE)
@@ -285,9 +289,10 @@ let existingFolder = await FolderModel.findOne({ folderName, customerId });
     axios
       .post(`${process.env.MEDIA_WORKER_URL}/process-drive`, {
         folderUrl,
-        order_id,      // so EC2 worker can know vendorId
-        customerId,    // optional for folder paths
+        order_id,     
+        customerId,  
         phoneNo,
+        mainFolderId,
       })
       .catch((err) => {
         console.error(

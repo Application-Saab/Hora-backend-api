@@ -32,7 +32,7 @@ const eventMessageSchema = new mongoose.Schema(
 
     actorId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      ref: 'User',
     },
 
     actorSnapshot: {

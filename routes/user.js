@@ -386,7 +386,7 @@ router.get("/user-details-by-phone/:phone", async (req, res) => {
       .lean();
 
     if (!user) {
-      return sendResponse(res, 200, false, "User not found", null);
+      return sendResponse(res, 200, false, 'User not found', null);
     }
 
     return sendResponse(res, 200, false, "User fetched successfully", user);

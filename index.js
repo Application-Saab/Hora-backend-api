@@ -138,6 +138,7 @@ const DecorationRoutes = require("./routes/decoration");
 const PhotographyRoutes = require("./routes/photography");
 const PhotoRoutes = require("./routes/photo");
 const DriveImportRoute = require("./routes/drive-import");
+const weblinkRoutes = require("./routes/weblink");
 const analyticsRoutes = require("./routes/analytics");
 let passportAuth = require("./store/passportAuth").passportAuth;
 
@@ -163,6 +164,7 @@ app.use("/api/photography", PhotographyRoutes);
 app.use("/api/photo", PhotoRoutes);
 app.use("/api/photo/drive", DriveImportRoute);
 app.use("/api/wonderland/badge", EventBadgeRoutes);
+app.use("/api/internal", weblinkRoutes);
 app.use("/api/analytics", analyticsRoutes);
 
 const notificationFunction = require("./store/notifications");

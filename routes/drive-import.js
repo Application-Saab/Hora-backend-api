@@ -5,6 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const OrderModel = require("../models/order");
 const FolderModel = require("../models/folder");
+const userModel = require("../models/user")
 const {
   generateThumbnail,
   uploadFileToS3,
@@ -252,9 +253,20 @@ router.post("/add-order-drive-link", async (req, res) => {
 
     // WebLink generate
     // const folderName = order_id + 10800;
-    // const customerId = order.fromId;
+    const customerId = order.fromId;
+    const orderId = order_id;
+    const phoneNo = order.phone_no;
 
-    // const webLink = `https://horaservices.com/photo-gallery?folderName=${folderName}&customerId=${customerId}`;
+const folderName = `${order_id}_${customerId}_${phoneNo}`;
+
+let folder = await FolderModel.findOne({ folderName, customerId });
+
+    if (!folder) {
+      folder = new FolderModel({ folderName, customerId, orderId });
+      await folder.save();
+    }
+let mainFolderId = folder._id;
+     const webLink = `https://horaservices.com/photo-gallery?folderName=${folderName}&customerId=${customerId}`;
 
     // MongoDB update (IMMEDIATE)
     await OrderModel.updateOne(
@@ -273,14 +285,21 @@ router.post("/add-order-drive-link", async (req, res) => {
       // webLink,
     });
 
-    // Background me images upload
-    // process.nextTick(async () => {
-    //   try {
-    //     await handleDriveFolderUpload(folderUrl, folderName);
-    //   } catch (err) {
-    //     console.error("Background upload failed:", err.message);
-    //   }
-    // });
+ // Trigger EC2 worker to process media in background
+    axios
+      .post(`${process.env.MEDIA_WORKER_URL}/process-drive`, {
+        folderUrl,
+        order_id,     
+        customerId,  
+        phoneNo,
+        mainFolderId,
+      })
+      .catch((err) => {
+        console.error(
+          "Media worker API call failed:",
+          err.response?.data || err.message
+        );
+      });
 
   } catch (error) {
     console.error("add-order-drive-link error:", error.message);

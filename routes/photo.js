@@ -12,6 +12,7 @@ const fs = require("fs");
 const AWS = require("aws-sdk");
 const path = require("path");
 const sharp = require("sharp");
+const WebLink = require("../models/weblink-images"); 
 
 // AWS S3 Configuration
 const s3 = new AWS.S3({
@@ -310,66 +311,128 @@ router.post("/upload", upload.array("files", 300), async (req, res) => {
   }
 });
 
+// router.get("/thumbnailsWithinProject", async (req, res) => {
+//   try {
+//     const { customerId, folderName } = req.query;
+
+//     if (!customerId) {
+//       return res.status(400).json({
+//         message: "Customer ID is required.",
+//       });
+//     }
+
+//     let folder = null;
+
+//     if (folderName) {
+//       folder = await FolderModel.findOne({
+//         customerId: customerId,
+//         folderName: folderName,
+//       }).lean();
+//     }
+
+//     const filter = { orderById: customerId };
+//     const hello = await WebLink.find({ orderById: customerId })
+
+// console.log(hello);
+// if (folder && folder._id) {
+//   filter.mainFolderIds = folder._id; 
+// }
+
+
+// const images = await WebLink.find(filter)
+//   .sort({ createdAt: -1 })
+//   .lean();
+
+//     const thumbnails = await Promise.all(
+//       images.map(async (img) => {
+//         return {
+//           ...img, // mongo ka saara data
+//         };
+//       })
+//     );
+
+//     /* =========================
+//        4Final Response
+//     ========================= */
+//     res.status(200).json({
+//       folder: folder
+//         ? {
+//             _id: folder._id,
+//             folderName: folder.folderName,
+//             customerId: folder.customerId,
+//             vendorId: folder.vendorId,
+//             eventId: folder.eventId,
+//             orderId: folder.orderId,
+//             subFolders: folder.subFolders || [],
+//           }
+//         : null,
+
+//       thumbnails, 
+//     });
+//   } catch (error) {
+//     console.error("Error fetching thumbnails:", error);
+//     res.status(500).json({
+//       message: "Server error",
+//       error: error.message,
+//     });
+//   }
+// });
+
 router.get("/thumbnailsWithinProject", async (req, res) => {
   try {
-    const { folderName, customerId, vendorId, phoneNo } = req.query;
+    const { folderName, customerId } = req.query;
 
-    if (!folderName || !customerId) {
-      return res
-        .status(400)
-        .json({ message: "Folder Name and Customer ID are required." });
+    if (!folderName) {
+      return res.status(400).json({
+        message: "folderName is required.",
+      });
     }
 
-    let folderPath = vendorId
-      ? `${folderName}_${customerId}_${vendorId}/`
-      : `${folderName}_${customerId}/`;
+    const folder = await FolderModel.findOne({ folderName }).lean();
 
-    const params = {
-      Bucket: process.env.S3_BUCKET_NAME,
-      Prefix: folderPath.trim(),
-    };
+    if (!folder) {
+      return res.status(404).json({
+        message: "Folder not found.",
+      });
+    }
 
-    const s3Response = await s3.listObjectsV2(params).promise();
+    const images = await WebLink.find({
+      mainFolderId: folder._id,
+    })
+      .sort({ createdAt: -1 })
+      .lean();
 
-    const thumbFiles =
-      (s3Response.Contents || []).filter((file) =>
-        file.Key.includes("/thumb_")
-      );
+    const thumbnails = images.map((img) => ({
+      ...img,
+    }));
 
-    const metadataPromises = thumbFiles.map(async (file) => {
-      try {
-        const metadata = await s3
-          .headObject({
-            Bucket: process.env.S3_BUCKET_NAME,
-            Key: file.Key,
-          })
-          .promise();
+    /* =========================
+           4Final Response
+        ========================= */
+    res.status(200).json({
+      folder: folder
+        ? {
+            _id: folder._id,
+            folderName: folder.folderName,
+            customerId: folder.customerId,
+            vendorId: folder.vendorId,
+            eventId: folder.eventId,
+            orderId: folder.orderId,
+            subFolders: folder.subFolders || [],
+          }
+        : null,
 
-        const filePhoneNo =
-          metadata.Metadata && metadata.Metadata.phoneno;
-
-        if (!phoneNo || filePhoneNo === phoneNo) {
-          return {
-            key: file.Key,
-            url: `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${file.Key}`,
-            phoneNo: filePhoneNo,
-          };
-        }
-      } catch (err) {
-        console.warn(`Metadata fetch failed for ${file.Key}:`, err.message);
-        return null;
-      }
+      thumbnails,
     });
-
-    const allResults = await Promise.all(metadataPromises);
-    const filteredThumbnails = allResults.filter(Boolean);
-
-    res.status(200).json({ thumbnails: filteredThumbnails });
   } catch (error) {
     console.error("Error fetching thumbnails:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
   }
 });
+
 
 router.get("/originalImage", async (req, res) => {
   try {

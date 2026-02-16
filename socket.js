@@ -142,6 +142,14 @@ function initSocket(server) {
     socket.on("rsvp:updated", ({ eventId }) => {
       io.to(eventId.toString()).emit("rsvp:refetch", { eventId });
     });
+    socket.on("submit:rsvp", async ({ eventId }) => {
+      try {
+        const unread = await computeUnreadCountsForUser(userId);
+        socket.emit("unread:counts:init", unread);
+      } catch (e) {
+        console.error("Failed compute unread on connect:", e);
+      }
+    });
 
     // Disconnect socket
     socket.on("disconnect", () => {

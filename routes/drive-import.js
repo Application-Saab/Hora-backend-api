@@ -274,7 +274,7 @@ let mainFolderId = folder._id;
       {
         $set: {
           orderDriveLink: folderUrl,
-          // orderWebLink: webLink,
+          orderWebLink: webLink,
         },
       }
     );
@@ -282,7 +282,7 @@ let mainFolderId = folder._id;
     // Frontend ko turant response
     res.status(201).json({
       message: "Drive link added successfully",
-      // webLink,
+      webLink,
     });
 
  // Trigger EC2 worker to process media in background

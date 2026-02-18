@@ -188,7 +188,7 @@ for (const thumb of thumbs) {
   }
 };
 
-migrationFunction("new born", "64137625549b58e3dc39a685", "");
+migrationFunction("pre wedding poses web link", "64137625549b58e3dc39a685", "");
 
 
 
@@ -205,6 +205,7 @@ migrationFunction("new born", "64137625549b58e3dc39a685", "");
 // engagement weblink
 // anniversary poses web link
 //House warming weblink
+//new born
 
 
 

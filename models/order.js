@@ -38,29 +38,59 @@ const orderSchema = new mongoose.Schema({
     order_locality: { type: String, default: '' },
     order_pincode: { type: String, default: '' },
     decoration_comments: { type: String, default: '' },
+    // add_on: [
+    //     {
+    //         addOnId: {
+    //             type: mongoose.Schema.Types.ObjectId,
+    //             ref: "AddOn",
+    //             required: true
+    //         },
+    //         quantity: {
+    //             type: Number,
+    //             required: true,
+    //             min: 1,
+    //             default: 1
+    //         },
+    //         priceAtPurchase: {
+    //             type: Number,
+    //             required: true
+    //         },
+    //         totalPrice: {
+    //             type: Number,
+    //             required: true
+    //         }
+    //     }
+    // ],
     add_on: [
-        {
-            addOnId: {
-                type: mongoose.Schema.Types.ObjectId,
-                ref: "AddOn",
-                required: true
-            },
-            quantity: {
-                type: Number,
-                required: true,
-                min: 1,
-                default: 1
-            },
-            priceAtPurchase: {
-                type: Number,
-                required: true
-            },
-            totalPrice: {
-                type: Number,
-                required: true
+    {
+        addOnId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "AddOn",
+            required: false  
+        },
+        name: {
+            type: String,
+            required: function () {
+                return !this.addOnId;  
             }
+        },
+        quantity: {
+            type: Number,
+            required: true,
+            min: 1,
+            default: 1
+        },
+        priceAtPurchase: {
+            type: Number,
+            required: true
+        },
+        totalPrice: {
+            type: Number,
+            required: true
         }
-    ],
+    }
+],
+
     phone_no: { type: String, default: '' },
     online_phone_no: { type: String, default: '' },
     advance_amount: { type: String, default: '' },

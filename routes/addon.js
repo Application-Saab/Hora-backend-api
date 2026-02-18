@@ -4,6 +4,66 @@ const mongoose = require('mongoose');
 const AddOn = require('../models/addon');
 const Decoration = require('../models/decoration');
 const Photography = require('../models/photography');
+const fs = require("fs");
+const path = require("path");
+
+router.put("/edit/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, price, image } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        error: true,
+        message: "Invalid AddOn ID",
+      });
+    }
+
+    const existingAddon = await AddOn.findById(id);
+
+    if (!existingAddon) {
+      return res.status(404).json({
+        error: true,
+        message: "AddOn not found",
+      });
+    }
+
+    // If new image is different → delete old one
+    if (image && existingAddon.image !== image) {
+
+      // Old image full path
+const oldImagePath = path.join(
+  __dirname,
+  "../uploads/compressed_webp",
+  existingAddon.image
+);
+
+if (fs.existsSync(oldImagePath)) {
+  fs.unlinkSync(oldImagePath);
+}
+
+    }
+
+    const updatedAddOn = await AddOn.findByIdAndUpdate(
+      id,
+      { title, price, image },
+      { new: true }
+    );
+
+    return res.status(200).json({
+      error: false,
+      message: "AddOn updated successfully",
+      data: updatedAddOn,
+    });
+  } catch (error) {
+    console.error("Error updating AddOn:", error);
+    return res.status(500).json({
+      error: true,
+      message: error.message,
+    });
+  }
+});
+
 
 // ----------------- ADD ADDON -----------------
 router.post('/add', async (req, res) => {
@@ -35,10 +95,7 @@ console.log("categoryType from frontend:", categoryType);
       title,
       price,
       description,
-      image,          // just filename
-      productId: productId || null,
-      categoryType: categoryType || null,
-      eventType: eventType || null
+      image,         
     });
 
     const savedAddOn = await newAddOn.save();
@@ -99,52 +156,63 @@ console.log("categoryType from frontend:", categoryType);
   }
 });
 
-router.get("/getAddon", async (req, res) => {
+router.get('/getAll', async (req, res) => {
   try {
-    const { productId, productType, categoryType, eventType } = req.query;
-
-    const conditions = [];
-
-    // Product based
-    if (productId && productType) {
-      conditions.push({
-        productId,
-        productType
-      });
-    }
-
-    // Category based
-    if (categoryType) {
-      conditions.push({
-        categoryType
-      });
-    }
-
-    // Event based
-    if (eventType) {
-      conditions.push({
-        eventType
-      });
-    }
-
-    const filter = conditions.length ? { $or: conditions } : {};
-
-    const addons = await AddOn.find(filter).sort({ createdAt: -1 });
-
-    res.status(200).json({
-      success: true,
-      count: addons.length,
+    const addons = await AddOn.find().sort({ createdAt: -1 });
+    return res.status(200).json({
+      error: false,
+      message: "All AddOns fetched successfully",
       data: addons
     });
-
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Server Error",
-      error: error.message
+    console.error("Error fetching all AddOns:", error);
+    return res.status(500).json({
+      error: true,
+      message: error.message
     });
   }
 });
+
+router.post("/delete/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        error: true,
+        message: "AddOn ID required",
+      });
+    }
+
+    // Remove from Decoration
+    await Decoration.updateMany(
+      { addons: id },
+      { $pull: { addons: id } }
+    );
+
+    // Remove from Photography
+    await Photography.updateMany(
+      { addons: id },
+      { $pull: { addons: id } }
+    );
+
+    // Delete from AddOn collection
+    await AddOn.findByIdAndDelete(id);
+
+    res.json({
+      error: false,
+      message: "AddOn deleted successfully",
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      error: true,
+      message: error.message,
+    });
+  }
+});
+
 
 // ----------------- GET ADDON(S) -----------------
 router.get('/get', async (req, res) => {

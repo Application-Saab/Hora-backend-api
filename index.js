@@ -69,7 +69,6 @@ app.use(async (req, res, next) => {
   next();
 });
 
-app.use("/images", express.static(path.join(__dirname, "uploads/compressed_webp")));
 
 setInterval(async()=>{
   console.log("Checking orders");

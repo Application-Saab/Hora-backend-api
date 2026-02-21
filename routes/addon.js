@@ -70,11 +70,6 @@ router.post('/add', async (req, res) => {
   try {
     const { title, price, description, image, productId, categoryType, productType, eventType } = req.body;
 
-    console.log("REQ BODY:", req.body);
-console.log("eventType from frontend:", eventType);
-console.log("categoryType from frontend:", categoryType);
-
-
     // ---------------- VALIDATION ----------------
     if (!title || !price || !image) {
       return res.status(400).json({
@@ -95,7 +90,8 @@ console.log("categoryType from frontend:", categoryType);
       title,
       price,
       description,
-      image,         
+      image,  
+      categoryType       
     });
 
     const savedAddOn = await newAddOn.save();
@@ -197,6 +193,15 @@ router.post("/delete/:id", async (req, res) => {
     );
 
     // Delete from AddOn collection
+
+    const addon = await AddOn.findById(id);
+    if (addon && addon.image) {
+    const imagePath = path.join(__dirname, "../uploads/compressed_webp", addon.image);
+ 
+    if (fs.existsSync(imagePath)) {
+     fs.unlinkSync(imagePath);
+    }
+   }
     await AddOn.findByIdAndDelete(id);
 
     res.json({

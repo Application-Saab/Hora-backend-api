@@ -19,6 +19,10 @@ const addOnSchema = new mongoose.Schema(
       type: String, // sirf filename
       required: true,
     },
+    categoryType: {
+      type: [String],
+      default: [],
+    },
   },
   { timestamps: true }
 );

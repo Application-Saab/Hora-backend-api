@@ -38,29 +38,6 @@ const orderSchema = new mongoose.Schema({
     order_locality: { type: String, default: '' },
     order_pincode: { type: String, default: '' },
     decoration_comments: { type: String, default: '' },
-    // add_on: [
-    //     {
-    //         addOnId: {
-    //             type: mongoose.Schema.Types.ObjectId,
-    //             ref: "AddOn",
-    //             required: true
-    //         },
-    //         quantity: {
-    //             type: Number,
-    //             required: true,
-    //             min: 1,
-    //             default: 1
-    //         },
-    //         priceAtPurchase: {
-    //             type: Number,
-    //             required: true
-    //         },
-    //         totalPrice: {
-    //             type: Number,
-    //             required: true
-    //         }
-    //     }
-    // ],
     add_on: [
     {
         addOnId: {

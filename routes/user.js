@@ -97,7 +97,14 @@ router.post("/otp_generate", async (req, res) => {
   try {
     const user = await UserModel.findOne({ phone }); // Changed to `findOne` for efficiency
 
-    const otp = commonFunction.OTP(); // Generate OTP
+    let otp;
+    if(phone == "9999999999"){
+      otp = "9876"; // Fixed OTP for testing with specific phone number on playstore.
+    } else {
+       otp = commonFunction.OTP(); // Generate OTP
+    }
+
+    // const otp = commonFunction.OTP(); // Generate OTP
 
     if (user) {
       // If user exists, update their OTP and info

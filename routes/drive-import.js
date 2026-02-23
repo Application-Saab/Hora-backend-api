@@ -266,7 +266,7 @@ let folder = await FolderModel.findOne({ folderName, customerId });
       await folder.save();
     }
 let mainFolderId = folder._id;
-     const webLink = `https://horaservices.com/photo-gallery?folderName=${folderName}&customerId=${customerId}`;
+     const webLink = `https://horaservices.com/weblink-gallery?folderName=${folderName}&customerId=${customerId}`;
 
     // MongoDB update (IMMEDIATE)
     await OrderModel.updateOne(

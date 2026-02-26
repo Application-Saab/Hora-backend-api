@@ -28,19 +28,18 @@ router.put("/edit/:id", async (req, res) => {
       });
     }
 
-    // If new image is different → delete old one
     if (image && existingAddon.image !== image) {
 
       // Old image full path
-const oldImagePath = path.join(
-  __dirname,
-  "../uploads/compressed_webp",
-  existingAddon.image
-);
+      const oldImagePath = path.join(
+        __dirname,
+        "../uploads/compressed_webp",
+        existingAddon.image
+      );
 
-if (fs.existsSync(oldImagePath)) {
-  fs.unlinkSync(oldImagePath);
-}
+      if (fs.existsSync(oldImagePath)) {
+        fs.unlinkSync(oldImagePath);
+      }
 
     }
 
@@ -90,8 +89,8 @@ router.post('/add', async (req, res) => {
       title,
       price,
       description,
-      image,  
-      categoryType       
+      image,
+      categoryType
     });
 
     const savedAddOn = await newAddOn.save();
@@ -111,7 +110,6 @@ router.post('/add', async (req, res) => {
         );
       }
     } else if (eventType) {
-      // eventType ke basis pe filter kar ke add kare
       if (categoryType === "Decoration") {
         await Decoration.updateMany(
           { tag: eventType },
@@ -196,12 +194,12 @@ router.post("/delete/:id", async (req, res) => {
 
     const addon = await AddOn.findById(id);
     if (addon && addon.image) {
-    const imagePath = path.join(__dirname, "../uploads/compressed_webp", addon.image);
- 
-    if (fs.existsSync(imagePath)) {
-     fs.unlinkSync(imagePath);
+      const imagePath = path.join(__dirname, "../uploads/compressed_webp", addon.image);
+
+      if (fs.existsSync(imagePath)) {
+        fs.unlinkSync(imagePath);
+      }
     }
-   }
     await AddOn.findByIdAndDelete(id);
 
     res.json({
@@ -222,7 +220,6 @@ router.post("/delete/:id", async (req, res) => {
 // ----------------- GET ADDON(S) -----------------
 router.get('/get', async (req, res) => {
   try {
-    // frontend array bhejega: ?ids[]=id1&ids[]=id2 ...
     let { ids } = req.query;
 
     if (!ids || ids.length === 0) {
@@ -232,7 +229,6 @@ router.get('/get', async (req, res) => {
       });
     }
 
-    // Agar string aaya, convert to array
     if (!Array.isArray(ids)) {
       ids = [ids];
     }

@@ -50,7 +50,7 @@ router.put("/edit/:id", async (req, res) => {
     );
 
     return res.status(200).json({
-      error: false,
+      success: true,
       message: "AddOn updated successfully",
       data: updatedAddOn,
     });
@@ -203,7 +203,7 @@ router.post("/delete/:id", async (req, res) => {
     await AddOn.findByIdAndDelete(id);
 
     res.json({
-      error: false,
+      success: true,
       message: "AddOn deleted successfully",
     });
 

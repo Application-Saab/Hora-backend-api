@@ -16,7 +16,7 @@ const addOnSchema = new mongoose.Schema(
     description: String,
 
     image: {
-      type: String, // sirf filename
+      type: String, 
       required: true,
     },
     categoryType: {

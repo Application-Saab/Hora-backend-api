@@ -19,6 +19,8 @@ router.put("/edit/:id", async (req, res) => {
       });
     }
 
+    const imageUrl = `https://horaservices.com/api/uploads/compressed_webp/${image}`;
+
     const existingAddon = await AddOn.findById(id);
 
     if (!existingAddon) {
@@ -28,24 +30,9 @@ router.put("/edit/:id", async (req, res) => {
       });
     }
 
-    if (image && existingAddon.image !== image) {
-
-      // Old image full path
-      const oldImagePath = path.join(
-        __dirname,
-        "../uploads/compressed_webp",
-        existingAddon.image
-      );
-
-      if (fs.existsSync(oldImagePath)) {
-        fs.unlinkSync(oldImagePath);
-      }
-
-    }
-
     const updatedAddOn = await AddOn.findByIdAndUpdate(
       id,
-      { title, price, image },
+      { title, price, image:imageUrl },
       { new: true }
     );
 
@@ -62,7 +49,6 @@ router.put("/edit/:id", async (req, res) => {
     });
   }
 });
-
 
 // ----------------- ADD ADDON -----------------
 router.post('/add', async (req, res) => {
@@ -84,12 +70,15 @@ router.post('/add', async (req, res) => {
       });
     }
 
+   const imageUrl = `https://horaservices.com/api/uploads/compressed_webp/${image}`;
+
+
     // ---------------- CREATE ADDON ----------------
     const newAddOn = new AddOn({
       title,
       price,
       description,
-      image,
+      image:imageUrl,
       categoryType
     });
 
@@ -191,15 +180,6 @@ router.post("/delete/:id", async (req, res) => {
     );
 
     // Delete from AddOn collection
-
-    const addon = await AddOn.findById(id);
-    if (addon && addon.image) {
-      const imagePath = path.join(__dirname, "../uploads/compressed_webp", addon.image);
-
-      if (fs.existsSync(imagePath)) {
-        fs.unlinkSync(imagePath);
-      }
-    }
     await AddOn.findByIdAndDelete(id);
 
     res.json({
@@ -215,7 +195,6 @@ router.post("/delete/:id", async (req, res) => {
     });
   }
 });
-
 
 // ----------------- GET ADDON(S) -----------------
 router.get('/get', async (req, res) => {

@@ -215,8 +215,6 @@ router.post("/import-drive-folder", async (req, res) => {
     const order = await OrderModel.findOne({ vendorId });
     if (!order) throw new Error("Order not found");
 
-    console.log("hello order -----------------------",order)
-
     // Drive public check
     const isPublic = await isFolderPubliclyAccessible(folderId, apiKey);
     if (!isPublic)

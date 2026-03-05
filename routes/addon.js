@@ -19,8 +19,6 @@ router.put("/edit/:id", async (req, res) => {
       });
     }
 
-    const imageUrl = `https://horaservices.com/api/uploads/compressed_webp/${image}`;
-
     const existingAddon = await AddOn.findById(id);
 
     if (!existingAddon) {
@@ -32,7 +30,7 @@ router.put("/edit/:id", async (req, res) => {
 
     const updatedAddOn = await AddOn.findByIdAndUpdate(
       id,
-      { title, price, image:imageUrl },
+      { title, price, image },
       { new: true }
     );
 
@@ -70,7 +68,6 @@ router.post('/add', async (req, res) => {
       });
     }
 
-   const imageUrl = `https://horaservices.com/api/uploads/compressed_webp/${image}`;
 
 
     // ---------------- CREATE ADDON ----------------
@@ -78,7 +75,7 @@ router.post('/add', async (req, res) => {
       title,
       price,
       description,
-      image:imageUrl,
+      image,
       categoryType
     });
 

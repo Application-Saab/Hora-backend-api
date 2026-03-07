@@ -248,6 +248,7 @@ router.post("/import-drive-folder", async (req, res) => {
         $set: {
           orderDriveLink: folderUrl,
           orderWebLink: webLink,
+       "imageUploadCounts.driveProvidedAt": new Date(),
         },
       }
     );
@@ -331,6 +332,7 @@ let mainFolderId = folder._id;
         $set: {
           orderDriveLink: folderUrl,
           orderWebLink: webLink,
+          "imageUploadCounts.driveProvidedAt": new Date(),
         },
       }
     );

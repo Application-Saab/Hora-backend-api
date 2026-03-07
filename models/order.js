@@ -50,7 +50,9 @@ const orderSchema = new mongoose.Schema({
     call_checklist_exists: {type: Boolean, default: false},
     imageUploadCounts: {
     totalFromDrive: { type: Number, default: 0 },
-    totalWeblink: { type: Number, default: 0 }
+    totalWeblink: { type: Number, default: 0 },
+    driveProvidedAt: {type:Date, default: ''},
+    AllImagesUploadedAt:{type:Date, default: ''},
     },
 }, {
     strict: false,

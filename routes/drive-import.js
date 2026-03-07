@@ -211,8 +211,10 @@ router.post("/import-drive-folder", async (req, res) => {
 
     if (!apiKey) throw new Error("Google Drive API key not configured");
 
+    const order_id = vendorId-10800;
+
     // Order check
-    const order = await OrderModel.findOne({ vendorId });
+    const order = await OrderModel.findOne({ order_id });
     if (!order) throw new Error("Order not found");
 
     // Drive public check
@@ -222,8 +224,7 @@ router.post("/import-drive-folder", async (req, res) => {
 
     const customerId = order.fromId;
     const phoneNo = order.phone_no;
-    const folderName = `${vendorId}_${customerId}_${phoneNo}`;
-    const order_id = vendorId - 10800;
+    const folderName = `${order_id}_${customerId}_${phoneNo}`;
     const fulfillmentDate = order?.order_date;
 
     let folder = await FolderModel.findOne({ folderName, customerId });
@@ -265,7 +266,7 @@ router.post("/import-drive-folder", async (req, res) => {
     axios
       .post(`${process.env.MEDIA_WORKER_URL}/process-drive`, {
         folderUrl,
-        vendorId,
+        order_id,
         customerId,
         phoneNo,
         mainFolderId,

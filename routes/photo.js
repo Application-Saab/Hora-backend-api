@@ -388,16 +388,22 @@ router.get("/thumbnailsWithinProject", async (req, res) => {
       });
     }
 
-    const folder = await FolderModel.findOne({ folderName }).lean();
+    const folderNames = folderName.split(",");
 
-    if (!folder) {
-      return res.status(404).json({
-        message: "Folder not found.",
-      });
-    }
+    const folders = await FolderModel.find({
+     folderName: { $in: folderNames },
+    }).lean();
+
+    if (!folders.length) {
+    return res.status(404).json({
+    message: "No folders found.",
+    });
+   }
+
+    const folderIds = folders.map((f) => f._id);
 
     const images = await WebLink.find({
-      mainFolderId: folder._id,
+    mainFolderId: { $in: folderIds },
     })
       .sort({ createdAt: -1 })
       .lean();
@@ -410,18 +416,7 @@ router.get("/thumbnailsWithinProject", async (req, res) => {
            4Final Response
         ========================= */
     res.status(200).json({
-      folder: folder
-        ? {
-            _id: folder._id,
-            folderName: folder.folderName,
-            customerId: folder.customerId,
-            vendorId: folder.vendorId,
-            eventId: folder.eventId,
-            orderId: folder.orderId,
-            subFolders: folder.subFolders || [],
-          }
-        : null,
-
+      folders,
       thumbnails,
     });
   } catch (error) {

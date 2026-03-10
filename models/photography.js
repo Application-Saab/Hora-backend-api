@@ -56,7 +56,6 @@ const photographySchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: "meals"
     }],
-    addons: [{ type: mongoose.Schema.Types.ObjectId, ref: "AddOn" }], 
     duration: { type : String, default : '' },
     advance_amount : { type : String, default : '' },
     status: {  type: Number, default: 1 /* 1-active 0-inactive 2-delete  */ }

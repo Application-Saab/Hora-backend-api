@@ -56,7 +56,6 @@ const decorationSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: "meals"
     }],
-    addons: [{ type: mongoose.Schema.Types.ObjectId, ref: "AddOn" }], 
     status: {  type: Number, default: 1 /* 1-active 0-inactive 2-delete  */ },
     discount: Number,
     popularity_score: {

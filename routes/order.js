@@ -2070,6 +2070,7 @@ router.get('/order_details_decoration/:id', async (req, res) => {
       .findOne({ order_id: req.params.id })
       .populate('addressId')
       .populate('fromId')
+      .populate('add_on.addOnId')
       .exec();
 
     if (!order) {
@@ -2202,6 +2203,7 @@ router.get('/order_details_photography/:id', async (req, res) => {
             .populate('addressId')
             .populate('fromId')
             .populate('addressId')
+            .populate('add_on.addOnId')
             .exec(); // Recommended for Mongoose 9
 
         let photography;

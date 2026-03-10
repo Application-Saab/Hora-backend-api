@@ -28,6 +28,21 @@ router.put("/edit/:id", async (req, res) => {
       });
     }
 
+    if (image && existingAddon.image !== image) {
+
+      // Old image full path
+      const oldImagePath = path.join(
+        __dirname,
+        "../uploads/compressed_webp",
+        existingAddon.image
+      );
+
+      if (fs.existsSync(oldImagePath)) {
+        fs.unlinkSync(oldImagePath);
+      }
+
+    }
+
     const updatedAddOn = await AddOn.findByIdAndUpdate(
       id,
       { title, price, image },
@@ -48,6 +63,7 @@ router.put("/edit/:id", async (req, res) => {
   }
 });
 
+
 // ----------------- ADD ADDON -----------------
 router.post('/add', async (req, res) => {
   try {
@@ -67,8 +83,6 @@ router.post('/add', async (req, res) => {
         message: "At least one of productId, categoryType, or eventType must be provided"
       });
     }
-
-
 
     // ---------------- CREATE ADDON ----------------
     const newAddOn = new AddOn({
@@ -177,6 +191,15 @@ router.post("/delete/:id", async (req, res) => {
     );
 
     // Delete from AddOn collection
+
+    const addon = await AddOn.findById(id);
+    if (addon && addon.image) {
+      const imagePath = path.join(__dirname, "../uploads/compressed_webp", addon.image);
+
+      if (fs.existsSync(imagePath)) {
+        fs.unlinkSync(imagePath);
+      }
+    }
     await AddOn.findByIdAndDelete(id);
 
     res.json({
@@ -192,6 +215,7 @@ router.post("/delete/:id", async (req, res) => {
     });
   }
 });
+
 
 // ----------------- GET ADDON(S) -----------------
 router.get('/get', async (req, res) => {

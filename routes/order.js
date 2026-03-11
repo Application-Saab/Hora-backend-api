@@ -2506,6 +2506,80 @@ router.put("/updateImageTags", async (req, res) => {
   }
 });
 
+function generateCoupon() {
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  let randomLetters = "";
+  let randomDigits = "";
+
+  for (let i = 0; i < 4; i++) {
+    randomLetters += letters.charAt(
+      Math.floor(Math.random() * letters.length)
+    );
+  }
+
+  for (let i = 0; i < 4; i++) {
+    randomDigits += Math.floor(Math.random() * 10);
+  }
+
+  return randomLetters + randomDigits;
+}
+
+router.put("/add-rating-reviews", async (req, res) => {
+  try {
+    const { rating, reviews, orderId } = req.body;
+
+    if (!orderId) {
+      return res.status(400).json({
+        error: true,
+        message: "orderId is required",
+      });
+    }
+
+    const order = await orderModel.findOne({ order_id: orderId });
+
+    if (!order) {
+      return res.status(404).json({
+        error: true,
+        message: "Order not found",
+      });
+    }
+
+    // Save rating & review
+    order.userReviewRatingArray = rating;
+    order.userReviews = reviews;
+
+    let couponCode = null;
+
+    if (
+      Array.isArray(rating) &&
+      rating.length === 1 &&
+      rating[0] === "1-6"
+    ) {
+      couponCode = generateCoupon();
+      order.couponCode = couponCode;
+    }
+
+    await order.save();
+
+    return res.status(200).json({
+      error: false,
+      message: "Review submitted successfully",
+      data: {
+        rating: rating,
+        couponCode: couponCode, // null if rating !===== "1-6"
+        reviews: reviews,
+      },
+    });
+
+  } catch (error) {
+    console.error("Rating Error:", error);
+    return res.status(500).json({
+      error: true,
+      message: "Internal server error",
+    });
+  }
+});
+
 
 
 

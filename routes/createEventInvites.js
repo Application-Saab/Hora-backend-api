@@ -776,6 +776,27 @@ router.post("/event-posts/:eventId", async (req, res) => {
 });
 
 // Get all posts for an event
+// router.get("/event-posts/:eventId", async (req, res) => {
+//   try {
+//     const { eventId } = req.params;
+
+//     if (!mongoose.Types.ObjectId.isValid(eventId)) {
+//       return sendResponse(res, 400, true, "Invalid event ID");
+//     }
+
+//     const posts = await eventPosts
+//       .find({ eventId })
+//       .sort({ createdAt: -1 })
+//       .lean();
+
+//     return sendResponse(res, 200, false, "Posts fetched successfully", posts);
+//   } catch (err) {
+//     console.error("Get Posts Error:", err);
+//     return sendResponse(res, 500, true, "Server error");
+//   }
+// });
+
+
 router.get("/event-posts/:eventId", async (req, res) => {
   try {
     const { eventId } = req.params;
@@ -784,12 +805,30 @@ router.get("/event-posts/:eventId", async (req, res) => {
       return sendResponse(res, 400, true, "Invalid event ID");
     }
 
+    // Get page & limit from query
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 25;
+
+    const skip = (page - 1) * limit;
+
+    // Get total count
+    const totalPosts = await eventPosts.countDocuments({ eventId });
+
+    // Fetch paginated posts
     const posts = await eventPosts
       .find({ eventId })
       .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
       .lean();
 
-    return sendResponse(res, 200, false, "Posts fetched successfully", posts);
+    return sendResponse(res, 200, false, "Posts fetched successfully", {
+      posts,
+      currentPage: page,
+      totalPages: Math.ceil(totalPosts / limit),
+      totalPosts,
+    });
+
   } catch (err) {
     console.error("Get Posts Error:", err);
     return sendResponse(res, 500, true, "Server error");

@@ -21,7 +21,7 @@ const cache = new NodeCache({ stdTTL: 60 * 10 }); // Cache TTL: 5 minutes
 const axios = require("axios");
 const EventGuest = require("../models/event-guest");
 const EventMessage = require("../models/eventMessage");
-const ChatRoom = require("../models/eventChatRoom");
+const ChatRoom = require("../models/eventChatRoom"); 
 
 router.post("/otp_generate_backup", async (req, res) => {
   const { phone } = req.body;
@@ -234,7 +234,7 @@ router.post("/otp_verify", async (req, res) => {
       }
 
       // Check account status
-      if (user.status === 0) {
+      if (user.status === 0 && user.role !== "supplier") {
         return res
           .status(503)
           .json({ error: true, status: 503, message: "Account Blocked" });
@@ -271,7 +271,7 @@ router.post("/otp_verify", async (req, res) => {
           .json({ error: true, status: 503, message: "Account Deleted" });
       }
 
-      if (user.status === 0) {
+      if (user.status === 0 && user.role !== "supplier") {
         return res
           .status(503)
           .json({ error: true, status: 503, message: "Account Blocked" });

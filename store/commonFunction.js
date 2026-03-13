@@ -317,149 +317,287 @@ let popularityJobRunning = false;
 //   }
 // };
 
-exports.updateDecorationPopularity = async () => {
-  if (popularityJobRunning) {
-    console.warn("Popularity job already running, skipping...");
-    return;
-  }
+// exports.updateDecorationPopularity = async () => {
+//   if (popularityJobRunning) {
+//     console.warn("Popularity job already running, skipping...");
+//     return;
+//   }
 
-  popularityJobRunning = true;
-  console.time("PopularityJob");
+//   popularityJobRunning = true;
+//   console.time("PopularityJob");
 
-  try {
-    const now = Date.now();
+//   try {
+//     const now = Date.now();
 
-    const decorations = await Decoration.find(
-      {},
-      { _id: 1, createdAt: 1 },
-    ).lean();
+//     const decorations = await Decoration.find(
+//       {},
+//       { _id: 1, createdAt: 1 },
+//     ).lean();
 
-    const orders = await Order.find(
-      { order_status: { $in: [1, 2, 3, 5, 6] } },
-      { items: 1 },
-    ).lean();
+//     const orders = await Order.find(
+//       { order_status: { $in: [1, 2, 3, 5, 6] } },
+//       { items: 1 },
+//     ).lean();
 
-    const usageMap = {};
+//     const usageMap = {};
 
-    const extractDecorationId = (item) => {
-      if (!item) return null;
+//     const extractDecorationId = (item) => {
+//       if (!item) return null;
 
-      if (mongoose.Types.ObjectId.isValid(item)) return String(item);
-      if (item.item_id && mongoose.Types.ObjectId.isValid(item.item_id))
-        return String(item.item_id);
-      if (item._id && mongoose.Types.ObjectId.isValid(item._id))
-        return String(item._id);
+//       if (mongoose.Types.ObjectId.isValid(item)) return String(item);
+//       if (item.item_id && mongoose.Types.ObjectId.isValid(item.item_id))
+//         return String(item.item_id);
+//       if (item._id && mongoose.Types.ObjectId.isValid(item._id))
+//         return String(item._id);
 
-      return null;
-    };
+//       return null;
+//     };
 
-    // Count orders
-    for (const order of orders) {
-      if (!Array.isArray(order.items)) continue;
+//     // Count orders
+//     for (const order of orders) {
+//       if (!Array.isArray(order.items)) continue;
 
-      for (const item of order.items) {
-        const id = extractDecorationId(item);
-        if (!id) continue;
+//       for (const item of order.items) {
+//         const id = extractDecorationId(item);
+//         if (!id) continue;
 
-        usageMap[id] = (usageMap[id] || 0) + 1;
-      }
-    }
+//         usageMap[id] = (usageMap[id] || 0) + 1;
+//       }
+//     }
 
-    const BATCH_SIZE = 50;
-    const cutoffDate = new Date("2025-10-01");
+//     const BATCH_SIZE = 50;
+//     const cutoffDate = new Date("2025-10-01");
 
-    for (let i = 0; i < decorations.length; i += BATCH_SIZE) {
-      const batch = decorations.slice(i, i + BATCH_SIZE);
+//     for (let i = 0; i < decorations.length; i += BATCH_SIZE) {
+//       const batch = decorations.slice(i, i + BATCH_SIZE);
 
-      await Promise.allSettled(
-        batch.map(async (decoration) => {
-          try {
-            const id = String(decoration._id);
+//       await Promise.allSettled(
+//         batch.map(async (decoration) => {
+//           try {
+//             const id = String(decoration._id);
 
-            const createdAt = new Date(decoration.createdAt);
+//             const createdAt = new Date(decoration.createdAt);
 
-            const ageInDays = Math.floor(
-              (now - createdAt.getTime()) / 86400000,
-            );
-            const orderCount = usageMap[id] || 0;
+//             const ageInDays = Math.floor(
+//               (now - createdAt.getTime()) / 86400000,
+//             );
+//             const orderCount = usageMap[id] || 0;
 
-            let oldBaseScore = 500 + orderCount * 300 - ageInDays * 5;
-            let baseScore = 7000;
+//             let oldBaseScore = 500 + orderCount * 300 - ageInDays * 5;
+//             let baseScore = 7000;
 
-            if (createdAt <= cutoffDate) {
-              baseScore = oldBaseScore;
-            }
-            else if (createdAt > cutoffDate 
-              // && oldBaseScore > 600
-            ) {
-              baseScore = 7000;
-            }
+//             if (createdAt <= cutoffDate) {
+//               baseScore = oldBaseScore;
+//             }
+//             else if (createdAt > cutoffDate 
+//               // && oldBaseScore > 600
+//             ) {
+//               baseScore = 7000;
+//             }
             
-            const score = baseScore + orderCount * 100 - ageInDays * 15;
-            if (id == "65aeb55c47d5cb78ba19d61c") {
-              console.log(
-                "%c [ orderCount, ageInDays, baseScore, oldBaseScore, newScore ]-369",
-                "font-size:13px; background:pink; color:#bf2c9f;",
-                orderCount,
-                ageInDays,
-                baseScore,
-                oldBaseScore,
-                score
-              );
-            }
-            if (id == "6915e6b42efefaef0f29cf41") {
-              console.log(
-                "%c [ orderCount, ageInDays, baseScore, oldBaseScore, newScore ]-369",
-                "font-size:13px; background:pink; color:#bf2c9f;",
-                orderCount,
-                ageInDays,
-                baseScore,
-                oldBaseScore,
-                score
-              );
-            }
-            if (id == "69148d542efefaef0f2846ea") {
-              console.log(
-                "%c [ orderCount, ageInDays, baseScore, oldBaseScore, newScore ]-369",
-                "font-size:13px; background:pink; color:#bf2c9f;",
-                orderCount,
-                ageInDays,
-                baseScore,
-                oldBaseScore,
-                score
-              );
-            }
-            if (id == "6603b642bb8025d3e2a6ecbb") {
-              console.log(
-                "%c [ orderCount, ageInDays, baseScore, oldBaseScore, newScore ]-369",
-                "font-size:13px; background:pink; color:#bf2c9f;",
-                orderCount,
-                ageInDays,
-                baseScore,
-                oldBaseScore,
-                score
-              );
-            }
+//             const score = baseScore + orderCount * 100 - ageInDays * 15;
+//             if (id == "65aeb55c47d5cb78ba19d61c") {
+//               console.log(
+//                 "%c [ orderCount, ageInDays, baseScore, oldBaseScore, newScore ]-369",
+//                 "font-size:13px; background:pink; color:#bf2c9f;",
+//                 orderCount,
+//                 ageInDays,
+//                 baseScore,
+//                 oldBaseScore,
+//                 score
+//               );
+//             }
+//             if (id == "6915e6b42efefaef0f29cf41") {
+//               console.log(
+//                 "%c [ orderCount, ageInDays, baseScore, oldBaseScore, newScore ]-369",
+//                 "font-size:13px; background:pink; color:#bf2c9f;",
+//                 orderCount,
+//                 ageInDays,
+//                 baseScore,
+//                 oldBaseScore,
+//                 score
+//               );
+//             }
+//             if (id == "69148d542efefaef0f2846ea") {
+//               console.log(
+//                 "%c [ orderCount, ageInDays, baseScore, oldBaseScore, newScore ]-369",
+//                 "font-size:13px; background:pink; color:#bf2c9f;",
+//                 orderCount,
+//                 ageInDays,
+//                 baseScore,
+//                 oldBaseScore,
+//                 score
+//               );
+//             }
+//             if (id == "6603b642bb8025d3e2a6ecbb") {
+//               console.log(
+//                 "%c [ orderCount, ageInDays, baseScore, oldBaseScore, newScore ]-369",
+//                 "font-size:13px; background:pink; color:#bf2c9f;",
+//                 orderCount,
+//                 ageInDays,
+//                 baseScore,
+//                 oldBaseScore,
+//                 score
+//               );
+//             }
             
-            await Decoration.updateOne(
-              { _id: id },
-              { $set: { popularity_score: score } },
-            );
-          } catch (err) {
-            console.error(
-              `Popularity update failed for ${decoration._id}`,
-              err.message,
-            );
-          }
-        }),
-      );
-    }
+//             await Decoration.updateOne(
+//               { _id: id },
+//               { $set: { popularity_score: score } },
+//             );
+//           } catch (err) {
+//             console.error(
+//               `Popularity update failed for ${decoration._id}`,
+//               err.message,
+//             );
+//           }
+//         }),
+//       );
+//     }
 
-    console.log("Decoration popularity updated successfully");
-  } catch (err) {
-    console.error("Popularity job failed", err);
-  } finally {
-    popularityJobRunning = false;
-    console.timeEnd("PopularityJob");
-  }
-};
+//     console.log("Decoration popularity updated successfully");
+//   } catch (err) {
+//     console.error("Popularity job failed", err);
+//   } finally {
+//     popularityJobRunning = false;
+//     console.timeEnd("PopularityJob");
+//   }
+// };
+
+
+
+
+// exports.updateDecorationPopularity = async () => {
+//   if (popularityJobRunning) {
+//     console.warn("Popularity job already running, skipping...");
+//     return;
+//   }
+
+//   popularityJobRunning = true;
+//   console.time("PopularityJob");
+
+//   try {
+
+//     const now = new Date();
+//     const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+//     const decorations = await Decoration.find(
+//       {},
+//       { _id: 1, createdAt: 1, popularity_score: 1 }
+//     ).lean();
+
+//     const orders = await Order.find(
+//       {
+//         order_status: { $in: [1, 2, 3, 5, 6] },
+//         createdAt: { $gte: oneWeekAgo }
+//       },
+//       { items: 1 }
+//     ).lean();
+
+//     const usageMap = {};
+
+//     const extractDecorationId = (item) => {
+//       if (!item) return null;
+
+//       if (mongoose.Types.ObjectId.isValid(item)) return String(item);
+
+//       if (item.item_id && mongoose.Types.ObjectId.isValid(item.item_id))
+//         return String(item.item_id);
+
+//       if (item._id && mongoose.Types.ObjectId.isValid(item._id))
+//         return String(item._id);
+
+//       return null;
+//     };
+
+//     // Count last week orders
+//     for (const order of orders) {
+
+//       if (!Array.isArray(order.items)) continue;
+
+//       for (const item of order.items) {
+
+//         const id = extractDecorationId(item);
+//         if (!id) continue;
+
+//         usageMap[id] = (usageMap[id] || 0) + 1;
+//       }
+//     }
+
+//     const BATCH_SIZE = 50;
+
+//     for (let i = 0; i < decorations.length; i += BATCH_SIZE) {
+
+//       const batch = decorations.slice(i, i + BATCH_SIZE);
+
+//       await Promise.allSettled(
+
+//         batch.map(async (decoration) => {
+
+//           try {
+
+//             const id = String(decoration._id);
+
+//             const createdAt = new Date(decoration.createdAt);
+
+//             const daysOfCreated = Math.floor(
+//               (now.getTime() - createdAt.getTime()) / 86400000
+//             );
+
+//             const lastWeekOrders = usageMap[id] || 0;
+
+//             let score;
+
+//             // NEW DESIGN (no popularity score yet)
+//             if (decoration.popularity_score == null) {
+
+//               score =
+//                 7000 +
+//                 100 * lastWeekOrders -
+//                 15 * daysOfCreated;
+
+//             }
+
+//             // EXISTING DESIGN
+//             else {
+
+//               score =
+//                 decoration.popularity_score +
+//                 100 * lastWeekOrders -
+//                 15 * 7;
+
+//             }
+
+//             await Decoration.updateOne(
+//               { _id: id },
+//               { $set: { popularity_score: score } }
+//             );
+
+//           } catch (err) {
+
+//             console.error(
+//               `Popularity update failed for ${decoration._id}`,
+//               err.message
+//             );
+
+//           }
+
+//         })
+
+//       );
+
+//     }
+
+//     console.log("Decoration popularity updated successfully");
+
+//   } catch (err) {
+
+//     console.error("Popularity job failed", err);
+
+//   } finally {
+
+//     popularityJobRunning = false;
+//     console.timeEnd("PopularityJob");
+
+//   }
+// };

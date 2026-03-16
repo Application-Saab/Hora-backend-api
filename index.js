@@ -70,44 +70,150 @@ app.use(async (req, res, next) => {
 });
 
 
-setInterval(async()=>{
-  console.log("Checking orders");
-  let finder = { };
-  finder[`order_status`] = { $in: [0,1] };
-  const isBookingOrder = await orderModel.find(finder);
-  const isInProgressOrder = await orderModel.find({ order_status: 2});
-  if(isBookingOrder.length>0){
-    isBookingOrder.forEach(async(element1) => {
-      const update = { order_status: 6 };
-      if(commonFunction.getOrderExpire(element1)){
-        const result = await orderModel.findByIdAndUpdate(element1._id, { $set: update })
-      }else{
+// setInterval(async()=>{
+//   console.log("Checking orders");
+//   let finder = { };
+//   finder[`order_status`] = { $in: [0,1] };
+//   const isBookingOrder = await orderModel.find(finder);
+//   const isInProgressOrder = await orderModel.find({ order_status: 2});
+//   if(isBookingOrder.length>0){
+//     isBookingOrder.forEach(async(element1) => {
+//       const update = { order_status: 6 };
+//       if(commonFunction.getOrderExpire(element1)){
+//         const result = await orderModel.findByIdAndUpdate(element1._id, { $set: update })
+//       }else{
         
-      }
-    });
-  }
-  if(isInProgressOrder.length>0){
-    isInProgressOrder.forEach(async(element2) => {
-      const update = { order_status: 3 };
-      if(commonFunction.getOrderComplete(element2)){
-        const result = await orderModel.findByIdAndUpdate(element2._id, { $set: update })
-      }else{
+//       }
+//     });
+//   }
+//   if(isInProgressOrder.length>0){
+//     isInProgressOrder.forEach(async(element2) => {
+//       const update = { order_status: 3 };
+//       if(commonFunction.getOrderComplete(element2)){
+//         const result = await orderModel.findByIdAndUpdate(element2._id, { $set: update })
+//       }else{
         
-      }
-    });
-  }
-  // console.log("Checking orders start");
-},60000);
+//       }
+//     });
+//   }
+//   // console.log("Checking orders start");
+// },60000);
 // ?? Run every Sunday at midnight
 cron.schedule('0 0 * * 0', () => {
   console.log('?? Running weekly decoration popularity update...');
   commonFunction.updateDecorationPopularity()
 });
 
+// setTimeout(async()=>{
+//   console.log("Updating scores")
+//   await commonFunction.updateDecorationPopularity()
+// }, 1 * 60 * 1000);
+
+
+
+async function runSupplierPerformance() {
+  try {
+    console.log("Running Supplier Performance Job:", new Date());
+
+    const suppliers = await UserModel.find({ role: "supplier", status: { $ne: 2 } });
+
+    for (const supplier of suppliers) {
+
+      //calculatttion
+      const orders = await orderModel.find({
+        toId: supplier._id,
+        // rating: { $exists: true }
+      })
+      .sort({ createdAt: -1 }) // newest order
+      .limit(20);
+
+      if (!orders.length) continue;
+
+let excellent = 0;
+let good = 0;
+let poor = 0;
+
+for (const order of orders) {
+
+  const rating = order.userReviewRatingArray;
+  const rate = Array.isArray(rating) ? rating[0] : rating;
+
+  if (!rate) continue;
+
+  if (rate === "9-10") excellent++;
+  else if (rate === "7-8") good++;
+  else if (rate === "1-6") poor++;
+  else if (rate === "6-8") good++;
+  else if (rate === "0-6") poor++;
+
+}
+
+// const totalRatedOrders = excellent + good + poor;
+
+// const vendorScore = ((excellent * 10) + (good * 5) + (poor * -10)) / totalRatedOrders;
+const totalRatedOrders = excellent + good + poor;
+
+if (totalRatedOrders === 0) {
+  console.log("No ratings found for supplier:", supplier._id);
+  continue;
+}
+
+const vendorScore =
+((excellent * 10) + (good * 5) + (poor * -10)) / totalRatedOrders;
+
+      let badge = "low";
+
+      if (vendorScore >= 7) badge = "elite";
+      else if (vendorScore >= 5) badge = "good";
+      else if (vendorScore >= 3) badge = "average";
+      else if (vendorScore < 3) badge = "low"
+
+      await UserModel.updateOne(
+        { _id: supplier._id },
+        {
+          performanceScore: vendorScore,
+          performanceBadge: badge,
+          lastRatingUpdate: new Date()
+        }
+      );
+
+    }
+    console.log("Supplier performance updated successfully");
+
+  } catch (error) {
+    console.error("Performance job error:", error);
+  }
+}
+
+// function getDelayUntil3AM() {
+//   const now = new Date();
+
+//   const next3AM = new Date();
+//   next3AM.setHours(3, 0, 0, 0);
+
+//   if (now >= next3AM) {
+//     next3AM.setDate(next3AM.getDate() + 1);
+//   }
+
+//   return next3AM - now;
+// }
+
+// const delay = getDelayUntil3AM();
+
+// setTimeout(() => {
+
+//   runSupplierPerformance(); 
+
+//   setInterval(() => {
+//     runSupplierPerformance();
+//   }, 24 * 60 * 60 * 1000); 
+
+// }, delay);
+
 setTimeout(async()=>{
-  console.log("Updating scores")
-  await commonFunction.updateDecorationPopularity()
-}, 1.5 * 60 * 1000);
+  console.log("Updating scores of supplier")
+runSupplierPerformance();
+}, 1 * 60 * 1000);
 
 database.on("error", (error) => {
   console.log(error);

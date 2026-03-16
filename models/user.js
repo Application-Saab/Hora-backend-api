@@ -54,7 +54,10 @@ const userSchema = new mongoose.Schema(
         // personal field
         isPersonalStatus : { type: Number, default: 0},
         isProfessionStatus  : { type: Number, default: 0},
-        
+        performanceScore: { type: Number,default: 0},
+        performanceBadge: { type: String,enum: ["elite", "good", "average", "low"], default: null},
+        lastRatingUpdate: {type: Date} ,
+        supplierOrderLimit:{type:Number, default:4}, 
     }, 
     { strict: false,timestamps: true }
 );

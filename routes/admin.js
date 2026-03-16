@@ -82,7 +82,7 @@ router.post("/admin_signin", async (req, res) => {
 
 router.post("/admin_user_list", async (req, res) => {
   try {
-    let { role, email, phone, _id, page, per_page } = req.body;
+    let { role, email, phone, _id, page, per_page, city, job_profile } = req.body;
 
     // Ensure page and per_page are valid numbers
     page = Number(page);
@@ -95,6 +95,8 @@ router.post("/admin_user_list", async (req, res) => {
     const finder = { status: { $ne: 2 } };
 
     if (role) finder.role = role;
+    if (city) finder.city = city;
+    if (job_profile && job_profile !== "all") finder.job_profile = job_profile;
 
     if (email) {
       finder.email = new RegExp(email.trim(), "i");

@@ -21,7 +21,7 @@ const cache = new NodeCache({ stdTTL: 60 * 10 }); // Cache TTL: 5 minutes
 const axios = require("axios");
 const EventGuest = require("../models/event-guest");
 const EventMessage = require("../models/eventMessage");
-const ChatRoom = require("../models/eventChatRoom"); 
+const ChatRoom = require("../models/eventChatRoom");
 
 router.post("/otp_generate_backup", async (req, res) => {
   const { phone } = req.body;

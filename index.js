@@ -70,44 +70,44 @@ app.use(async (req, res, next) => {
 });
 
 
-// setInterval(async()=>{
-//   console.log("Checking orders");
-//   let finder = { };
-//   finder[`order_status`] = { $in: [0,1] };
-//   const isBookingOrder = await orderModel.find(finder);
-//   const isInProgressOrder = await orderModel.find({ order_status: 2});
-//   if(isBookingOrder.length>0){
-//     isBookingOrder.forEach(async(element1) => {
-//       const update = { order_status: 6 };
-//       if(commonFunction.getOrderExpire(element1)){
-//         const result = await orderModel.findByIdAndUpdate(element1._id, { $set: update })
-//       }else{
+setInterval(async()=>{
+  console.log("Checking orders");
+  let finder = { };
+  finder[`order_status`] = { $in: [0,1] };
+  const isBookingOrder = await orderModel.find(finder);
+  const isInProgressOrder = await orderModel.find({ order_status: 2});
+  if(isBookingOrder.length>0){
+    isBookingOrder.forEach(async(element1) => {
+      const update = { order_status: 6 };
+      if(commonFunction.getOrderExpire(element1)){
+        const result = await orderModel.findByIdAndUpdate(element1._id, { $set: update })
+      }else{
         
-//       }
-//     });
-//   }
-//   if(isInProgressOrder.length>0){
-//     isInProgressOrder.forEach(async(element2) => {
-//       const update = { order_status: 3 };
-//       if(commonFunction.getOrderComplete(element2)){
-//         const result = await orderModel.findByIdAndUpdate(element2._id, { $set: update })
-//       }else{
+      }
+    });
+  }
+  if(isInProgressOrder.length>0){
+    isInProgressOrder.forEach(async(element2) => {
+      const update = { order_status: 3 };
+      if(commonFunction.getOrderComplete(element2)){
+        const result = await orderModel.findByIdAndUpdate(element2._id, { $set: update })
+      }else{
         
-//       }
-//     });
-//   }
-//   // console.log("Checking orders start");
-// },60000);
+      }
+    });
+  }
+  // console.log("Checking orders start");
+},60000);
 // ?? Run every Sunday at midnight
 cron.schedule('0 0 * * 0', () => {
   console.log('?? Running weekly decoration popularity update...');
   commonFunction.updateDecorationPopularity()
 });
 
-// setTimeout(async()=>{
-//   console.log("Updating scores")
-//   await commonFunction.updateDecorationPopularity()
-// }, 1 * 60 * 1000);
+setTimeout(async()=>{
+  console.log("Updating scores")
+  await commonFunction.updateDecorationPopularity()
+}, 1.5 * 60 * 1000);
 
 
 
@@ -193,35 +193,35 @@ const vendorScore =
   }
 }
 
-// function getDelayUntil3AM() {
-//   const now = new Date();
+function getDelayUntil3AM() {
+  const now = new Date();
 
-//   const next3AM = new Date();
-//   next3AM.setHours(3, 0, 0, 0);
+  const next3AM = new Date();
+  next3AM.setHours(3, 0, 0, 0);
 
-//   if (now >= next3AM) {
-//     next3AM.setDate(next3AM.getDate() + 1);
-//   }
+  if (now >= next3AM) {
+    next3AM.setDate(next3AM.getDate() + 1);
+  }
 
-//   return next3AM - now;
-// }
+  return next3AM - now;
+}
 
-// const delay = getDelayUntil3AM();
+const delay = getDelayUntil3AM();
 
-// setTimeout(() => {
+setTimeout(() => {
 
-//   runSupplierPerformance(); 
+  runSupplierPerformance(); 
 
-//   setInterval(() => {
-//     runSupplierPerformance();
-//   }, 24 * 60 * 60 * 1000); 
+  setInterval(() => {
+    runSupplierPerformance();
+  }, 24 * 60 * 60 * 1000); 
 
-// }, delay);
+}, delay);
 
-setTimeout(async()=>{
-  console.log("Updating scores of supplier")
-runSupplierPerformance();
-}, 1 * 60 * 1000);
+// setTimeout(async()=>{
+//   console.log("Updating scores of supplier")
+// runSupplierPerformance();
+// }, 1 * 60 * 1000);
 
 database.on("error", (error) => {
   console.log(error);

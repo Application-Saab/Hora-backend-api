@@ -470,34 +470,10 @@ router.post('/add', async(req, res) => {
                    console.log("Filtered suppliers matching locality and type:", filteredSuppliers.length);
 
                    if (filteredSuppliers.length > 0) {
-
-                   const orderDate = new Date(req.body.order_date);
-
-                   const start = new Date(orderDate);
-                   start.setUTCHours(0,0,0,0);
-
-                   const end = new Date(orderDate);
-                   end.setUTCHours(23,59,59,999);
-
-                   for (const element of filteredSuppliers) {
-
-                   const orderCount = await orderModel.countDocuments({
-                   toId: element._id,
-                   order_date: {
-                     $gte: start,
-                     $lte: end
-                    }
-                    });
-
-                   const limit = Number(element.supplierOrderLimit || 4);
-
-                  if(orderCount > limit){
-                  console.log(`Supplier ${element._id} reached order limit`);
-                  continue; // notification skip iif supplier reached the daily limit 
-                  }
+                       filteredSuppliers.forEach(element => {
 
                 userSupplierIdsArray.push(element._id);
-                console.log(`Sending notification to supplier: ${element._id}`);
+                console.log(`Sending notification to supplier: ${element._id}, device_token: ${element.device_token}`);
 
                 notificationFunction.sendNotifications(
                 element.device_token,
@@ -507,9 +483,9 @@ router.post('/add', async(req, res) => {
                 '',
                  0
                 );
-                }
-                   }
-                   else {
+                })
+                   
+                } else {
                        console.log("No suppliers matched the locality and type for notification.");
                    }
                } else {

@@ -2524,6 +2524,50 @@ function generateCoupon() {
   return randomLetters + randomDigits;
 }
 
+
+async function sendRatingNotification(order, rating) {
+
+  let msg = "";
+  let title = "";
+
+  const rate = Array.isArray(rating) ? rating[0] : rating;
+
+  if (rate === "9-10") {
+    title = "9–10 Rating 🤩 🎉";
+    msg = `Order #${Number(order.order_id) + 10800} rated 9–10 🤩. Excellent work! Keep it up!`;
+  } 
+  else if (rate === "7-8") {
+    title = "7–8 Rating 😞";
+    msg = `Order #${Number(order.order_id) + 10800} rated 7–8 😞. Good job! Aim for a perfect rating next time.`;
+  } 
+  else if (rate === "1-6") {
+    title = "1–6 Rating 😡 ⚠️";
+    msg = `Order #${Number(order.order_id) + 10800} rated 1–6 😡. Please review the service quality and improve.`;
+  }
+
+  if (order.toId) {
+
+    const supplier = await userModel.findById(order.toId);
+
+    if (supplier) {
+
+      console.log(`Sending notification to supplier: ${supplier._id}`);
+
+      notificationFunction.sendNotifications(
+        supplier.device_token,
+        order.fromId,
+        title,
+        msg,
+        '',
+        0,
+        '/past-order'
+      );
+
+    }
+  }
+}
+
+
 router.put("/add-rating-reviews", async (req, res) => {
   try {
     const { rating, reviews, orderId } = req.body;
@@ -2561,6 +2605,8 @@ router.put("/add-rating-reviews", async (req, res) => {
 
     await order.save();
 
+    await sendRatingNotification(order, rating);
+
     return res.status(200).json({
       error: false,
       message: "Review submitted successfully",
@@ -2578,6 +2624,41 @@ router.put("/add-rating-reviews", async (req, res) => {
       message: "Internal server error",
     });
   }
+});
+
+router.post("/rating-notification", async (req, res) => {
+
+  try {
+
+    const { orderId, rating } = req.body;
+
+    const order = await orderModel.findOne({ order_id: orderId });
+
+    if (!order) {
+      return res.status(404).json({
+        error: true,
+        message: "Order not found"
+      });
+    }
+
+    await sendRatingNotification(order, rating);
+
+    return res.json({
+      error: false,
+      message: "Notification sent"
+    });
+
+  } catch (error) {
+
+    console.error(error);
+
+    return res.status(500).json({
+      error: true,
+      message: "Server error"
+    });
+
+  }
+
 });
 
 

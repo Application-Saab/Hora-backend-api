@@ -55,7 +55,7 @@ const userSchema = new mongoose.Schema(
         isPersonalStatus : { type: Number, default: 0},
         isProfessionStatus  : { type: Number, default: 0},
         performanceScore: { type: Number,default: 0},
-        performanceBadge: { type: String,enum: ["elite", "good", "average", "low"], default: null},
+        performanceBadge: { type: String,enum: ["Elite", "Good", "Average", "Low"], default: null},
         lastRatingUpdate: {type: Date} ,
         supplierOrderLimit:{type:Number, default:4}, 
     }, 

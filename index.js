@@ -152,9 +152,17 @@ for (const order of orders) {
 
 // const vendorScore = ((excellent * 10) + (good * 5) + (poor * -10)) / totalRatedOrders;
 const totalRatedOrders = excellent + good + poor;
-
 if (totalRatedOrders === 0) {
-  console.log("No ratings found for supplier:", supplier._id);
+
+  await UserModel.updateOne(
+    { _id: supplier._id },
+    {
+      performanceScore: 0,
+      performanceBadge: "low",
+      lastRatingUpdate: new Date()
+    }
+  );
+
   continue;
 }
 
@@ -163,10 +171,10 @@ const vendorScore =
 
       let badge = "low";
 
-      if (vendorScore >= 7) badge = "elite";
-      else if (vendorScore >= 5) badge = "good";
-      else if (vendorScore >= 3) badge = "average";
-      else if (vendorScore < 3) badge = "low"
+      if (vendorScore >= 7) badge = "Elite";
+      else if (vendorScore >= 5) badge = "Good";
+      else if (vendorScore >= 3) badge = "Average";
+      else if (vendorScore < 3) badge = "Low"
 
       await UserModel.updateOne(
         { _id: supplier._id },

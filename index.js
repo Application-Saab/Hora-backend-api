@@ -115,14 +115,13 @@ async function runSupplierPerformance() {
   try {
     console.log("Running Supplier Performance Job:", new Date());
 
-    const suppliers = await UserModel.find({ role: "supplier", status: { $ne: 2 } });
+    const suppliers = await UserModel.find({ role: "supplier" });
 
     for (const supplier of suppliers) {
 
       //calculatttion
       const orders = await orderModel.find({
         toId: supplier._id,
-        // rating: { $exists: true }
       })
       .sort({ createdAt: -1 }) // newest order
       .limit(20);

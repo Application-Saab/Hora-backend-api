@@ -265,12 +265,6 @@ router.post("/otp_verify", async (req, res) => {
           .status(503)
           .json({ error: true, status: 503, message: "Account Deleted" });
       }
-
-      if (user.status === 0 && user.role !== "supplier") {
-        return res
-          .status(503)
-          .json({ error: true, status: 503, message: "Account Blocked" });
-      }
       if (user.status === 2) {
         return res
           .status(503)

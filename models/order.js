@@ -32,6 +32,7 @@ const orderSchema = new mongoose.Schema({
     userReviewRatingArray: { type: Array, default: [] },
     userReviews: {type:String, default:""},
     couponCode:{type:String, default:""},
+    ratingNotificationSent:{type:Boolean, default:false},
     rateofCleanliness: { type: String, default: "" },
     comments: { type: String, default: '' },
     review_date: { type: Date, default: '' },

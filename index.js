@@ -128,32 +128,29 @@ async function runSupplierPerformance() {
 
       if (!orders.length) continue;
 
-let excellent = 0;
-let good = 0;
-let poor = 0;
+     let excellent = 0;
+     let good = 0;
+     let poor = 0;
 
-for (const order of orders) {
+    for (const order of orders) {
 
-  const rating = order.userReviewRatingArray;
-  const rate = Array.isArray(rating) ? rating[0] : rating;
+        const rating = order.userReviewRatingArray;
+        const rate = Array.isArray(rating) ? rating[0] : rating;
 
-  if (!rate) continue;
+       if (!rate) continue;
 
-  if (rate === "9-10") excellent++;
-  else if (rate === "7-8") good++;
-  else if (rate === "1-6") poor++;
-  else if (rate === "6-8") good++;
-  else if (rate === "0-6") poor++;
+       if (rate === "9-10") excellent++;
+       else if (rate === "7-8") good++;
+       else if (rate === "1-6") poor++;
+       else if (rate === "6-8") good++;
+       else if (rate === "0-6") poor++;
 
-}
+      }
 
-// const totalRatedOrders = excellent + good + poor;
+    const totalRatedOrders = excellent + good + poor;
+    if (totalRatedOrders === 0) {
 
-// const vendorScore = ((excellent * 10) + (good * 5) + (poor * -10)) / totalRatedOrders;
-const totalRatedOrders = excellent + good + poor;
-if (totalRatedOrders === 0) {
-
-  await UserModel.updateOne(
+     await UserModel.updateOne(
     { _id: supplier._id },
     {
       performanceScore: 0,

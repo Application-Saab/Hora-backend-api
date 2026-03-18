@@ -192,35 +192,11 @@ const vendorScore =
   }
 }
 
-function getDelayUntil3AM() {
-  const now = new Date();
-
-  const next3AM = new Date();
-  next3AM.setHours(3, 0, 0, 0);
-
-  if (now >= next3AM) {
-    next3AM.setDate(next3AM.getDate() + 1);
-  }
-
-  return next3AM - now;
-}
-
-const delay = getDelayUntil3AM();
-
-setTimeout(() => {
-
-  runSupplierPerformance(); 
-
-  setInterval(() => {
-    runSupplierPerformance();
-  }, 24 * 60 * 60 * 1000); 
-
-}, delay);
-
-// setTimeout(async()=>{
-//   console.log("Updating scores of supplier")
-// runSupplierPerformance();
-// }, 1 * 60 * 1000);
+// Runs every day at 3:00 AM
+cron.schedule('0 3 * * *', async () => {
+  console.log('Running Supplier Performance Job:', new Date());
+  await runSupplierPerformance();
+});
 
 database.on("error", (error) => {
   console.log(error);

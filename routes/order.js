@@ -480,7 +480,7 @@ router.post('/add', async(req, res) => {
                                'You have a new order!!!',
                                '',
                                0
-                           ); 
+                           );
                        });
                    } else {
                        console.log("No suppliers matched the locality and type for notification.");

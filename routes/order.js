@@ -2527,22 +2527,27 @@ function generateCoupon() {
 
 async function sendRatingNotification(order, rating) {
 
+    if (order.ratingNotificationSent) {
+    console.log("Notification already sent, skipping...");
+    return;
+    }
+
   let msg = "";
   let title = "";
 
   const rate = Array.isArray(rating) ? rating[0] : rating;
 
   if (rate === "9-10") {
-    title = "9–10 Rating 🤩 🎉";
-    msg = `Order #${Number(order.order_id) + 10800} rated 9–10 🤩. Excellent work! Keep it up!`;
+    title = `${rate} Rating 🤩 🎉`;
+    msg = `Order #${Number(order.order_id) + 10800} rated ${rate} 🤩. Excellent work! Keep it up!`;
   } 
-  else if (rate === "7-8") {
-    title = "7–8 Rating 😞";
-    msg = `Order #${Number(order.order_id) + 10800} rated 7–8 😞. Good job! Aim for a perfect rating next time.`;
+  else if (rate === "7-8" || rate === "6-8") {
+    title = `${rate} Rating 😞`;
+    msg = `Order #${Number(order.order_id) + 10800} rated ${rate} 😞. Good job! Aim for a perfect rating next time.`;
   } 
-  else if (rate === "1-6") {
-    title = "1–6 Rating 😡 ⚠️";
-    msg = `Order #${Number(order.order_id) + 10800} rated 1–6 😡. Please review the service quality and improve.`;
+  else if (rate === "1-6" || rate === "0-6") {
+    title = `${rate} Rating 😡 ⚠️`;
+    msg = `Order #${Number(order.order_id) + 10800} rated ${rate} 😡. Please review the service quality and improve.`;
   }
 
   if (order.toId) {
@@ -2565,6 +2570,10 @@ async function sendRatingNotification(order, rating) {
 
     }
   }
+    await orderModel.updateOne(
+    { _id: order._id },
+    { $set: { ratingNotificationSent: true } }
+  );
 }
 
 

@@ -4,8 +4,8 @@ const foodPackageSchema = new mongoose.Schema(
   {
     name: { type: String, default: "", required: true },
     image: { type: String, default: "", required: true },
-    price: { type: String, default: "" },
-    actualPrice: { type: String, default: "" },
+    price: { type: Number, default: 0, required: true },
+    actualPrice: { type: Number, default: 0, required: true },
     foodType: {
       type: String,
       enum: ["veg", "non-veg", "mixed"],
@@ -33,7 +33,6 @@ const foodPackageSchema = new mongoose.Schema(
     } /* 1-active 2-inactive 3-delete  */,
   },
   {
-    strict: false,
     timestamps: true,
   },
 );

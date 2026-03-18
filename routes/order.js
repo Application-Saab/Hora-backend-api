@@ -471,18 +471,17 @@ router.post('/add', async(req, res) => {
 
                    if (filteredSuppliers.length > 0) {
                        filteredSuppliers.forEach(element => {
-
-                userSupplierIdsArray.push(element._id);
-                          console.log(`Sending notification to supplier: ${element._id}, device_token: ${element.device_token}`);
-                          notificationFunction.sendNotifications(
-                              element.device_token,
-                              req.body.fromId,
-                              'New order',
-                              'You have a new order!!!',
-                              '',
-                              0
-                          ); 
-                      });
+                           userSupplierIdsArray.push(element._id);
+                           console.log(`Sending notification to supplier: ${element._id}, device_token: ${element.device_token}`);
+                           notificationFunction.sendNotifications(
+                               element.device_token,
+                               req.body.fromId,
+                               'New order',
+                               'You have a new order!!!',
+                               '',
+                               0
+                           ); 
+                       });
                    } else {
                        console.log("No suppliers matched the locality and type for notification.");
                    }

@@ -1,6 +1,8 @@
 exports.capitalizeFirstLetter = function (string) {
     return string.charAt(0).toUpperCase() + string.slice(1);
 }
+exports.CustomResponse = (res, status, error, message, data = null) =>
+  res.status(status).json({ error, status, message, data });
 
 exports.OTP = function (user) {
     var secureCode = Math.floor(100000 + Math.random() * 900000);

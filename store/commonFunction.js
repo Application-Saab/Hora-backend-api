@@ -1,3 +1,4 @@
+const PopularitySetting = require("../models/PopularitySetting");
 exports.capitalizeFirstLetter = function (string) {
   return string.charAt(0).toUpperCase() + string.slice(1);
 };
@@ -558,7 +559,118 @@ let popularityJobRunning = false;
 //   }
 // };
 
+// exports.updateDecorationPopularity = async () => {
+//   if (popularityJobRunning) {
+//     console.warn("Popularity job already running, skipping...");
+//     return;
+//   }
+
+//   popularityJobRunning = true;
+//   console.time("PopularityJob");
+
+//   try {
+//     const now = new Date();
+//     const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+//     const decorations = await Decoration.find(
+//       {},
+//       { _id: 1, createdAt: 1, popularity_score: 1 },
+//     ).lean();
+
+//     const orders = await Order.find(
+//       {
+//         order_status: { $in: [1, 2, 3, 5, 6] },
+//         createdAt: { $gte: oneWeekAgo },
+//       },
+//       { items: 1 },
+//     ).lean();
+
+//     const usageMap = {};
+
+//     const extractDecorationId = (item) => {
+//       if (!item) return null;
+
+//       if (mongoose.Types.ObjectId.isValid(item)) return String(item);
+
+//       if (item.item_id && mongoose.Types.ObjectId.isValid(item.item_id))
+//         return String(item.item_id);
+
+//       if (item._id && mongoose.Types.ObjectId.isValid(item._id))
+//         return String(item._id);
+
+//       return null;
+//     };
+
+//     // Count last week orders
+//     for (const order of orders) {
+//       if (!Array.isArray(order.items)) continue;
+
+//       for (const item of order.items) {
+//         const id = extractDecorationId(item);
+//         if (!id) continue;
+
+//         usageMap[id] = (usageMap[id] || 0) + 1;
+//       }
+//     }
+
+//     const BATCH_SIZE = 50;
+
+//     for (let i = 0; i < decorations.length; i += BATCH_SIZE) {
+//       const batch = decorations.slice(i, i + BATCH_SIZE);
+
+//       await Promise.allSettled(
+//         batch.map(async (decoration) => {
+//           try {
+//             const id = String(decoration._id);
+
+//             const createdAt = new Date(decoration.createdAt);
+
+//             const daysOfCreated = Math.floor(
+//               (now.getTime() - createdAt.getTime()) / 86400000,
+//             );
+
+//             const lastWeekOrders = usageMap[id] || 0;
+
+//             let score;
+
+//             // NEW DESIGN (no popularity score yet)
+//             if (decoration.popularity_score == null) {
+//               score = 7000 + 100 * lastWeekOrders - 15 * daysOfCreated;
+//             }
+
+//             // EXISTING DESIGN
+//             else {
+//               score =
+//                 decoration.popularity_score + 100 * lastWeekOrders - 15 * 7;
+//             }
+
+//             await Decoration.updateOne(
+//               { _id: id },
+//               { $set: { popularity_score: score } },
+//             );
+//           } catch (err) {
+//             console.error(
+//               `Popularity update failed for ${decoration._id}`,
+//               err.message,
+//             );
+//           }
+//         }),
+//       );
+//     }
+
+//     console.log("Decoration popularity updated successfully");
+//   } catch (err) {
+//     console.error("Popularity job failed", err);
+//   } finally {
+//     popularityJobRunning = false;
+//     console.timeEnd("PopularityJob");
+//   }
+// };
+
+
+
 exports.updateDecorationPopularity = async () => {
+
   if (popularityJobRunning) {
     console.warn("Popularity job already running, skipping...");
     return;
@@ -568,28 +680,47 @@ exports.updateDecorationPopularity = async () => {
   console.time("PopularityJob");
 
   try {
+
     const now = new Date();
-    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    // Get last run time
+    let setting = await PopularitySetting.findOne({ key: "popularityLastRun" });
+
+    let lastRun = setting?.value;
+
+    // first run case (fallback)
+    if (!lastRun) {
+      lastRun = new Date("2026-03-16");
+    } else {
+      lastRun = new Date(lastRun);
+    }
+
+    const daysPassed = Math.floor(
+      (now.getTime() - lastRun.getTime()) / 86400000
+    );
 
     const decorations = await Decoration.find(
       {},
-      { _id: 1, createdAt: 1, popularity_score: 1 },
+      { _id: 1, createdAt: 1, popularity_score: 1 }
     ).lean();
 
     const orders = await Order.find(
       {
         order_status: { $in: [1, 2, 3, 5, 6] },
-        createdAt: { $gte: oneWeekAgo },
+        createdAt: { $gte: lastRun }
       },
-      { items: 1 },
+      { items: 1, createdAt: 1 }
     ).lean();
 
     const usageMap = {};
+    const totalOrdersMap = {};
 
     const extractDecorationId = (item) => {
+
       if (!item) return null;
 
-      if (mongoose.Types.ObjectId.isValid(item)) return String(item);
+      if (mongoose.Types.ObjectId.isValid(item))
+        return String(item);
 
       if (item.item_id && mongoose.Types.ObjectId.isValid(item.item_id))
         return String(item.item_id);
@@ -600,68 +731,123 @@ exports.updateDecorationPopularity = async () => {
       return null;
     };
 
-    // Count last week orders
+    // Count orders
     for (const order of orders) {
+
       if (!Array.isArray(order.items)) continue;
 
       for (const item of order.items) {
+
         const id = extractDecorationId(item);
         if (!id) continue;
 
         usageMap[id] = (usageMap[id] || 0) + 1;
+
+      }
+    }
+
+    // Total orders for new designs only
+    const allOrders = await Order.find(
+      { order_status: { $in: [1, 2, 3, 5, 6] } },
+      { items: 1 }
+    ).lean();
+
+    for (const order of allOrders) {
+
+      if (!Array.isArray(order.items)) continue;
+
+      for (const item of order.items) {
+
+        const id = extractDecorationId(item);
+        if (!id) continue;
+
+        totalOrdersMap[id] = (totalOrdersMap[id] || 0) + 1;
+
       }
     }
 
     const BATCH_SIZE = 50;
 
     for (let i = 0; i < decorations.length; i += BATCH_SIZE) {
+
       const batch = decorations.slice(i, i + BATCH_SIZE);
 
       await Promise.allSettled(
-        batch.map(async (decoration) => {
-          try {
-            const id = String(decoration._id);
 
+        batch.map(async (decoration) => {
+
+          try {
+
+            const id = String(decoration._id);
             const createdAt = new Date(decoration.createdAt);
 
             const daysOfCreated = Math.floor(
-              (now.getTime() - createdAt.getTime()) / 86400000,
+              (now.getTime() - createdAt.getTime()) / 86400000
             );
 
-            const lastWeekOrders = usageMap[id] || 0;
+            const newOrders = usageMap[id] || 0;
+            const totalOrders = totalOrdersMap[id] || 0;
 
             let score;
 
-            // NEW DESIGN (no popularity score yet)
+            // NEW DESIGN
             if (decoration.popularity_score == null) {
-              score = 7000 + 100 * lastWeekOrders - 15 * daysOfCreated;
+
+              score =
+                5000 +
+                300 * totalOrders -
+                15 * daysOfCreated;
+
             }
 
             // EXISTING DESIGN
             else {
+
               score =
-                decoration.popularity_score + 100 * lastWeekOrders - 15 * 7;
+                decoration.popularity_score +
+                300 * newOrders -
+                15 * daysPassed;
+
             }
 
             await Decoration.updateOne(
               { _id: id },
-              { $set: { popularity_score: score } },
+              { $set: { popularity_score: score } }
             );
+
           } catch (err) {
+
             console.error(
               `Popularity update failed for ${decoration._id}`,
-              err.message,
+              err.message
             );
+
           }
-        }),
+
+        })
+
       );
+
     }
 
+    // 🔹 Update last run time
+    await PopularitySetting.updateOne(
+      { key: "popularityLastRun" },
+      { $set: { value: now } },
+      { upsert: true }
+    );
+
     console.log("Decoration popularity updated successfully");
+
   } catch (err) {
+
     console.error("Popularity job failed", err);
+
   } finally {
+
     popularityJobRunning = false;
     console.timeEnd("PopularityJob");
+
   }
+
 };

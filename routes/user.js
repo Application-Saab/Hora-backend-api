@@ -731,6 +731,9 @@ router.post("/supplier_personal_details_update/:id", async (req, res) => {
     userServedLocalities: req.body.userServedLocalities,
     order_type: req.body.order_type,
   };
+  if (req.body.supplierOrderLimit !== undefined) {
+  updatedData.supplierOrderLimit = req.body.supplierOrderLimit;
+  }
 
   const options = { new: true };
 

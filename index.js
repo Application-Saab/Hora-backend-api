@@ -109,6 +109,92 @@ cron.schedule('0 0 * * 0', () => {
 //   await commonFunction.updateDecorationPopularity()
 // }, 1.5 * 60 * 1000);
 
+
+
+async function runSupplierPerformance() {
+  try {
+    console.log("Running Supplier Performance Job:", new Date());
+
+    const suppliers = await UserModel.find({ role: "supplier" });
+
+    for (const supplier of suppliers) {
+
+      //calculatttion
+      const orders = await orderModel.find({
+        toId: supplier._id,
+      })
+      .sort({ createdAt: -1 }) // newest order
+      .limit(20);
+
+      if (!orders.length) continue;
+
+     let excellent = 0;
+     let good = 0;
+     let poor = 0;
+
+    for (const order of orders) {
+
+        const rating = order.userReviewRatingArray;
+        const rate = Array.isArray(rating) ? rating[0] : rating;
+
+       if (!rate) continue;
+
+       if (rate === "9-10") excellent++;
+       else if (rate === "7-8") good++;
+       else if (rate === "1-6") poor++;
+       else if (rate === "6-8") good++;
+       else if (rate === "0-6") poor++;
+
+      }
+
+    const totalRatedOrders = excellent + good + poor;
+    if (totalRatedOrders === 0) {
+
+     await UserModel.updateOne(
+    { _id: supplier._id },
+    {
+      performanceScore: 0,
+      performanceBadge: "low",
+      lastRatingUpdate: new Date()
+    }
+  );
+
+  continue;
+}
+
+const vendorScore =
+((excellent * 10) + (good * 5) + (poor * -10)) / totalRatedOrders;
+
+      let badge = "low";
+
+      if (vendorScore >= 7) badge = "Elite";
+      else if (vendorScore >= 5) badge = "Good";
+      else if (vendorScore >= 3) badge = "Average";
+      else if (vendorScore < 3) badge = "Low"
+
+      await UserModel.updateOne(
+        { _id: supplier._id },
+        {
+          performanceScore: vendorScore,
+          performanceBadge: badge,
+          lastRatingUpdate: new Date()
+        }
+      );
+
+    }
+    console.log("Supplier performance updated successfully");
+
+  } catch (error) {
+    console.error("Performance job error:", error);
+  }
+}
+
+// Runs every day at 3:00 AM
+cron.schedule('0 3 * * *', async () => {
+  console.log('Running Supplier Performance Job:', new Date());
+  await runSupplierPerformance();
+});
+
 database.on("error", (error) => {
   console.log(error);
 });

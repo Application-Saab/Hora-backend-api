@@ -127,20 +127,23 @@ router.post("/adminCelebrationBoosterList", async (req, res) => {
   }
 });
 
-router.post("/getCelebrationBoosterByName", async (req, res) => {
+// Path parameters use kar rahe hain hum yahan (:name)
+router.get("/getCelebrationBoosterByName/:name", async (req, res) => {
   try {
-    const { name } = req.body;
+    // GET request me data req.params se nikalte hain
+    const { name } = req.params;
 
     if (!name) {
       return CustomResponse(res, 400, true, "Name is required");
     }
 
     const booster = await CelebrationBooster.findOne({
+      // Regex case-insensitive search ke liye (Sahi hai tera logic)
       name: { $regex: `^${name}$`, $options: "i" },
     }).populate("tag");
 
     if (!booster) {
-      return CustomResponse(res, 404, true, "Design not found");
+      return CustomResponse(res, 200, true, "Design not found", {});
     }
 
     return CustomResponse(
@@ -151,7 +154,7 @@ router.post("/getCelebrationBoosterByName", async (req, res) => {
       booster,
     );
   } catch (error) {
-    console.error(error);
+    console.error("Error fetching booster:", error);
     return CustomResponse(res, 500, true, "Server error");
   }
 });

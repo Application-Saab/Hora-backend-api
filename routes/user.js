@@ -253,6 +253,14 @@ router.post("/otp_verify", async (req, res) => {
           .json({ error: true, status: 503, message: "OTP Mismatch" });
       }
 
+      if (role !== user.role) {
+        return res.status(503).json({
+          error: true,
+          status: 503,
+          message: `The number is already used for ${commonFunction.capitalizeFirstLetter(user.role)} login. Please use a different number.`,
+        });
+      }
+
       // Check account status
       if (user.status === 0 && user.role !== "supplier") {
         return res

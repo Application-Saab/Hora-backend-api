@@ -122,6 +122,7 @@ async function runSupplierPerformance() {
       //calculatttion
       const orders = await orderModel.find({
         toId: supplier._id,
+        order_status: { $in: [3, 6] }
       })
       .sort({ createdAt: -1 }) // newest order
       .limit(20);

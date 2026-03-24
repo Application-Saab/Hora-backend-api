@@ -476,7 +476,7 @@ router.post('/add', async(req, res) => {
                            notificationFunction.sendNotifications(
                                element.device_token,
                                req.body.fromId,
-                               'New Order!!!',
+                               'New Order',
                                `New Order!!! Order ID: #${nextOrderId + 10800} 🥳🤩`,
                                '',
                                0
@@ -604,7 +604,7 @@ router.post('/update_order_status', async (req, res) => {
           notificationFunction.sendNotifications(
             supplier.device_token,
             order.fromId, // fromId from order
-            'New Order!!!',
+            'New Order',
             `New Order!!! Order ID: #${order.order_id + 10800} 🥳🤩`,
             '',
             0

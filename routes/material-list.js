@@ -153,4 +153,65 @@ router.post("/admin_material_list", async (req, res) => {
   }
 });
 
+router.get("/getMaterialFilterData", async (req, res) => {
+  try {
+    const materials = await MaterialList.find(
+      { materialStatus: 1 },
+      {
+        specs: 1,
+        type: 1,
+        materialName: 1,
+        minimumOrderQuantity: 1,
+        materialCategory: 1,
+        vendorMaterialPrice: 1,
+      },
+    ).sort({ createdAt: -1 });
+
+    const specs = materials.map((item) => ({
+      _id: item._id,
+      value: item.specs || "",
+      minimumOrderQuantity: item.minimumOrderQuantity || "",
+      materialCategory: item.materialCategory || "",
+      type: item.type || "",
+      material: item.materialName || "",
+      vendorMaterialPrice: item.vendorMaterialPrice || 0,
+    }));
+
+    const uniqueTypes = [
+      ...new Set(
+        materials
+          .map((item) => (item.type || "").trim())
+          .filter((item) => item !== ""),
+      ),
+    ].map((item) => ({
+      value: item,
+    }));
+
+    const uniqueMaterials = [
+      ...new Set(
+        materials
+          .map((item) => (item.materialName || "").trim())
+          .filter((item) => item !== ""),
+      ),
+    ].map((item) => ({
+      value: item,
+    }));
+
+    return CustomResponse(
+      res,
+      200,
+      false,
+      "Material filter data fetched successfully",
+      {
+        specs,
+        type: uniqueTypes,
+        material: uniqueMaterials,
+      },
+    );
+  } catch (error) {
+    console.error(error);
+    return CustomResponse(res, 500, true, "Server error");
+  }
+});
+
 module.exports = router;

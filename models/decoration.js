@@ -30,7 +30,6 @@ const decorationSchema = new mongoose.Schema({
     badge: String,
     price: {
         type: String,
-        
     },
     cost_price: {
         type:String,

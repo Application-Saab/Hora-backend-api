@@ -738,6 +738,7 @@ router.post("/supplier_personal_details_update/:id", async (req, res) => {
     avatar: req.body.avatar,
     userServedLocalities: req.body.userServedLocalities,
     order_type: req.body.order_type,
+    job_profile: req.body.job_profile,
   };
   if (req.body.supplierOrderLimit !== undefined) {
   updatedData.supplierOrderLimit = req.body.supplierOrderLimit;

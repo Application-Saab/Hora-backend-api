@@ -30,6 +30,7 @@ router.post("/add", async (req, res) => {
         vendorMaterialPrice: req.body.vendorMaterialPrice,
         executionPrice: req.body.executionPrice,
         horaAdvance: req.body.horaAdvance,
+        inclusionVariables: req.body.inclusionVariables,
       });
 
       // Check existing

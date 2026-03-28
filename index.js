@@ -230,6 +230,7 @@ const weblinkRoutes = require("./routes/weblink");
 const analyticsRoutes = require("./routes/analytics");
 const FoodPackageRoutes = require("./routes/food-package");
 let passportAuth = require("./store/passportAuth").passportAuth;
+const errorLogsRoutes = require("./routes/error-logs");
 
 app.use("/api/admin", AdminRoutes);
 app.use("/api/user", UserRoutes);
@@ -256,6 +257,7 @@ app.use("/api/wonderland/badge", EventBadgeRoutes);
 app.use("/api/internal", weblinkRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/food-package", FoodPackageRoutes);
+app.use("/api/error-logs", errorLogsRoutes);
 
 const notificationFunction = require("./store/notifications");
 const UserModel = require("./models/user");

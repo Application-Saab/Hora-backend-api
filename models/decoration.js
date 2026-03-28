@@ -30,7 +30,6 @@ const decorationSchema = new mongoose.Schema({
     badge: String,
     price: {
         type: String,
-        
     },
     cost_price: {
         type:String,
@@ -68,7 +67,15 @@ const decorationSchema = new mongoose.Schema({
     timestamps: true 
 });
 
-decorationSchema.index({ tag: 1, name:1 });
+// decorationSchema.index({ tag: 1, name:1 });
+
+decorationSchema.index({
+  tag: 1,
+  status: 1,
+  price: 1,
+  popularity_score: -1
+});
+decorationSchema.index({ name: "text" });
 
 const Decoration = mongoose.model('decoration', decorationSchema);
 

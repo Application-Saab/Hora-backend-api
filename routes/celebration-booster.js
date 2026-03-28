@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const CelebrationBooster = require("../models/celebration-booster");
 const { CustomResponse } = require("../store/commonFunction");
+const getPaginatedData = require("../utils/functions"); // Import karein
 
 router.post("/createCelebrationBooster", async (req, res) => {
   try {
@@ -75,50 +76,21 @@ router.post("/adminCelebrationBoosterList", async (req, res) => {
     const { page, per_page, name, status, type, tag } = req.body;
 
     let query = {};
+    if (name) query.name = { $regex: name, $options: "i" };
+    if (status !== undefined && status !== "") query.status = parseInt(status);
+    if (type) query.type = type;
+    if (tag) query.tag = tag;
 
-    if (name) {
-      query.name = { $regex: name, $options: "i" };
-    }
-
-    if (status !== undefined && status !== "") {
-      query.status = parseInt(status);
-    }
-
-    if (type) {
-      query.type = type;
-    }
-
-    if (tag) {
-      query.tag = tag;
-    }
-
-    const currentPage = page ? parseInt(page) : 1;
-    const limit = per_page ? parseInt(per_page) : 10;
-    const skip = (currentPage - 1) * limit;
-
-    const boosters = await CelebrationBooster.find(query)
-      .populate("tag")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    const total = await CelebrationBooster.countDocuments(query);
-
-    const paginate = {
-      total_item: total,
-      showing: boosters.length,
-      first_page: 1,
-      previous_page: currentPage > 1 ? currentPage - 1 : 1,
-      current_page: currentPage,
-      next_page:
-        currentPage < Math.ceil(total / limit)
-          ? currentPage + 1
-          : Math.ceil(total / limit),
-      last_page: Math.ceil(total / limit),
-    };
+    const { items, paginate } = await getPaginatedData({
+      model: CelebrationBooster,
+      query: query,
+      page: page,
+      per_page: per_page,
+      populate: "tag",
+    });
 
     return CustomResponse(res, 200, false, "Boosters fetched successfully", {
-      boosters,
+      boosters: items,
       paginate,
     });
   } catch (error) {

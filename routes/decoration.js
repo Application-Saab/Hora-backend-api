@@ -1,15 +1,10 @@
 const express = require('express');
 const orderModel = require('../models/order');
-const userModel = require('../models/user');
-const commonFunction = require('../store/commonFunction');
 const router = express.Router();
-var async = require("async");
-// Load the full build.
-var _ = require('lodash');
 const AddressModel = require('../models/address');
 const decorationModel = require('../models/decoration');
 const NodeCache = require('node-cache');
-const cache = new NodeCache({ stdTTL: 60 * 10 }); // Cache TTL: 5 minutes
+const cache = new NodeCache({ stdTTL: 60 * 10 }); // Cache TTL: 10 minutes
 const path = require("path");
 const fs = require("fs");
 const mongoose = require('mongoose');

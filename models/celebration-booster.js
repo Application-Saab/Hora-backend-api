@@ -1,75 +1,61 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
-const celebrationBoostersSchema = new mongoose.Schema({
-    // id: {
-    //     type: mongoose.Schema.Types.ObjectId
-    // },
+const celebrationBoostersSchema = new mongoose.Schema(
+  {
     name: {
-        type: String,
-        required: true
+      type: String,
+      required: true,
     },
     short_link: {
-        type: String,
+      type: String,
     },
     featured_image: {
-        type: String
+      type: String,
     },
     caption: String,
-    featured_images: {
-        url: String,
-        caption: String,
-        small: String,
-        webp_small: String,
-        thumbnail: String,
-        large: String,
-        original: String,
-        webp_thumbnail: String,
-        webp_large: String,
-        webp_original: String
-    },
     badge: String,
     price: {
-        type: String,
-        
+      type: Number,
     },
     cost_price: {
-        type:String,
+      type: Number,
     },
     type: String,
     is_wishlisted: {
-        type: Boolean,
-        default: false
+      type: Boolean,
+      default: false,
     },
     ratings: {
-        score: Number,
-        count: Number
+      score: Number,
+      count: Number,
     },
     attributes: {
-        price_subtext: [String],
-        locality: [String],
-        caption: [String]
+      price_subtext: [String],
+      locality: [String],
+      caption: [String],
     },
-    inclusion: [
-        String
-    ],
-    tag : [{
+    inclusion: [String],
+    tag: [
+      {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "meals"
-    }],
-    status: {  type: Number, default: 1 /* 1-active 2-inactive 3-delete  */ },
+        ref: "meals",
+      },
+    ],
+    status: { type: Number, default: 1 /* 1-active 2-inactive 3-delete  */ },
     discount: Number,
-    // popularity_score: {
-    //     type: Number,
-    //     default: 500
-    // },
     designType: { type: Object, default: {} },
-},{
+  },
+  {
     strict: false,
-    timestamps: true 
-});
+    timestamps: true,
+  },
+);
 
-celebrationBoostersSchema.index({ tag: 1, name:1 });
+celebrationBoostersSchema.index({ tag: 1, name: 1 });
 
-const CelebrationBooster = mongoose.model('celebration-booster', celebrationBoostersSchema);
+const CelebrationBooster = mongoose.model(
+  "celebration-booster",
+  celebrationBoostersSchema,
+);
 
 module.exports = CelebrationBooster;

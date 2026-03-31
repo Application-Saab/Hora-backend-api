@@ -395,6 +395,7 @@ router.post('/add', async(req, res) => {
 	online_phone_no:req.body.online_phone_no,
 	order_taken_by:req.body.order_taken_by,
     eventName:req.body.eventName,
+    inclusionVariables :req.body.inclusionVariables,
     })
     if(req.body.items.length>0){
         let hasKey = req.body.items[0].hasOwnProperty('item_id');

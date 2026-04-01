@@ -1,17 +1,13 @@
 const express = require('express');
 const orderModel = require('../models/order');
-const userModel = require('../models/user');
-const commonFunction = require('../store/commonFunction');
 const router = express.Router();
-var async = require("async");
-// Load the full build.
-var _ = require('lodash');
 const AddressModel = require('../models/address');
 const decorationModel = require('../models/decoration');
 const NodeCache = require('node-cache');
-const cache = new NodeCache({ stdTTL: 60 * 10 }); // Cache TTL: 5 minutes
+const cache = new NodeCache({ stdTTL: 60 * 10 }); // Cache TTL: 10 minutes
 const path = require("path");
 const fs = require("fs");
+const mongoose = require('mongoose');
 
 router.post('/add', async (req, res) => {
     const {
@@ -219,68 +215,125 @@ router.get('/details/:id', async (req, res) => {
     }
 })
 
+
+
 router.get("/searchByTag/v2/:tag", async (req, res) => {
-  const { tag } = req.params;
-  const limit = parseInt(req.query.limit) || 10;
-  const page = parseInt(req.query.page) || 1;
-  const priceFilter = req.query.priceFilter;
-  const sortBy = req.query.sortBy;
-  const theme = req.query.theme;
-
-  const cacheKey = `search_${tag}_${limit}_${page}_${priceFilter}_${sortBy}_${theme}`;
-
-  // Step 1: Return Cached Response if exists
-  const cachedData = cache.get(cacheKey);
-  if (cachedData) {
-    console.log("returning cached data with key " + cacheKey);
-    return res.json({
-      ...cachedData,
-      cached: true,
-    });
-  }
-
-  const query = { tag };
-
-  if (priceFilter === "under2000") {
-    query.price = { $lt: 2000 };
-  } else if (priceFilter === "2000to5000") {
-    query.price = { $gte: 2000, $lte: 5000 };
-  } else if (priceFilter === "above5000") {
-    query.price = { $gt: 5000 };
-  }
-
-  if (theme && theme !== "all") {
-    const formattedThemeFilter = theme.toLowerCase().split("-")[0];
-    query.name = { $regex: formattedThemeFilter, $options: "i" };
-  }
-
   try {
-    // Step 3: Build Sort Criteria Safely (FIXED)
-    let sortOrder = sortBy === "asc" ? 1 : sortBy === "desc" ? -1 : null;
+    const { tag } = req.params;
+    const limit = Math.min(parseInt(req.query.limit) || 10, 1000);
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const priceFilter = req.query.priceFilter;
+    const sortBy = req.query.sortBy?.toLowerCase(); // "asc" or "desc"
+    const theme = req.query.theme;
 
-    const sortCriteria =
-      sortOrder !== null
-        ? priceFilter == "all" ||
-          priceFilter == "All" ||
-          query.price != null ||
-          query.price != undefined
-          ? { popularity_score: -1, price: sortOrder }
-          : { price: sortOrder, popularity_score: -1 }
-        : { popularity_score: -1 };
+    const cacheKey = `search_${tag}_${limit}_${page}_${priceFilter || "absent"}_${sortBy || "default"}_${theme || "all"}`;
 
-    // Step 4: Execute Query Safely
-    const decorationsQuery = decorationModel
-      .find(query)
-      .collation({ locale: "en", numericOrdering: true })
-      .sort(sortCriteria)
-      .skip((page - 1) * limit)
-      .limit(limit)
-      .lean();
+    // Cache hit
+    const cachedData = cache.get(cacheKey);
+    if (cachedData) {
+      return res.json({ ...cachedData, cached: true });
+    }
+    
+    // Match stage with dynamic filters
+    const matchStage = { status: 1 };
 
-    const [decorations, totalDecorations] = await Promise.all([
-      decorationsQuery,
-      decorationModel.countDocuments(query),
-    ]);
+    if (mongoose.Types.ObjectId.isValid(tag)) {
+      matchStage.tag = new mongoose.Types.ObjectId(tag);
+    } else {
+      matchStage.tag = tag;
+    }
+
+    // Price Filter
+    if (priceFilter === "under2000") {
+      matchStage.$expr = { $lt: [{ $toDouble: "$price" }, 2000] };
+    } else if (priceFilter === "2000to5000") {
+      matchStage.$expr = {
+        $and: [
+          { $gte: [{ $toDouble: "$price" }, 2000] },
+          { $lte: [{ $toDouble: "$price" }, 5000] },
+        ],
+      };
+    } else if (priceFilter === "above5000") {
+      matchStage.$expr = { $gt: [{ $toDouble: "$price" }, 5000] };
+    }
+
+    // Theme filter
+    if (theme && theme !== "all") {
+      const formattedTheme = theme.toLowerCase().split("-")[0];
+      matchStage.name = { $regex: formattedTheme, $options: "i" };
+    }
+
+    // Sorting logic
+    const isAsc = sortBy === "asc";
+    const isDesc = sortBy === "desc";
+    const priceSortDir = isAsc ? 1 : isDesc ? -1 : null;
+
+    let sortStage;
+
+    const priceFilterIsAll = priceFilter === "all" || priceFilter === "All";
+    const hasSpecificPriceFilter =
+      priceFilter &&
+      !priceFilterIsAll &&
+      ["under2000", "2000to5000", "above5000"].includes(priceFilter);
+
+    if (priceSortDir !== null) {
+      if (priceFilterIsAll || hasSpecificPriceFilter) {
+        sortStage = { popularity_score: -1, numericPrice: priceSortDir };
+      } else {
+        sortStage = { numericPrice: priceSortDir, popularity_score: -1 };
+      }
+    } else {
+      sortStage = { popularity_score: -1 };
+    }
+
+    // Aggregation pipeline
+    const pipeline = [
+      { $match: matchStage },
+
+      // Safe numericPrice for sorting
+      {
+        $addFields: {
+          numericPrice: {
+            $cond: {
+              if: { $or: [{ $eq: ["$price", null] }, { $eq: ["$price", ""] }] },
+              then: 0,
+              else: { $toDouble: "$price" },
+            },
+          },
+        },
+      },
+
+      { $sort: sortStage },
+
+      {
+        $facet: {
+          data: [
+            { $skip: (page - 1) * limit },
+            { $limit: limit },
+            {
+              $project: {
+                _id: 1,
+                name: 1,
+                short_link: 1,
+                featured_image: 1,
+                price: 1,
+                cost_price: 1,
+                ratings: 1,
+                popularity_score: 1,
+              },
+            },
+          ],
+          pagination: [{ $count: "totalItems" }],
+        },
+      },
+    ];
+
+    const result = await decorationModel
+      .aggregate(pipeline)
+      .collation({ locale: "en", numericOrdering: true });
+
+    const decorations = result[0]?.data || [];
+    const totalItems = result[0]?.pagination?.[0]?.totalItems || 0;
 
     const response = {
       error: false,
@@ -292,25 +345,25 @@ router.get("/searchByTag/v2/:tag", async (req, res) => {
           : "No matching decorations found.",
       data: decorations,
       pagination: {
-        totalItems: totalDecorations,
-        totalPages: Math.ceil(totalDecorations / limit),
+        totalItems,
+        totalPages: Math.ceil(totalItems / limit),
         currentPage: page,
         limit,
       },
     };
 
-    // Step 5: Save to Cache
+    // Cache save
     cache.set(cacheKey, response);
 
     return res.json(response);
   } catch (error) {
+    console.error("=== SearchByTag v2 Error ===", error);
     return res.status(500).json({
       error: true,
       message: "Server Error: " + error.message,
     });
   }
 });
-
 
 //get decoration by name and all orders individual product actual images 
 router.get('/decorations/:name/orders', async (req, res) => {

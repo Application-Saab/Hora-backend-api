@@ -253,6 +253,14 @@ router.post("/otp_verify", async (req, res) => {
           .json({ error: true, status: 503, message: "OTP Mismatch" });
       }
 
+      if (role !== user.role) {
+        return res.status(503).json({
+          error: true,
+          status: 503,
+          message: `The number is already used for ${commonFunction.capitalizeFirstLetter(user.role)} login. Please use a different number.`,
+        });
+      }
+
       // Check account status
       if (user.status === 0 && user.role !== "supplier") {
         return res
@@ -730,7 +738,11 @@ router.post("/supplier_personal_details_update/:id", async (req, res) => {
     avatar: req.body.avatar,
     userServedLocalities: req.body.userServedLocalities,
     order_type: req.body.order_type,
+    job_profile: req.body.job_profile,
   };
+  if (req.body.supplierOrderLimit !== undefined) {
+  updatedData.supplierOrderLimit = req.body.supplierOrderLimit;
+  }
 
   const options = { new: true };
 

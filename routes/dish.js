@@ -4,6 +4,7 @@ const decorationModel = require("../models/decoration");
 const photographyModel = require("../models/photography");
 const { CustomResponse } = require("../store/commonFunction");
 const router = express.Router();
+const { default: mongoose } = require("mongoose");
 
 router.post("/add", async (req, res) => {
   try {
@@ -562,7 +563,9 @@ router.get("/getRandomDishList", async (req, res) => {
 
 router.get("/getAllDishesList", async (req, res) => {
   try {
-    const dishes = await dishModel.find().lean();
+    const dishes = await dishModel.find({
+      cuisineId : { $in: [new mongoose.Types.ObjectId("65f1b256aaba27208a89865f")] },
+    }).lean();
     return CustomResponse(res, 200, false, "Dishes fetched successfully", dishes);
   } catch (err) {
     console.error("Get All Dishes Error:", err);

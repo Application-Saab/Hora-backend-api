@@ -215,92 +215,135 @@ router.get('/details/:id', async (req, res) => {
     }
 })
 
+
+
 router.get("/searchByTag/v2/:tag", async (req, res) => {
   try {
     const { tag } = req.params;
     const limit = Math.min(parseInt(req.query.limit) || 10, 1000);
-    const page = parseInt(req.query.page) || 1;
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
     const priceFilter = req.query.priceFilter;
-    const sortBy = req.query.sortBy;
+    const sortBy = req.query.sortBy?.toLowerCase(); // "asc" or "desc"
     const theme = req.query.theme;
 
-    const cacheKey = `search_${tag}_${limit}_${page}_${priceFilter}_${sortBy}_${theme}`;
+    const cacheKey = `search_${tag}_${limit}_${page}_${priceFilter || "absent"}_${sortBy || "default"}_${theme || "all"}`;
 
-    // check cache first
+    // Cache hit
     const cachedData = cache.get(cacheKey);
     if (cachedData) {
       return res.json({ ...cachedData, cached: true });
     }
+    
+    // Match stage with dynamic filters
+    const matchStage = { status: 1 };
 
-    // match mongoose object id
-    const matchStage = {
-      tag: new mongoose.Types.ObjectId(tag),
-      status: 1
-    };
-
-    // Price filter
-    if (priceFilter === "under2000") matchStage.price = { $lt: 2000 };
-    else if (priceFilter === "2000to5000") matchStage.price = { $gte: 2000, $lte: 5000 };
-    else if (priceFilter === "above5000") matchStage.price = { $gt: 5000 };
-
-    // Serach by theme (text index on name field)
-    if (theme && theme !== "all") {
-      matchStage.$text = { $search: theme };
+    if (mongoose.Types.ObjectId.isValid(tag)) {
+      matchStage.tag = new mongoose.Types.ObjectId(tag);
+    } else {
+      matchStage.tag = tag;
     }
 
-    // Sorting by order
-    const sortOrder = sortBy === "asc" ? 1 : sortBy === "desc" ? -1 : null;
+    // Price Filter
+    if (priceFilter === "under2000") {
+      matchStage.$expr = { $lt: [{ $toDouble: "$price" }, 2000] };
+    } else if (priceFilter === "2000to5000") {
+      matchStage.$expr = {
+        $and: [
+          { $gte: [{ $toDouble: "$price" }, 2000] },
+          { $lte: [{ $toDouble: "$price" }, 5000] },
+        ],
+      };
+    } else if (priceFilter === "above5000") {
+      matchStage.$expr = { $gt: [{ $toDouble: "$price" }, 5000] };
+    }
 
-    const sortStage =
-      sortOrder !== null
-        ? { popularity_score: -1, price: sortOrder }
-        : { popularity_score: -1 };
+    // Theme filter
+    if (theme && theme !== "all") {
+      const formattedTheme = theme.toLowerCase().split("-")[0];
+      matchStage.name = { $regex: formattedTheme, $options: "i" };
+    }
 
-    // Pipeline
+    // Sorting logic
+    const isAsc = sortBy === "asc";
+    const isDesc = sortBy === "desc";
+    const priceSortDir = isAsc ? 1 : isDesc ? -1 : null;
+
+    let sortStage;
+
+    const priceFilterIsAll = priceFilter === "all" || priceFilter === "All";
+    const hasSpecificPriceFilter =
+      priceFilter &&
+      !priceFilterIsAll &&
+      ["under2000", "2000to5000", "above5000"].includes(priceFilter);
+
+    if (priceSortDir !== null) {
+      if (priceFilterIsAll || hasSpecificPriceFilter) {
+        sortStage = { popularity_score: -1, numericPrice: priceSortDir };
+      } else {
+        sortStage = { numericPrice: priceSortDir, popularity_score: -1 };
+      }
+    } else {
+      sortStage = { popularity_score: -1 };
+    }
+
+    // Aggregation pipeline
     const pipeline = [
       { $match: matchStage },
+
+      // Safe numericPrice for sorting
+      {
+        $addFields: {
+          numericPrice: {
+            $cond: {
+              if: { $or: [{ $eq: ["$price", null] }, { $eq: ["$price", ""] }] },
+              then: 0,
+              else: { $toDouble: "$price" },
+            },
+          },
+        },
+      },
+
+      { $sort: sortStage },
 
       {
         $facet: {
           data: [
-            { $sort: sortStage },
             { $skip: (page - 1) * limit },
             { $limit: limit },
-
-            // Only required fields
             {
               $project: {
                 _id: 1,
                 name: 1,
-                price: 1,
+                short_link: 1,
                 featured_image: 1,
-                type: 1,
-                tag: 1,
-                discount: 1,
-                designType: 1,
-              }
-            }
+                price: 1,
+                cost_price: 1,
+                ratings: 1,
+                popularity_score: 1,
+              },
+            },
           ],
-
-          pagination: [
-            { $count: "totalItems" }
-          ]
-        }
-      }
+          pagination: [{ $count: "totalItems" }],
+        },
+      },
     ];
 
-    const result = await decorationModel.aggregate(pipeline);
+    const result = await decorationModel
+      .aggregate(pipeline)
+      .collation({ locale: "en", numericOrdering: true });
 
-    const data = result[0].data;
-    const totalItems = result[0].pagination[0]?.totalItems || 0;
+    const decorations = result[0]?.data || [];
+    const totalItems = result[0]?.pagination?.[0]?.totalItems || 0;
 
     const response = {
       error: false,
       status: 200,
-      message: data.length
-        ? "Search Successful"
-        : "No matching decorations found.",
-      data,
+      ok: "ok",
+      message:
+        decorations.length > 0
+          ? "Search Successful"
+          : "No matching decorations found.",
+      data: decorations,
       pagination: {
         totalItems,
         totalPages: Math.ceil(totalItems / limit),
@@ -309,21 +352,18 @@ router.get("/searchByTag/v2/:tag", async (req, res) => {
       },
     };
 
-    // Save to cache
+    // Cache save
     cache.set(cacheKey, response);
 
     return res.json(response);
-
   } catch (error) {
+    console.error("=== SearchByTag v2 Error ===", error);
     return res.status(500).json({
       error: true,
-      message: error.message,
+      message: "Server Error: " + error.message,
     });
   }
 });
-
-
-
 
 //get decoration by name and all orders individual product actual images 
 router.get('/decorations/:name/orders', async (req, res) => {

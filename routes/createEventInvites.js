@@ -18,6 +18,7 @@ const ChatRoom = require("../models/eventChatRoom");
 const User = require("../models/user");
 const { s3, S3_BUCKET } = require("../utils/awsConfigs");
 const { getIO } = require("../socket");
+const { CustomResponse } = require("../store/commonFunction");
 
 // Helper: Delete image from S3
 async function deleteFromS3(key) {
@@ -1017,5 +1018,301 @@ router.put(
     }
   },
 );
+
+router.get("/all-tracking", async (req, res) => {
+  try {
+    const [
+      totalEvents,
+      hostCount,
+      guestCount,
+      totalPosts,
+      wonderlandUsers,
+    ] = await Promise.all([
+      // 1. Total Events
+      EventInvite.countDocuments(),
+
+      // 3A. Total Hosts (unique users who created events)
+      EventInvite.distinct("userId").then((users) => users.length),
+
+      // 3B. Total Guests (unique users who joined events)
+      EventGuest.distinct("userId").then((users) => users.length),
+
+      // 4. Total Posts
+      eventPosts.countDocuments(),
+
+      // 5. Wonderland Users
+      User.countDocuments({ fromWonderland: true }),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      message: "Global dashboard stats fetched successfully",
+      data: {
+        totalEvents,
+        totalHosts: hostCount,
+        totalGuests: guestCount,
+        totalPosts,
+        totalWonderlandUsers: wonderlandUsers,
+      },
+    });
+  } catch (err) {
+    console.error("Dashboard Stats Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+});
+
+const getDateFilter = (dateFilter) => {
+  const now = new Date();
+
+  switch (dateFilter) {
+    case "last_1_week":
+      return new Date(now.setDate(now.getDate() - 7));
+    case "last_1_month":
+      return new Date(now.setMonth(now.getMonth() - 1));
+    case "last_1_year":
+      return new Date(now.setFullYear(now.getFullYear() - 1));
+    default:
+      return null;
+  }
+};
+
+router.post("/admin_all_details", async (req, res) => {
+  try {
+    const { type, page, per_page, search, dateFilter } = req.body;
+
+    const currentPage = parseInt(page) || 1;
+    const limit = parseInt(per_page) || 10;
+    const skip = (currentPage - 1) * limit;
+
+    const date = getDateFilter(dateFilter);
+
+    let data = [];
+    let total = 0;
+
+    // ============================
+    // 🔵 BY USERS
+    // ============================
+    if (type === "byUsers") {
+      const matchStage = {};
+
+      if (search) {
+        matchStage.name = { $regex: search, $options: "i" };
+      }
+
+      const pipeline = [
+        { $match: matchStage },
+
+        // Hosted Events
+        {
+          $lookup: {
+            from: "eventinvites",
+            localField: "_id",
+            foreignField: "userId",
+            as: "hostedEvents",
+          },
+        },
+
+        // Guest Events
+        {
+          $lookup: {
+            from: "eventguests",
+            localField: "_id",
+            foreignField: "userId",
+            as: "guestEvents",
+          },
+        },
+
+        // Posts
+        {
+          $lookup: {
+            from: "event-posts",
+            localField: "_id",
+            foreignField: "postById", // NOTE: string stored
+            as: "posts",
+          },
+        },
+
+        // 🔥 IMPORTANT FILTER (only relevant users)
+        {
+          $addFields: {
+            hostedEventsCount: {
+              $size: {
+                $filter: {
+                  input: "$hostedEvents",
+                  as: "event",
+                  cond: date
+                    ? { $gte: ["$$event.createdAt", date] }
+                    : {},
+                },
+              },
+            },
+            guestEventsCount: { $size: "$guestEvents" },
+            postsCount: { $size: "$posts" },
+          },
+        },
+
+        {
+          $match: {
+            $or: [
+              { hostedEventsCount: { $gt: 0 } },
+              { guestEventsCount: { $gt: 0 } },
+              { fromWonderland: true },
+            ],
+          },
+        },
+
+        {
+          $project: {
+            name: 1,
+            hostedEventsCount: 1,
+            guestEventsCount: 1,
+            postsCount: 1,
+            fromWonderland: 1,
+          },
+        },
+
+        { $sort: { createdAt: -1 } },
+        { $skip: skip },
+        { $limit: limit },
+      ];
+
+      data = await User.aggregate(pipeline);
+
+      // 🔥 total count bhi same condition pe
+      const countPipeline = [
+        { $match: matchStage },
+        {
+          $lookup: {
+            from: "eventinvites",
+            localField: "_id",
+            foreignField: "userId",
+            as: "hostedEvents",
+          },
+        },
+        {
+          $lookup: {
+            from: "eventguests",
+            localField: "_id",
+            foreignField: "userId",
+            as: "guestEvents",
+          },
+        },
+        {
+          $addFields: {
+            hostedEventsCount: { $size: "$hostedEvents" },
+            guestEventsCount: { $size: "$guestEvents" },
+          },
+        },
+        {
+          $match: {
+            $or: [
+              { hostedEventsCount: { $gt: 0 } },
+              { guestEventsCount: { $gt: 0 } },
+              { fromWonderland: true },
+            ],
+          },
+        },
+        { $count: "total" },
+      ];
+
+      const countResult = await User.aggregate(countPipeline);
+      total = countResult[0]?.total || 0;
+    }
+
+    // ============================
+    // 🟢 BY EVENTS
+    // ============================
+    else if (type === "byEvents") {
+      const matchStage = {};
+
+      if (date) {
+        matchStage.createdAt = { $gte: date };
+      }
+
+      if (search) {
+        matchStage.hostName = { $regex: search, $options: "i" };
+      }
+
+      const pipeline = [
+        { $match: matchStage },
+
+        // Guests
+        {
+          $lookup: {
+            from: "eventguests",
+            localField: "_id",
+            foreignField: "eventId",
+            as: "guests",
+          },
+        },
+
+        // Posts
+        {
+          $lookup: {
+            from: "event-posts",
+            localField: "_id",
+            foreignField: "eventId",
+            as: "posts",
+          },
+        },
+
+        {
+          $addFields: {
+            guestCount: { $size: "$guests" },
+            photoCount: { $size: "$posts" },
+            hostCount: 1,
+          },
+        },
+
+        {
+          $project: {
+            eventType: 1,
+            hostName: 1,
+            eventDate: 1,
+            guestCount: 1,
+            photoCount: 1,
+            hostCount: 1,
+            createdAt: 1,
+          },
+        },
+
+        { $sort: { createdAt: -1 } },
+        { $skip: skip },
+        { $limit: limit },
+      ];
+
+      data = await EventInvite.aggregate(pipeline);
+
+      total = await EventInvite.countDocuments(matchStage);
+    }
+
+    // ============================
+    // PAGINATION
+    // ============================
+    const lastPage = Math.ceil(total / limit) || 1;
+
+    const paginate = {
+      total_item: total,
+      showing: data.length,
+      first_page: 1,
+      previous_page: currentPage > 1 ? currentPage - 1 : 1,
+      current_page: currentPage,
+      next_page: currentPage < lastPage ? currentPage + 1 : lastPage,
+      last_page: lastPage,
+    };
+
+    return CustomResponse(res, 200, false, "Data fetched successfully", {
+      data,
+      paginate,
+    });
+
+  } catch (error) {
+    console.error(error);
+    return CustomResponse(res, 500, true, "Server error");
+  }
+});
 
 module.exports = router;

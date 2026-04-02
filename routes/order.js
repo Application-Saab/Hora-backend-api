@@ -18,6 +18,7 @@ const AddressModel = require('../models/address');
 const mongoose = require('mongoose');
 const path = require("path");
 const fs = require("fs"); 
+const { getIO } = require("../socket")
 
 router.post('/add_backup1', async(req, res) => {
     const otp = commonFunction.OTP();
@@ -517,6 +518,8 @@ router.post('/add', async(req, res) => {
                 data.helper=commonFunction.getCalcalutionOfChefAndHelper(noOfChefHelper).helper;
                 //data.supplierUserIds=userSupplierIdsArray;
                 const dataToSave = await data.save();
+                const io = getIO();
+                io.emit("order:new", dataToSave);
                 // const dataToSave = data;
                 return res.json({ error: false, status: 200, message: 'Order Created Successfully', data: dataToSave })
             }
@@ -791,6 +794,9 @@ router.post('/acceptOrder', async (req, res) => {
                 { $set: update },
                 { new: true } // To return the updated document
             );
+
+            const io = getIO();
+            io.to(result.toId.toString()).emit("order:updated",result)
 
             return res.json({
                 error: false,

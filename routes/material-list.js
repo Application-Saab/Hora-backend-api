@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const MaterialList = require("../models/material-list");
 const { CustomResponse } = require("../store/commonFunction");
+const getPaginatedData = require("../utils/functions");
 
 // Create material
 router.post("/createMaterial", async (req, res) => {
@@ -80,7 +81,6 @@ router.get("/getAllMaterialList", async (req, res) => {
   }
 });
 
-// Get all materials by filters with pagination
 router.post("/admin_material_list", async (req, res) => {
   try {
     const {
@@ -120,33 +120,19 @@ router.post("/admin_material_list", async (req, res) => {
       query.materialStatus = parseInt(materialStatus);
     }
 
-    const currentPage = page ? parseInt(page) : 1;
-    const limit = per_page ? parseInt(per_page) : 10;
-    const skip = (currentPage - 1) * limit;
-
-    const materials = await MaterialList.find(query)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    const total = await MaterialList.countDocuments(query);
-
-    const lastPage = Math.ceil(total / limit) || 1;
-
-    const paginate = {
-      total_item: total,
-      showing: materials.length,
-      first_page: 1,
-      previous_page: currentPage > 1 ? currentPage - 1 : 1,
-      current_page: currentPage,
-      next_page: currentPage < lastPage ? currentPage + 1 : lastPage,
-      last_page: lastPage,
-    };
+    // Common Pagination Function Use
+    const { items, paginate } = await getPaginatedData({
+      model: MaterialList,
+      query: query,
+      page: page,
+      per_page: per_page,
+    });
 
     return CustomResponse(res, 200, false, "Materials fetched successfully", {
-      materials: materials,
+      materials: items,
       paginate,
     });
+
   } catch (error) {
     console.error(error);
     return CustomResponse(res, 500, true, "Server error");

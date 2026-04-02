@@ -24,6 +24,7 @@ function initSocket(server) {
     }
 
     socket.userId = userId;
+      socket.join(userId.toString());
 
     // JOIN ALL CHAT ROOMS
     const rooms = await ChatRoom.find({ "members.userId": userId }).select(

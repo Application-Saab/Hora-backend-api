@@ -795,7 +795,7 @@ router.post('/acceptOrder', async (req, res) => {
             );
 
             const io = getIO();
-            io.emit("order:updated");
+            io.to(result.toId.toString()).emit("order:updated",result)
 
             return res.json({
                 error: false,

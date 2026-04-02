@@ -229,8 +229,8 @@ router.get("/getAllFoodPackageList", async (req, res) => {
     if (packageType) {
       query.packageType = packageType;
     }
-    if(foodType){
-        query.foodType = foodType;
+    if (foodType) {
+      query.foodType = foodType;
     }
 
     const packages = await FoodPackage.find(query)

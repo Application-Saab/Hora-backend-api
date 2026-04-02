@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const CelebrationBooster = require("../models/celebration-booster");
 const { CustomResponse } = require("../store/commonFunction");
-const getPaginatedData = require("../utils/functions"); // Import karein
+const getPaginatedData = require("../utils/functions");
 
 router.post("/createCelebrationBooster", async (req, res) => {
   try {

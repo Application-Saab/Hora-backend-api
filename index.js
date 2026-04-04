@@ -98,18 +98,20 @@ setInterval(async()=>{
   }
   // console.log("Checking orders start");
 },60000);
-// ?? Run every Sunday at midnight
-cron.schedule('0 0 * * 0', () => {
-  console.log('?? Running weekly decoration popularity update...');
-  commonFunction.updateDecorationPopularity()
+
+// ?? Run every Sunday at midnight 12:30
+cron.schedule('30 0 * * 0', () => {
+  console.log('?? Running weekly decoration popularity update at 12:30 AM IST...');
+  commonFunction.updateDecorationPopularity();
+}, {
+  scheduled: true,
+  timezone: "Asia/Kolkata"
 });
 
 // setTimeout(async()=>{
 //   console.log("Updating scores")
 //   await commonFunction.updateDecorationPopularity()
 // }, 1.5 * 60 * 1000);
-
-
 
 async function runSupplierPerformance() {
   try {

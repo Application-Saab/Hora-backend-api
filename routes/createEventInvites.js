@@ -1021,38 +1021,53 @@ router.put(
 
 router.get("/all-tracking", async (req, res) => {
   try {
-    const [
-      totalEvents,
-      hostCount,
-      guestCount,
-      totalPosts,
-      wonderlandUsers,
-    ] = await Promise.all([
-      // 1. Total Events
-      EventInvite.countDocuments(),
+    const [totalEvents, hostUsers, guestUsersRaw, totalPosts, wonderlandUsers] =
+      await Promise.all([
+        // Total Events
+        EventInvite.countDocuments(),
 
-      // 3A. Total Hosts (unique users who created events)
-      EventInvite.distinct("userId").then((users) => users.length),
+        // Unique Hosts
+        EventInvite.distinct("userId"),
 
-      // 3B. Total Guests (unique users who joined events)
-      EventGuest.distinct("userId").then((users) => users.length),
+        // Raw Guests (includes self-host guests)
+        EventGuest.distinct("userId"),
 
-      // 4. Total Posts
-      eventPosts.countDocuments(),
+        // Total Posts
+        eventPosts.countDocuments(),
 
-      // 5. Wonderland Users
-      User.countDocuments({ fromWonderland: true }),
+        // Wonderland Users
+        User.countDocuments({ fromWonderland: true }),
+      ]);
+
+    // Convert host list to Set for fast lookup
+    const hostSet = new Set(hostUsers.map(String));
+
+    // Filter guests (remove self-host cases)
+    const filteredGuestUsers = guestUsersRaw.filter(
+      (userId) => !hostSet.has(String(userId)),
+    );
+
+    // Unique Guests Count
+    const totalGuests = filteredGuestUsers.length;
+
+    // UNIQUE USERS (host + guest but without duplication)
+    const uniqueUsersSet = new Set([
+      ...hostUsers.map(String),
+      ...filteredGuestUsers.map(String),
     ]);
+
+    const totalUniqueEventUsers = uniqueUsersSet.size;
 
     return res.status(200).json({
       success: true,
       message: "Global dashboard stats fetched successfully",
       data: {
         totalEvents,
-        totalHosts: hostCount,
-        totalGuests: guestCount,
+        totalHosts: hostUsers.length,
+        totalGuests,
         totalPosts,
         totalWonderlandUsers: wonderlandUsers,
+        totalUniqueEventUsers,
       },
     });
   } catch (err) {
@@ -1063,7 +1078,6 @@ router.get("/all-tracking", async (req, res) => {
     });
   }
 });
-
 const getDateFilter = (dateFilter) => {
   const now = new Date();
 
@@ -1092,139 +1106,92 @@ router.post("/admin_all_details", async (req, res) => {
     let data = [];
     let total = 0;
 
-    // ============================
-    // 🔵 BY USERS
-    // ============================
+    // By Users handler
     if (type === "byUsers") {
-      const matchStage = {};
+      // Pre-aggregate counts
+      const [hostedMap, guestMap, postsMap] = await Promise.all([
+        EventInvite.aggregate([
+          ...(date ? [{ $match: { createdAt: { $gte: date } } }] : []),
+          {
+            $group: {
+              _id: "$userId",
+              count: { $sum: 1 },
+            },
+          },
+        ]),
+
+        EventGuest.aggregate([
+          {
+            $group: {
+              _id: "$userId",
+              count: { $sum: 1 },
+            },
+          },
+        ]),
+
+        eventPosts.aggregate([
+          {
+            $group: {
+              _id: "$postById",
+              count: { $sum: 1 },
+            },
+          },
+        ]),
+      ]);
+
+      // Convert to map for unique data
+      const hostedObj = Object.fromEntries(
+        hostedMap.map((i) => [i._id.toString(), i.count])
+      );
+
+      const guestObj = Object.fromEntries(
+        guestMap.map((i) => [i._id.toString(), i.count])
+      );
+
+      const postsObj = Object.fromEntries(
+        postsMap.map((i) => [i._id.toString(), i.count])
+      );
+
+      // Fetch users
+      let userQuery = {};
 
       if (search) {
-        matchStage.name = { $regex: search, $options: "i" };
+        userQuery.phone = { $regex: search, $options: "i" };
       }
 
-      const pipeline = [
-        { $match: matchStage },
+      const users = await User.find(userQuery)
+        .select("name phone fromWonderland createdAt")
+        .sort({ createdAt: -1 });
 
-        // Hosted Events
-        {
-          $lookup: {
-            from: "eventinvites",
-            localField: "_id",
-            foreignField: "userId",
-            as: "hostedEvents",
-          },
-        },
+      // Attach counts + filter
+      const enrichedUsers = users
+        .map((user) => {
+          const id = user._id.toString();
 
-        // Guest Events
-        {
-          $lookup: {
-            from: "eventguests",
-            localField: "_id",
-            foreignField: "userId",
-            as: "guestEvents",
-          },
-        },
+          return {
+            name: user.name,
+            phone: user.phone,
+            fromWonderland: user.fromWonderland,
+            hostedEventsCount: hostedObj[id] || 0,
+            guestEventsCount: guestObj[id] || 0,
+            postsCount: postsObj[id] || 0,
+            createdAt: user.createdAt,
+          };
+        })
+        .filter(
+          (u) =>
+            u.hostedEventsCount > 0 ||
+            u.guestEventsCount > 0 ||
+            u.fromWonderland
+        );
 
-        // Posts
-        {
-          $lookup: {
-            from: "event-posts",
-            localField: "_id",
-            foreignField: "postById", // NOTE: string stored
-            as: "posts",
-          },
-        },
+      // Pagination AFTER filter
+      total = enrichedUsers.length;
 
-        // 🔥 IMPORTANT FILTER (only relevant users)
-        {
-          $addFields: {
-            hostedEventsCount: {
-              $size: {
-                $filter: {
-                  input: "$hostedEvents",
-                  as: "event",
-                  cond: date
-                    ? { $gte: ["$$event.createdAt", date] }
-                    : {},
-                },
-              },
-            },
-            guestEventsCount: { $size: "$guestEvents" },
-            postsCount: { $size: "$posts" },
-          },
-        },
-
-        {
-          $match: {
-            $or: [
-              { hostedEventsCount: { $gt: 0 } },
-              { guestEventsCount: { $gt: 0 } },
-              { fromWonderland: true },
-            ],
-          },
-        },
-
-        {
-          $project: {
-            name: 1,
-            hostedEventsCount: 1,
-            guestEventsCount: 1,
-            postsCount: 1,
-            fromWonderland: 1,
-          },
-        },
-
-        { $sort: { createdAt: -1 } },
-        { $skip: skip },
-        { $limit: limit },
-      ];
-
-      data = await User.aggregate(pipeline);
-
-      // 🔥 total count bhi same condition pe
-      const countPipeline = [
-        { $match: matchStage },
-        {
-          $lookup: {
-            from: "eventinvites",
-            localField: "_id",
-            foreignField: "userId",
-            as: "hostedEvents",
-          },
-        },
-        {
-          $lookup: {
-            from: "eventguests",
-            localField: "_id",
-            foreignField: "userId",
-            as: "guestEvents",
-          },
-        },
-        {
-          $addFields: {
-            hostedEventsCount: { $size: "$hostedEvents" },
-            guestEventsCount: { $size: "$guestEvents" },
-          },
-        },
-        {
-          $match: {
-            $or: [
-              { hostedEventsCount: { $gt: 0 } },
-              { guestEventsCount: { $gt: 0 } },
-              { fromWonderland: true },
-            ],
-          },
-        },
-        { $count: "total" },
-      ];
-
-      const countResult = await User.aggregate(countPipeline);
-      total = countResult[0]?.total || 0;
+      data = enrichedUsers.slice(skip, skip + limit);
     }
 
-    // ============================
-    // 🟢 BY EVENTS
-    // ============================
+    // By Users
     else if (type === "byEvents") {
       const matchStage = {};
 
@@ -1239,38 +1206,74 @@ router.post("/admin_all_details", async (req, res) => {
       const pipeline = [
         { $match: matchStage },
 
-        // Guests
+        // Host User
+        {
+          $lookup: {
+            from: "users",
+            localField: "userId",
+            foreignField: "_id",
+            as: "hostUser",
+          },
+        },
+        { $unwind: { path: "$hostUser", preserveNullAndEmptyArrays: true } },
+
+        // Guests Count (excluding host)
         {
           $lookup: {
             from: "eventguests",
-            localField: "_id",
-            foreignField: "eventId",
-            as: "guests",
+            let: { eventId: "$_id", hostId: "$userId" },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      { $eq: ["$eventId", "$$eventId"] },
+                      { $ne: ["$userId", "$$hostId"] },
+                    ],
+                  },
+                },
+              },
+              { $count: "count" },
+            ],
+            as: "guestData",
           },
         },
 
-        // Posts
+        // Posts Count
         {
           $lookup: {
             from: "event-posts",
-            localField: "_id",
-            foreignField: "eventId",
-            as: "posts",
+            let: { eventId: "$_id" },
+            pipeline: [
+              {
+                $match: {
+                  $expr: { $eq: ["$eventId", "$$eventId"] },
+                },
+              },
+              { $count: "count" },
+            ],
+            as: "postData",
           },
         },
 
         {
           $addFields: {
-            guestCount: { $size: "$guests" },
-            photoCount: { $size: "$posts" },
+            guestCount: {
+              $ifNull: [{ $arrayElemAt: ["$guestData.count", 0] }, 0],
+            },
+            photoCount: {
+              $ifNull: [{ $arrayElemAt: ["$postData.count", 0] }, 0],
+            },
+            hostPhone: "$hostUser.phone",
             hostCount: 1,
           },
         },
 
         {
           $project: {
-            eventType: 1,
+            wonderland_id: 1,
             hostName: 1,
+            hostPhone: 1,
             eventDate: 1,
             guestCount: 1,
             photoCount: 1,
@@ -1285,13 +1288,10 @@ router.post("/admin_all_details", async (req, res) => {
       ];
 
       data = await EventInvite.aggregate(pipeline);
-
       total = await EventInvite.countDocuments(matchStage);
     }
 
-    // ============================
-    // PAGINATION
-    // ============================
+    // Pagination
     const lastPage = Math.ceil(total / limit) || 1;
 
     const paginate = {
@@ -1308,7 +1308,6 @@ router.post("/admin_all_details", async (req, res) => {
       data,
       paginate,
     });
-
   } catch (error) {
     console.error(error);
     return CustomResponse(res, 500, true, "Server error");

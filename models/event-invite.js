@@ -15,5 +15,5 @@ const eventInviteSchema = new mongoose.Schema({
     strict: false,
     timestamps: true
 });
-
+eventInviteSchema.index({ userId: 1, createdAt: -1 });
 module.exports = mongoose.model('eventInvites', eventInviteSchema);

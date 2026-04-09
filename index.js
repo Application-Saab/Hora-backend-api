@@ -196,6 +196,91 @@ cron.schedule('0 3 * * *', async () => {
   await runSupplierPerformance();
 });
 
+async function sendNotificationsInPriority() {
+  try {
+    const orders = await orderModel.find({
+      status: 1,
+      notificationStep: { $lt: 4 }
+    });
+
+    for (const order of orders) {
+
+      // STOP if already accepted
+      if (order.order_status == 1) {
+        console.log(`Order ${order._id} already accepted`);
+        continue;
+      }
+
+      // check 15 min gap
+      const now = new Date();
+
+
+      if (!order.lastNotifiedAt) {
+      order.lastNotifiedAt = new Date();
+     await order.save();
+     continue;
+      }
+
+      const diff = (now - new Date(order.lastNotifiedAt)) / (1000 * 60);
+
+      if (diff < 15) continue; // wait for 15 mins before sending next notification 
+      let badgeToSend = "";
+
+      if (order.notificationStep === 1) badgeToSend = "Good";
+      else if (order.notificationStep === 2) badgeToSend = "Average";
+      else if (order.notificationStep === 3) badgeToSend = "Low";
+
+      if (!badgeToSend) continue;
+
+      console.log(`Sending ${badgeToSend} notifications for Order ${order._id}`);
+
+      const suppliers = await UserModel.find({
+        role: "supplier",
+        device_token: { $nin: [null, ""] },
+        city: order.order_locality,
+        order_type: order.type,
+        performanceBadge: badgeToSend
+      });
+
+      for (const supplier of suppliers) {
+
+        const latestOrder = await orderModel.findById(order._id);
+
+        if (latestOrder.order_status == 1) {
+          console.log("Order accepted mid-way, stopping...");
+          break;
+        }
+
+        notificationFunction.sendNotifications(
+          supplier.device_token,
+          order.fromId,
+          'New Order',
+          `New Order!!! Order ID: #${order.order_id + 10800} 🥳🤩`,
+          '',
+          0
+        );
+      }
+
+      // update step if still not accepted
+      const updatedOrder = await orderModel.findById(order._id);
+
+      if (updatedOrder.order_status !== 1) {
+        updatedOrder.notificationStep += 1;
+        updatedOrder.lastNotifiedAt = new Date();
+        await updatedOrder.save();
+      }
+    }
+
+  } catch (error) {
+    console.error("Notification Scheduler Error:", error);
+  }
+}
+
+cron.schedule("* * * * *", async () => {
+    console.log("Running Notification Scheduler:", new Date());
+  await sendNotificationsInPriority();
+});
+
 database.on("error", (error) => {
   console.log(error);
 });

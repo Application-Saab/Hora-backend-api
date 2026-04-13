@@ -54,8 +54,13 @@ const userSchema = new mongoose.Schema(
         // personal field
         isPersonalStatus : { type: Number, default: 0},
         isProfessionStatus  : { type: Number, default: 0},
-        
+        performanceScore: { type: Number,default: 0},
+        performanceBadge: { type: String,enum: ["Elite", "Good", "Average", "Low"], default: "Low"},
+        lastRatingUpdate: {type: Date} ,
+        supplierOrderLimit:{type:Number, default:4},
+        fromWonderland: {type: Boolean, default: false}, 
     }, 
     { strict: false,timestamps: true }
 );
+userSchema.index({ phone: 1 });
 module.exports = mongoose.model('Users', userSchema)

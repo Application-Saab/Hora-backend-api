@@ -15,7 +15,7 @@ try {
 
 const notificationModel = require('../models/notifications');
 
-exports.sendNotifications = function(deviceToken, user_id, title, MsgBody, ID, Type) {
+exports.sendNotifications = function(deviceToken, user_id, title, MsgBody, ID, Type, url) {
   var message = {
     token: deviceToken,
     notification: {
@@ -29,7 +29,8 @@ exports.sendNotifications = function(deviceToken, user_id, title, MsgBody, ID, T
     },
     data: {
       id: ID ? String(ID) : '',
-      type: Type ? String(Type) : ''
+      type: Type ? String(Type) : '',
+      url: url ? String(url) : ''  
     }
   };
 

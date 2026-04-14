@@ -19,23 +19,31 @@ router.post("/track-daily-visit", async (req, res) => {
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
-    const result = await userVisit.updateOne(
-      {
-        visitorId,
-        visitDate: startOfToday,
-      },
-      {
-        $setOnInsert: {
+   const result = await userVisit.updateOne(
+  {
     visitorId,
     visitDate: startOfToday,
-    device,
-    os,
-    browser,
-    page,
+  },
+  {
+    $setOnInsert: {
+      visitorId,
+      visitDate: startOfToday,
+      device,
+      os,
+      browser
+    },
+
+    $addToSet: {
+      pages: page   // 👈 THIS creates array automatically
+    },
+
+    $inc: {
+      pageViews: 1
     }
-      },
-      { upsert: true }
-    );
+
+  },
+  { upsert: true }
+);
 
     // count UNIQUE users today
     const totalUniqueUsersToday = await userVisit.countDocuments({
@@ -98,23 +106,33 @@ router.get("/visits/unique/range", async (req, res) => {
     }
 
     const data = await userVisit.aggregate([
-      { $match: { visitDate: { $gte: start, $lte: end } } },
-      {
-        $group: {
-          _id: "$visitDate",
-          users: { $sum: 1 },
-        },
-      },
-      { $sort: { _id: 1 } },
-    ]);
+  { $match: { visitDate: { $gte: start, $lte: end } } },
 
-    res.json({
-      success: true,
-      data: data.map(d => ({
-        date: d._id.toISOString().split("T")[0],
-        users: d.users,
-      })),
-    });
+  {
+    $group: {
+      _id: "$visitDate",
+      users: { $sum: 1 },
+      browsers: { $push: "$browser" },
+      devices: { $push: "$device" },
+      pages: { $push: "$pages" },
+      os: { $push: "$os" }
+    }
+  },
+
+  { $sort: { _id: 1 } }
+]);
+
+   res.json({
+  success: true,
+  data: data.map(d => ({
+    date: d._id.toISOString().split("T")[0],
+    users: d.users,
+    browsers: d.browsers,
+    devices: d.devices,
+    pages: d.pages,
+    os: d.os
+  }))
+});
   } catch (error) {
     res.status(500).json({
       success: false,

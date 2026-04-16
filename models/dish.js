@@ -43,7 +43,11 @@ const dishSchema = new mongoose.Schema({
     noofpeopleServedByDish: {type: Number,default: 0 },
     vendorMaterialPrice: {type: Number,default: 0 },
     executionPrice: {type: Number,default: 0 },
-    horaAdvance: {type: Number,default: 0 }
+    horaAdvance: {type: Number,default: 0 },
+    packageIds: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "food-package"
+    }],
 }, {
     strict: false,
     timestamps: true

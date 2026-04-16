@@ -18,6 +18,7 @@ const AddressModel = require('../models/address');
 const mongoose = require('mongoose');
 const path = require("path");
 const fs = require("fs"); 
+const { getIO } = require("../socket")
 
 router.post('/add_backup1', async(req, res) => {
     const otp = commonFunction.OTP();
@@ -395,6 +396,7 @@ router.post('/add', async(req, res) => {
 	online_phone_no:req.body.online_phone_no,
 	order_taken_by:req.body.order_taken_by,
     eventName:req.body.eventName,
+    inclusionVariables :req.body.inclusionVariables,
     })
     if(req.body.items.length>0){
         let hasKey = req.body.items[0].hasOwnProperty('item_id');
@@ -439,6 +441,7 @@ router.post('/add', async(req, res) => {
         //}
 
                var userSupplierIdsArray = [];
+               let filteredSuppliers = [];
                // Find all suppliers with device_token not null/empty
                var userFinder = { role: 'supplier', device_token: { "$nin": [null, ""] } };
                console.log("Finding suppliers with finder:", userFinder);
@@ -457,7 +460,7 @@ router.post('/add', async(req, res) => {
                // order.type == user.order_type
                // order.status == 1
                if (orderStatus == 1) {
-                   let filteredSuppliers = userIds.filter(user => {
+                    filteredSuppliers = userIds.filter(user => {
                        // user.city and user.order_type must exist
                        return (
                            user.city &&
@@ -476,8 +479,8 @@ router.post('/add', async(req, res) => {
                            notificationFunction.sendNotifications(
                                element.device_token,
                                req.body.fromId,
-                               'New order',
-                               'You have a new order!!!',
+                               'New Order',
+                               `New Order!!! Order ID: #${nextOrderId + 10800} 🥳🤩`,
                                '',
                                0
                            );
@@ -516,6 +519,12 @@ router.post('/add', async(req, res) => {
                 data.helper=commonFunction.getCalcalutionOfChefAndHelper(noOfChefHelper).helper;
                 //data.supplierUserIds=userSupplierIdsArray;
                 const dataToSave = await data.save();
+                const io = getIO();
+                if (orderStatus == 1 && filteredSuppliers.length) {
+                filteredSuppliers.forEach((supplier) => {
+                 io.to(supplier._id.toString()).emit("order:new", dataToSave);
+                });
+}
                 // const dataToSave = data;
                 return res.json({ error: false, status: 200, message: 'Order Created Successfully', data: dataToSave })
             }
@@ -604,8 +613,8 @@ router.post('/update_order_status', async (req, res) => {
           notificationFunction.sendNotifications(
             supplier.device_token,
             order.fromId, // fromId from order
-            'New order',
-            'You have a new order!!!',
+            'New Order',
+            `New Order!!! Order ID: #${order.order_id + 10800} 🥳🤩`,
             '',
             0
           );
@@ -790,6 +799,9 @@ router.post('/acceptOrder', async (req, res) => {
                 { $set: update },
                 { new: true } // To return the updated document
             );
+
+            const io = getIO();
+            io.to(result.toId.toString()).emit("order:updated",result)
 
             return res.json({
                 error: false,
@@ -2504,6 +2516,170 @@ router.put("/updateImageTags", async (req, res) => {
       message: err.message,
     });
   }
+});
+
+function generateCoupon() {
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  let randomLetters = "";
+  let randomDigits = "";
+
+  for (let i = 0; i < 4; i++) {
+    randomLetters += letters.charAt(
+      Math.floor(Math.random() * letters.length)
+    );
+  }
+
+  for (let i = 0; i < 4; i++) {
+    randomDigits += Math.floor(Math.random() * 10);
+  }
+
+  return randomLetters + randomDigits;
+}
+
+
+async function sendRatingNotification(order, rating) {
+
+    if (order.ratingNotificationSent) {
+    console.log("Notification already sent, skipping...");
+    return;
+    }
+
+  let msg = "";
+  let title = "";
+
+  const rate = Array.isArray(rating) ? rating[0] : rating;
+
+  if (rate === "9-10") {
+    title = `${rate} Rating 🤩 🎉`;
+    msg = `Order #${Number(order.order_id) + 10800} rated ${rate} 🤩. Excellent work! Keep it up!`;
+  } 
+  else if (rate === "7-8" || rate === "6-8") {
+    title = `${rate} Rating 😞`;
+    msg = `Order #${Number(order.order_id) + 10800} rated ${rate} 😞. Good job! Aim for a perfect rating next time.`;
+  } 
+  else if (rate === "1-6" || rate === "0-6") {
+    title = `${rate} Rating 😡 ⚠️`;
+    msg = `Order #${Number(order.order_id) + 10800} rated ${rate} 😡. Please review the service quality and improve.`;
+  }
+
+  if (order.toId) {
+
+    const supplier = await userModel.findById(order.toId);
+
+    if (supplier) {
+
+      console.log(`Sending notification to supplier: ${supplier._id}`);
+
+      notificationFunction.sendNotifications(
+        supplier.device_token,
+        order.fromId,
+        title,
+        msg,
+        '',
+        0,
+        '/past-order'
+      );
+
+    }
+  }
+    await orderModel.updateOne(
+    { _id: order._id },
+    { $set: { ratingNotificationSent: true } }
+  );
+}
+
+
+router.put("/add-rating-reviews", async (req, res) => {
+  try {
+    const { rating, reviews, orderId } = req.body;
+
+    if (!orderId) {
+      return res.status(400).json({
+        error: true,
+        message: "orderId is required",
+      });
+    }
+
+    const order = await orderModel.findOne({ order_id: orderId });
+
+    if (!order) {
+      return res.status(404).json({
+        error: true,
+        message: "Order not found",
+      });
+    }
+
+    // Save rating & review
+    order.userReviewRatingArray = rating;
+    order.userReviews = reviews;
+
+    let couponCode = null;
+
+    if (
+      Array.isArray(rating) &&
+      rating.length === 1 &&
+      rating[0] === "1-6"
+    ) {
+      couponCode = generateCoupon();
+      order.couponCode = couponCode;
+    }
+
+    await order.save();
+
+    await sendRatingNotification(order, rating);
+
+    return res.status(200).json({
+      error: false,
+      message: "Review submitted successfully",
+      data: {
+        rating: rating,
+        couponCode: couponCode, // null if rating !===== "1-6"
+        reviews: reviews,
+      },
+    });
+
+  } catch (error) {
+    console.error("Rating Error:", error);
+    return res.status(500).json({
+      error: true,
+      message: "Internal server error",
+    });
+  }
+});
+
+router.post("/rating-notification", async (req, res) => {
+
+  try {
+
+    const { orderId, rating } = req.body;
+
+    const order = await orderModel.findOne({ order_id: orderId });
+
+    if (!order) {
+      return res.status(404).json({
+        error: true,
+        message: "Order not found"
+      });
+    }
+
+    await sendRatingNotification(order, rating);
+
+    return res.json({
+      error: false,
+      message: "Notification sent"
+    });
+
+  } catch (error) {
+
+    console.error(error);
+
+    return res.status(500).json({
+      error: true,
+      message: "Server error"
+    });
+
+  }
+
 });
 
 

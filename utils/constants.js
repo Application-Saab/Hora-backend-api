@@ -9,3 +9,9 @@ const EVENT_TYPE = {
     PARTY: "Party",
     OTHER: "Other",
 }
+const bulkFoodCuisineId ="65f1b256aaba27208a89865f"
+module.exports = {
+    RSVP_STATUS,
+    EVENT_TYPE,
+    bulkFoodCuisineId
+};

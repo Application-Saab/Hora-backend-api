@@ -98,16 +98,105 @@ setInterval(async()=>{
   }
   // console.log("Checking orders start");
 },60000);
-// ?? Run every Sunday at midnight
-cron.schedule('0 0 * * 0', () => {
-  console.log('?? Running weekly decoration popularity update...');
-  commonFunction.updateDecorationPopularity()
+
+// ?? Run every Sunday at midnight 12:30
+cron.schedule('30 0 * * 0', () => {
+  console.log('?? Running weekly decoration popularity update at 12:30 AM IST...');
+  commonFunction.updateDecorationPopularity();
+}, {
+  scheduled: true,
+  timezone: "Asia/Kolkata"
 });
 
-setTimeout(async()=>{
-  console.log("Updating scores")
-  await commonFunction.updateDecorationPopularity()
-}, 1 * 60 * 1000);
+// setTimeout(async()=>{
+//   console.log("Updating scores")
+//   await commonFunction.updateDecorationPopularity()
+// }, 1.5 * 60 * 1000);
+
+async function runSupplierPerformance() {
+  try {
+    console.log("Running Supplier Performance Job:", new Date());
+
+    const suppliers = await UserModel.find({ role: "supplier" });
+
+    for (const supplier of suppliers) {
+
+      //calculatttion
+      const orders = await orderModel.find({
+        toId: supplier._id,
+        order_status: { $in: [3, 6] }
+      })
+      .sort({ createdAt: -1 }) // newest order
+      .limit(20);
+
+      if (!orders.length) continue;
+
+     let excellent = 0;
+     let good = 0;
+     let poor = 0;
+
+    for (const order of orders) {
+
+        const rating = order.userReviewRatingArray;
+        const rate = Array.isArray(rating) ? rating[0] : rating;
+
+       if (!rate) continue;
+
+       if (rate === "9-10") excellent++;
+       else if (rate === "7-8") good++;
+       else if (rate === "1-6") poor++;
+       else if (rate === "6-8") good++;
+       else if (rate === "0-6") poor++;
+
+      }
+
+    const totalRatedOrders = excellent + good + poor;
+    if (totalRatedOrders === 0) {
+
+     await UserModel.updateOne(
+    { _id: supplier._id },
+    {
+      performanceScore: 0,
+      performanceBadge: "low",
+      lastRatingUpdate: new Date()
+    }
+  );
+
+  continue;
+}
+
+const vendorScore =
+((excellent * 10) + (good * 5) + (poor * -10)) / totalRatedOrders;
+
+      let badge = "low";
+
+      if (vendorScore >= 7) badge = "Elite";
+      else if (vendorScore >= 5) badge = "Good";
+      else if (vendorScore >= 3) badge = "Average";
+      else if (vendorScore < 3) badge = "Low"
+
+      await UserModel.updateOne(
+        { _id: supplier._id },
+        {
+          performanceScore: vendorScore,
+          performanceBadge: badge,
+          lastRatingUpdate: new Date()
+        }
+      );
+
+    }
+    console.log("Supplier performance updated successfully");
+
+  } catch (error) {
+    console.error("Performance job error:", error);
+  }
+}
+
+// Runs every day at 3:00 AM
+cron.schedule('0 3 * * *', async () => {
+  console.log('Running Supplier Performance Job:', new Date());
+  await runSupplierPerformance();
+});
 
 database.on("error", (error) => {
   console.log(error);
@@ -141,7 +230,9 @@ const PhotoRoutes = require("./routes/photo");
 const DriveImportRoute = require("./routes/drive-import");
 const weblinkRoutes = require("./routes/weblink");
 const analyticsRoutes = require("./routes/analytics");
-const addon = require("./routes/addon")
+const FoodPackageRoutes = require("./routes/food-package");
+const MaterialListRoutes = require("./routes/material-list");
+const CelebrationBoosterRoutes = require("./routes/celebration-booster");
 let passportAuth = require("./store/passportAuth").passportAuth;
 
 app.use("/api/admin", AdminRoutes);
@@ -168,7 +259,9 @@ app.use("/api/photo/drive", DriveImportRoute);
 app.use("/api/wonderland/badge", EventBadgeRoutes);
 app.use("/api/internal", weblinkRoutes);
 app.use("/api/analytics", analyticsRoutes);
-app.use("/api/addon", addon);
+app.use("/api/food-package", FoodPackageRoutes);
+app.use("/api/material-list", MaterialListRoutes);
+app.use("/api/celebration-booster", CelebrationBoosterRoutes);
 
 const notificationFunction = require("./store/notifications");
 const UserModel = require("./models/user");

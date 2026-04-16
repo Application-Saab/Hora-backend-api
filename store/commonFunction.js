@@ -1,6 +1,9 @@
+const PopularitySetting = require("../models/PopularitySetting");
 exports.capitalizeFirstLetter = function (string) {
   return string.charAt(0).toUpperCase() + string.slice(1);
 };
+exports.CustomResponse = (res, status, error, message, data = null) =>
+  res.status(status).json({ error, status, message, data });
 
 exports.OTP = function (user) {
   var secureCode = Math.floor(100000 + Math.random() * 900000);
@@ -88,48 +91,15 @@ exports.getOrderComplete = function (orderObject) {
 
   var date1 = new Date(formatted_order_date).getTime();
   var date2 = new Date(formatted_current_date).getTime();
-  // var addingHoursInOrderDateTime = date1+ 1*3600*1000; /* 1 hours in ms */
   var addingHoursInOrderDateTime =
     date1 + 24 * 3600 * 1000; /* 24 hours in ms */
-  // console.log("date1",date1)
-  // console.log("date2",date2)
-  // console.log("addingHoursInOrderDateTime",addingHoursInOrderDateTime)
   if (date2 > addingHoursInOrderDateTime) {
     flag = true;
   } else {
     flag = false;
   }
-  // console.log("flag>>>>Complete"+orderObject._id+'-'+orderObject.order_date,flag)
   return flag;
 };
-
-// exports.getOrderExpire = function (orderObject) {
-//     var flag = false;
-//     // let order_datetime = new Date(orderObject.createdAt);
-//     let order_datetime = new Date(orderObject.order_date);
-//     let current_datetime = new Date();
-//     let order_day = order_datetime.getDate(); var order_month = order_datetime.getMonth() + 1;
-
-//     if (order_day < 10) { order_day = '0' + order_day }
-//     if (order_month < 10) { order_month = '0' + order_month }
-
-//     // let formatted_order_date = order_datetime.getFullYear()+ "-" + order_month + "-" + order_day + "T" +orderObject.order_time.slice(0, 5) +":00";
-//     let formatted_order_date = order_datetime;
-//     let formatted_current_date = current_datetime;
-
-//     var date1 = new Date(formatted_order_date).getTime();
-//     var date2 = new Date(formatted_current_date).getTime();
-//     // var addingHoursInOrderDateTime = date1+ 1*3600*1000; /* 1 hours in ms */
-//     var addingHoursInOrderDateTime = date1 + 12 * 3600 * 1000; /* 15 hours in ms */
-
-//     if (date2 > addingHoursInOrderDateTime) {
-//         flag = true;
-//     } else {
-//         flag = false;
-//     }
-//     // console.log("flag>>>>Expire"+orderObject._id+'-'+orderObject.order_date,flag)
-//     return flag;
-// }
 
 exports.getOrderExpire = function (orderObject) {
   let flag = false;
@@ -222,10 +192,106 @@ exports.getDistanceFromLatLonInKm = function (lat1, lon1, lat2, lon2) {
 const Order = require("../models/order"); // adjust path as needed
 const Decoration = require("../models/decoration");
 const { default: mongoose } = require("mongoose");
+const fs = require("fs");
+
+let popularityJobRunningOld = false;
+
+exports.updateDecorationPopularityOld = async () => {
+  if (popularityJobRunningOld) {
+    console.warn("Popularity job already running, skipping...");
+    return;
+  }
+
+  popularityJobRunningOld = true;
+  console.time("PopularityJob");
+
+  try {
+    // Reset popularity scores safely
+    await Decoration.updateMany({}, { $set: { popularity_score: -100000 } });
+
+    // Fetch valid orders
+    const orders = await Order.find(
+      { order_status: { $in: [1, 2, 3, 5, 6] } },
+      { items: 1 },
+    ).lean();
+
+    const usageMap = {};
+
+    // SAFE ID extractor
+    const extractDecorationId = (item) => {
+      if (!item) return null;
+
+      if (mongoose.Types.ObjectId.isValid(item)) return String(item);
+      if (item.item_id && mongoose.Types.ObjectId.isValid(item.item_id))
+        return String(item.item_id);
+      if (item._id && mongoose.Types.ObjectId.isValid(item._id))
+        return String(item._id);
+
+      return null;
+    };
+
+    // Count usage
+    for (const order of orders) {
+      if (!Array.isArray(order.items)) continue;
+
+      for (const item of order.items) {
+        const id = extractDecorationId(item);
+        if (!id) continue;
+
+        usageMap[id] = (usageMap[id] || 0) + 1;
+      }
+    }
+
+    const decorationIds = Object.keys(usageMap);
+    const BATCH_SIZE = 25;
+    const now = Date.now();
+
+    // Batch + parallel update
+    for (let i = 0; i < decorationIds.length; i += BATCH_SIZE) {
+      const batch = decorationIds.slice(i, i + BATCH_SIZE);
+
+      await Promise.allSettled(
+        batch.map(async (id) => {
+          try {
+            if (!mongoose.Types.ObjectId.isValid(id)) return;
+
+            const decoration = await Decoration.findById(id)
+              .select("createdAt")
+              .lean();
+
+            if (!decoration?.createdAt) return;
+
+            const ageInDays = Math.floor(
+              (now - new Date(decoration.createdAt).getTime()) / 86400000,
+            );
+
+            const orderCount = usageMap[id];
+            const score = 500 + orderCount * 300 - ageInDays * 5;
+
+            await Decoration.updateOne(
+              { _id: id },
+              { $set: { popularity_score: Math.max(score, 0) } },
+            );
+          } catch (err) {
+            console.error(`Popularity update failed for ${id}`, err.message);
+          }
+        }),
+      );
+    }
+
+    console.log("Decoration popularity updated successfully");
+  } catch (err) {
+    console.error("Popularity job failed", err);
+  } finally {
+    popularityJobRunningOld = false;
+    console.timeEnd("PopularityJob");
+  }
+};
 
 let popularityJobRunning = false;
 
 // exports.updateDecorationPopularity = async () => {
+
 //   if (popularityJobRunning) {
 //     console.warn("Popularity job already running, skipping...");
 //     return;
@@ -235,251 +301,23 @@ let popularityJobRunning = false;
 //   console.time("PopularityJob");
 
 //   try {
-//     // Reset popularity scores safely
-//     await Decoration.updateMany({}, { $set: { popularity_score: -100000 } });
-
-//     // Fetch valid orders
-//     const orders = await Order.find(
-//       { order_status: { $in: [1, 2, 3, 5, 6] } },
-//       { items: 1 }
-//     ).lean();
-
-//     const usageMap = {};
-
-//     // SAFE ID extractor
-//     const extractDecorationId = (item) => {
-//       if (!item) return null;
-
-//       if (mongoose.Types.ObjectId.isValid(item)) return String(item);
-//       if (item.item_id && mongoose.Types.ObjectId.isValid(item.item_id))
-//         return String(item.item_id);
-//       if (item._id && mongoose.Types.ObjectId.isValid(item._id))
-//         return String(item._id);
-
-//       return null;
-//     };
-
-//     // Count usage
-//     for (const order of orders) {
-//       if (!Array.isArray(order.items)) continue;
-
-//       for (const item of order.items) {
-//         const id = extractDecorationId(item);
-//         if (!id) continue;
-
-//         usageMap[id] = (usageMap[id] || 0) + 1;
-//       }
-//     }
-
-//     const decorationIds = Object.keys(usageMap);
-//     const BATCH_SIZE = 25;
-//     const now = Date.now();
-
-//     // Batch + parallel update
-//     for (let i = 0; i < decorationIds.length; i += BATCH_SIZE) {
-//       const batch = decorationIds.slice(i, i + BATCH_SIZE);
-
-//       await Promise.allSettled(
-//         batch.map(async (id) => {
-//           try {
-//             if (!mongoose.Types.ObjectId.isValid(id)) return;
-
-//             const decoration = await Decoration.findById(id)
-//               .select("createdAt")
-//               .lean();
-
-//             if (!decoration?.createdAt) return;
-
-//             const ageInDays = Math.floor(
-//               (now - new Date(decoration.createdAt).getTime()) / 86400000
-//             );
-
-//             const orderCount = usageMap[id];
-//             const score = 500 + orderCount * 300 - ageInDays * 5;
-
-//             await Decoration.updateOne(
-//               { _id: id },
-//               { $set: { popularity_score: Math.max(score, 0) } }
-//             );
-//           } catch (err) {
-//             console.error(`Popularity update failed for ${id}`, err.message);
-//           }
-//         })
-//       );
-//     }
-
-//     console.log("Decoration popularity updated successfully");
-//   } catch (err) {
-//     console.error("Popularity job failed", err);
-//   } finally {
-//     popularityJobRunning = false;
-//     console.timeEnd("PopularityJob");
-//   }
-// };
-
-// exports.updateDecorationPopularity = async () => {
-//   if (popularityJobRunning) {
-//     console.warn("Popularity job already running, skipping...");
-//     return;
-//   }
-
-//   popularityJobRunning = true;
-//   console.time("PopularityJob");
-
-//   try {
-//     const now = Date.now();
-
-//     const decorations = await Decoration.find(
-//       {},
-//       { _id: 1, createdAt: 1 },
-//     ).lean();
-
-//     const orders = await Order.find(
-//       { order_status: { $in: [1, 2, 3, 5, 6] } },
-//       { items: 1 },
-//     ).lean();
-
-//     const usageMap = {};
-
-//     const extractDecorationId = (item) => {
-//       if (!item) return null;
-
-//       if (mongoose.Types.ObjectId.isValid(item)) return String(item);
-//       if (item.item_id && mongoose.Types.ObjectId.isValid(item.item_id))
-//         return String(item.item_id);
-//       if (item._id && mongoose.Types.ObjectId.isValid(item._id))
-//         return String(item._id);
-
-//       return null;
-//     };
-
-//     // Count orders
-//     for (const order of orders) {
-//       if (!Array.isArray(order.items)) continue;
-
-//       for (const item of order.items) {
-//         const id = extractDecorationId(item);
-//         if (!id) continue;
-
-//         usageMap[id] = (usageMap[id] || 0) + 1;
-//       }
-//     }
-
-//     const BATCH_SIZE = 50;
-//     const cutoffDate = new Date("2025-10-01");
-
-//     for (let i = 0; i < decorations.length; i += BATCH_SIZE) {
-//       const batch = decorations.slice(i, i + BATCH_SIZE);
-
-//       await Promise.allSettled(
-//         batch.map(async (decoration) => {
-//           try {
-//             const id = String(decoration._id);
-
-//             const createdAt = new Date(decoration.createdAt);
-
-//             const ageInDays = Math.floor(
-//               (now - createdAt.getTime()) / 86400000,
-//             );
-//             const orderCount = usageMap[id] || 0;
-
-//             let oldBaseScore = 500 + orderCount * 300 - ageInDays * 5;
-//             let baseScore = 7000;
-
-//             if (createdAt <= cutoffDate) {
-//               baseScore = oldBaseScore;
-//             }
-//             else if (createdAt > cutoffDate 
-//               // && oldBaseScore > 600
-//             ) {
-//               baseScore = 7000;
-//             }
-            
-//             const score = baseScore + orderCount * 100 - ageInDays * 15;
-//             if (id == "65aeb55c47d5cb78ba19d61c") {
-//               console.log(
-//                 "%c [ orderCount, ageInDays, baseScore, oldBaseScore, newScore ]-369",
-//                 "font-size:13px; background:pink; color:#bf2c9f;",
-//                 orderCount,
-//                 ageInDays,
-//                 baseScore,
-//                 oldBaseScore,
-//                 score
-//               );
-//             }
-//             if (id == "6915e6b42efefaef0f29cf41") {
-//               console.log(
-//                 "%c [ orderCount, ageInDays, baseScore, oldBaseScore, newScore ]-369",
-//                 "font-size:13px; background:pink; color:#bf2c9f;",
-//                 orderCount,
-//                 ageInDays,
-//                 baseScore,
-//                 oldBaseScore,
-//                 score
-//               );
-//             }
-//             if (id == "69148d542efefaef0f2846ea") {
-//               console.log(
-//                 "%c [ orderCount, ageInDays, baseScore, oldBaseScore, newScore ]-369",
-//                 "font-size:13px; background:pink; color:#bf2c9f;",
-//                 orderCount,
-//                 ageInDays,
-//                 baseScore,
-//                 oldBaseScore,
-//                 score
-//               );
-//             }
-//             if (id == "6603b642bb8025d3e2a6ecbb") {
-//               console.log(
-//                 "%c [ orderCount, ageInDays, baseScore, oldBaseScore, newScore ]-369",
-//                 "font-size:13px; background:pink; color:#bf2c9f;",
-//                 orderCount,
-//                 ageInDays,
-//                 baseScore,
-//                 oldBaseScore,
-//                 score
-//               );
-//             }
-            
-//             await Decoration.updateOne(
-//               { _id: id },
-//               { $set: { popularity_score: score } },
-//             );
-//           } catch (err) {
-//             console.error(
-//               `Popularity update failed for ${decoration._id}`,
-//               err.message,
-//             );
-//           }
-//         }),
-//       );
-//     }
-
-//     console.log("Decoration popularity updated successfully");
-//   } catch (err) {
-//     console.error("Popularity job failed", err);
-//   } finally {
-//     popularityJobRunning = false;
-//     console.timeEnd("PopularityJob");
-//   }
-// };
-
-
-
-
-// exports.updateDecorationPopularity = async () => {
-//   if (popularityJobRunning) {
-//     console.warn("Popularity job already running, skipping...");
-//     return;
-//   }
-
-//   popularityJobRunning = true;
-//   console.time("PopularityJob");
-
-//   try {
-
 //     const now = new Date();
-//     const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+//     // Get last run time
+//     let setting = await PopularitySetting.findOne({ key: "popularityLastRun" });
+
+//     let lastRun = setting?.value;
+
+//     // first run case (fallback)
+//     if (!lastRun) {
+//       lastRun = new Date("2026-03-15");
+//     } else {
+//       lastRun = new Date(lastRun);
+//     }
+
+//     const daysPassed = Math.floor(
+//       (now.getTime() - lastRun.getTime()) / 86400000
+//     );
 
 //     const decorations = await Decoration.find(
 //       {},
@@ -489,115 +327,291 @@ let popularityJobRunning = false;
 //     const orders = await Order.find(
 //       {
 //         order_status: { $in: [1, 2, 3, 5, 6] },
-//         createdAt: { $gte: oneWeekAgo }
+//         createdAt: { $gte: lastRun }
 //       },
-//       { items: 1 }
+//       { items: 1, createdAt: 1 }
 //     ).lean();
 
 //     const usageMap = {};
+//     const totalOrdersMap = {};
 
 //     const extractDecorationId = (item) => {
 //       if (!item) return null;
 
-//       if (mongoose.Types.ObjectId.isValid(item)) return String(item);
+//       if (mongoose.Types.ObjectId.isValid(item))
+//         return String(item);
 
 //       if (item.item_id && mongoose.Types.ObjectId.isValid(item.item_id))
 //         return String(item.item_id);
 
 //       if (item._id && mongoose.Types.ObjectId.isValid(item._id))
 //         return String(item._id);
-
 //       return null;
 //     };
 
-//     // Count last week orders
+//     // Count orders
 //     for (const order of orders) {
-
 //       if (!Array.isArray(order.items)) continue;
-
 //       for (const item of order.items) {
-
 //         const id = extractDecorationId(item);
 //         if (!id) continue;
-
 //         usageMap[id] = (usageMap[id] || 0) + 1;
 //       }
 //     }
 
-//     const BATCH_SIZE = 50;
+//     // Total orders for new designs only
+//     const allOrders = await Order.find(
+//       { order_status: { $in: [1, 2, 3, 5, 6] } },
+//       { items: 1 }
+//     ).lean();
 
+//     for (const order of allOrders) {
+//       if (!Array.isArray(order.items)) continue;
+//       for (const item of order.items) {
+//         const id = extractDecorationId(item);
+//         if (!id) continue;
+//         totalOrdersMap[id] = (totalOrdersMap[id] || 0) + 1;
+//       }
+//     }
+
+//     const BATCH_SIZE = 50;
 //     for (let i = 0; i < decorations.length; i += BATCH_SIZE) {
 
 //       const batch = decorations.slice(i, i + BATCH_SIZE);
 
 //       await Promise.allSettled(
-
 //         batch.map(async (decoration) => {
-
 //           try {
-
 //             const id = String(decoration._id);
-
 //             const createdAt = new Date(decoration.createdAt);
 
 //             const daysOfCreated = Math.floor(
 //               (now.getTime() - createdAt.getTime()) / 86400000
 //             );
 
-//             const lastWeekOrders = usageMap[id] || 0;
+//             const newOrders = usageMap[id] || 0;
+//             const totalOrders = totalOrdersMap[id] || 0;
 
 //             let score;
-
-//             // NEW DESIGN (no popularity score yet)
+//             // NEW DESIGN
 //             if (decoration.popularity_score == null) {
-
 //               score =
-//                 7000 +
-//                 100 * lastWeekOrders -
+//                 5000 +
+//                 300 * totalOrders -
 //                 15 * daysOfCreated;
-
 //             }
 
 //             // EXISTING DESIGN
 //             else {
-
 //               score =
 //                 decoration.popularity_score +
-//                 100 * lastWeekOrders -
-//                 15 * 7;
-
+//                 300 * newOrders -
+//                 15 * daysPassed;
 //             }
-
 //             await Decoration.updateOne(
 //               { _id: id },
 //               { $set: { popularity_score: score } }
 //             );
-
 //           } catch (err) {
-
 //             console.error(
 //               `Popularity update failed for ${decoration._id}`,
 //               err.message
 //             );
-
 //           }
-
 //         })
-
 //       );
-
 //     }
 
+//     // Update last run time
+//     await PopularitySetting.updateOne(
+//       { key: "popularityLastRun" },
+//       { $set: { value: now } },
+//       { upsert: true }
+//     );
 //     console.log("Decoration popularity updated successfully");
-
 //   } catch (err) {
-
 //     console.error("Popularity job failed", err);
-
 //   } finally {
-
 //     popularityJobRunning = false;
 //     console.timeEnd("PopularityJob");
-
 //   }
 // };
+
+exports.updateDecorationPopularity = async () => {
+  if (popularityJobRunning) {
+    console.warn("Popularity job already running, skipping...");
+    return;
+  }
+
+  popularityJobRunning = true;
+  console.time("PopularityJob");
+
+  try {
+    const now = new Date();
+
+    // ðŸ”¹ Get last run
+    let setting = await PopularitySetting.findOne({ key: "popularityLastRun" });
+
+    let lastRun = setting?.value
+      ? new Date(setting.value)
+      : new Date("2026-03-15");
+
+    const daysPassed = Math.floor(
+      (now.getTime() - lastRun.getTime()) / 86400000,
+    );
+
+    // ðŸ”¹ Start log
+    let log = "";
+    log += "==== POPULARITY JOB LOG ====\n\n";
+    log += `Last Run: ${lastRun}\n`;
+    log += `Current Run: ${now}\n`;
+    log += `Days Passed: ${daysPassed}\n\n`;
+
+    const decorations = await Decoration.find(
+      {},
+      { _id: 1, createdAt: 1, popularity_score: 1 },
+    ).lean();
+
+    const orders = await Order.find(
+      {
+        order_status: { $in: [1, 2, 3, 5, 6] },
+        createdAt: { $gte: lastRun },
+      },
+      { items: 1, createdAt: 1 },
+    ).lean();
+
+    const usageMap = {};
+    const totalOrdersMap = {};
+
+    const extractDecorationId = (item) => {
+      if (!item) return null;
+
+      if (mongoose.Types.ObjectId.isValid(item)) return String(item);
+      if (item.item_id && mongoose.Types.ObjectId.isValid(item.item_id))
+        return String(item.item_id);
+      if (item._id && mongoose.Types.ObjectId.isValid(item._id))
+        return String(item._id);
+
+      return null;
+    };
+
+    // ðŸ”¹ Count new orders
+    for (const order of orders) {
+      if (!Array.isArray(order.items)) continue;
+
+      for (const item of order.items) {
+        const id = extractDecorationId(item);
+        if (!id) continue;
+
+        usageMap[id] = (usageMap[id] || 0) + 1;
+      }
+    }
+
+    // ðŸ”¹ Total orders (for new designs)
+    const allOrders = await Order.find(
+      { order_status: { $in: [1, 2, 3, 5, 6] } },
+      { items: 1 },
+    ).lean();
+
+    for (const order of allOrders) {
+      if (!Array.isArray(order.items)) continue;
+
+      for (const item of order.items) {
+        const id = extractDecorationId(item);
+        if (!id) continue;
+
+        totalOrdersMap[id] = (totalOrdersMap[id] || 0) + 1;
+      }
+    }
+
+    const BATCH_SIZE = 50;
+
+    const nullScoreDesigns = [];
+    const noOrderDesigns = [];
+
+    for (let i = 0; i < decorations.length; i += BATCH_SIZE) {
+      const batch = decorations.slice(i, i + BATCH_SIZE);
+
+      await Promise.allSettled(
+        batch.map(async (decoration) => {
+          try {
+            const id = String(decoration._id);
+            const createdAt = new Date(decoration.createdAt);
+
+            const daysOfCreated = Math.floor(
+              (now.getTime() - createdAt.getTime()) / 86400000,
+            );
+
+            const newOrders = usageMap[id] || 0;
+            const totalOrders = totalOrdersMap[id] || 0;
+
+            const oldScore = decoration.popularity_score ?? null;
+
+            let score;
+            let increment = 0;
+            let decay = 0;
+
+            // ðŸ†• NEW DESIGN
+            if (oldScore == null) {
+              increment = 300 * totalOrders;
+              decay = 15 * daysOfCreated;
+
+              score = 5000 + increment - decay;
+
+              nullScoreDesigns.push(id);
+            }
+
+            // ðŸ” EXISTING DESIGN
+            else {
+              increment = 300 * newOrders;
+              decay = 15 * daysPassed;
+
+              score = oldScore + increment - decay;
+
+              if (newOrders === 0) {
+                noOrderDesigns.push(id);
+              }
+            }
+
+            // ðŸ”¹ Log line
+            log += `${id} | ${createdAt.toISOString()} | ${daysOfCreated} days | newOrders:${newOrders} | totalOrders:${totalOrders} | old:${oldScore} | +${increment} | -${decay} | final:${score}\n`;
+
+            await Decoration.updateOne(
+              { _id: id },
+              { $set: { popularity_score: score } },
+            );
+          } catch (err) {
+            log += `ERROR for ${decoration._id} -> ${err.message}\n`;
+          }
+        }),
+      );
+    }
+
+    // ðŸ”¹ Special Sections
+    log += "\n==== NEW DESIGNS (NULL SCORE) ====\n";
+    nullScoreDesigns.forEach((id) => (log += id + "\n"));
+
+    log += "\n==== NO ORDER DESIGNS ====\n";
+    noOrderDesigns.forEach((id) => (log += id + "\n"));
+
+    // ðŸ”¹ Save log file
+    const fileName = `popularity_log_${Date.now()}.txt`;
+    fs.writeFileSync(fileName, log);
+
+    console.log("ðŸ“ Log file created:", fileName);
+
+    // ðŸ”¹ Update last run
+    await PopularitySetting.updateOne(
+      { key: "popularityLastRun" },
+      { $set: { value: now } },
+      { upsert: true },
+    );
+
+    console.log("âœ… Decoration popularity updated successfully");
+  } catch (err) {
+    console.error("Popularity job failed", err);
+  } finally {
+    popularityJobRunning = false;
+    console.timeEnd("PopularityJob");
+  }
+};

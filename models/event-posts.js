@@ -2,27 +2,24 @@ const mongoose = require("mongoose");
 
 const eventPostsSchema = new mongoose.Schema(
   {
-    // Common fields
-    _id: {
-      type: String,
-      default: () => new mongoose.Types.ObjectId().toString(),
-    },
     eventId: {
-      type: String,
+      type: mongoose.Schema.Types.ObjectId,
       ref: "eventInvites",
       required: true,
-      trim: true,
     },
+
     postById: {
-      type: String,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Users",
       required: true,
-      trim: true,
     },
+
     postByName: {
       type: String,
       required: true,
       trim: true,
     },
+
     postUrl: {
       type: String,
       required: true,
@@ -43,15 +40,18 @@ const eventPostsSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+
     postType: {
       type: String,
       enum: ["selfUploaded", "thankYouNote", "postBadge", "luckyDraw"],
       required: true,
     },
+
     likeCounts: {
       type: String,
       default: "0",
     },
+
     commentCounts: {
       type: String,
       default: "0",
@@ -89,10 +89,7 @@ const eventPostsSchema = new mongoose.Schema(
       },
     },
   },
-  {
-    timestamps: true,
-    versionKey: false, // disables __v
-  }
+  { timestamps: true, versionKey: false },
 );
-
+eventPostsSchema.index({ postById: 1, eventId: 1 });
 module.exports = mongoose.model("event-posts", eventPostsSchema);

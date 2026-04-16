@@ -1,12 +1,21 @@
 const mongoose = require("mongoose");
 
 const userVisitSchema = new mongoose.Schema({
-  visitorId: String,
-  visitDate: Date, // start of day
+  visitorId: { type: String, required: true },
+
+  visitDate: { type: Date, required: true }, // start of day
+
   device: String,
   os: String,
   browser: String,
-  page: String, // 👈 add this
-});
+
+  pages: [String], // store visited pages
+
+  pageViews: {
+    type: Number,
+    default: 1
+  }
+
+}, { timestamps: true });
 
 module.exports = mongoose.model("userVisit", userVisitSchema);

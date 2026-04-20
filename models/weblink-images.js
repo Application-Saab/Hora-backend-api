@@ -13,13 +13,13 @@ const weblinkSchema = new mongoose.Schema(
       default: null,
     },
 
-  orderId: {
-   type: String, // changed from ObjectId
-   ref: "order",
-   required: true,
-   index: true,
+    orderId: {
+      type: String, // changed from ObjectId
+      ref: "order",
+      required: true,
+      index: true,
 
-   },
+    },
 
     orderById: {
       type: String,
@@ -77,6 +77,11 @@ const weblinkSchema = new mongoose.Schema(
       default: [],
       index: true,
     },
+    likedBy: {
+      type: [String], 
+      default: [],
+      index: true,
+    }
   },
   {
     timestamps: true,

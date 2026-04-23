@@ -441,6 +441,7 @@ router.post('/add', async(req, res) => {
         //}
 
                var userSupplierIdsArray = [];
+               let filteredSuppliers = [];
                // Find all suppliers with device_token not null/empty
                var userFinder = { role: 'supplier', device_token: { "$nin": [null, ""] } };
                console.log("Finding suppliers with finder:", userFinder);
@@ -459,7 +460,7 @@ router.post('/add', async(req, res) => {
                // order.type == user.order_type
                // order.status == 1
                if (orderStatus == 1) {
-                   let filteredSuppliers = userIds.filter(user => {
+                    filteredSuppliers = userIds.filter(user => {
                        // user.city and user.order_type must exist
                        return (
                            user.city &&
@@ -519,7 +520,11 @@ router.post('/add', async(req, res) => {
                 //data.supplierUserIds=userSupplierIdsArray;
                 const dataToSave = await data.save();
                 const io = getIO();
-                io.emit("order:new", dataToSave);
+                if (orderStatus == 1 && filteredSuppliers.length) {
+                filteredSuppliers.forEach((supplier) => {
+                 io.to(supplier._id.toString()).emit("order:new", dataToSave);
+                });
+}
                 // const dataToSave = data;
                 return res.json({ error: false, status: 200, message: 'Order Created Successfully', data: dataToSave })
             }

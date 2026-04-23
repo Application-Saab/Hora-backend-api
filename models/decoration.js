@@ -60,7 +60,7 @@ const decorationSchema = new mongoose.Schema(
     discount: Number,
     popularity_score: {
       type: Number,
-      default: 500,
+      default: null,
     },
     designType: { type: Object, default: {} },
   },

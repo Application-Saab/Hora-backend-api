@@ -9,8 +9,12 @@ const EventImages = require("../models/eventImages");
 const EventMessage = require("../models/eventMessage");
 const multer = require("multer");
 const fs = require("fs");
+const path = require("path");
 
-const { generateTemplateThumbnail } = require("../store/multerS3Config");
+const {
+  generateTemplateThumbnail,
+  generateThumbnail,
+} = require("../store/multerS3Config");
 const eventPosts = require("../models/event-posts");
 const postLikes = require("../models/post-likes");
 const postComment = require("../models/post-comment");
@@ -186,7 +190,7 @@ router.get("/event-invites/:id", async (req, res) => {
 
     const invite = await EventInvite.findById(id)
       .select(
-        "userId eventType hostName eventDate eventTime location googleMapLink externalTemplateImageUrl",
+        "userId eventType hostName eventDate eventTime location googleMapLink externalTemplateImageUrl subFolders",
       )
       .lean();
 
@@ -642,6 +646,11 @@ const uploadSingle = multer({
   limits: { fileSize: 100 * 1024 * 1024 },
 }).single("image");
 
+const uploadSingle2 = multer({
+  storage,
+  limits: { fileSize: 100 * 1024 * 1024 },
+});
+
 const uploadImageToS3 = async (
   filePath,
   fileName,
@@ -797,6 +806,43 @@ router.post("/event-posts/:eventId", async (req, res) => {
 //   }
 // });
 
+// router.get("/event-posts/:eventId", async (req, res) => {
+//   try {
+//     const { eventId } = req.params;
+
+//     if (!mongoose.Types.ObjectId.isValid(eventId)) {
+//       return sendResponse(res, 400, true, "Invalid event ID");
+//     }
+
+//     // Get page & limit from query
+//     const page = parseInt(req.query.page) || 1;
+//     const limit = parseInt(req.query.limit) || 25;
+
+//     const skip = (page - 1) * limit;
+
+//     // Get total count
+//     const totalPosts = await eventPosts.countDocuments({ eventId });
+
+//     // Fetch paginated posts
+//     const posts = await eventPosts
+//       .find({ eventId })
+//       .sort({ createdAt: -1 })
+//       .skip(skip)
+//       .limit(limit)
+//       .lean();
+
+//     return sendResponse(res, 200, false, "Posts fetched successfully", {
+//       posts,
+//       currentPage: page,
+//       totalPages: Math.ceil(totalPosts / limit),
+//       totalPosts,
+//     });
+
+//   } catch (err) {
+//     console.error("Get Posts Error:", err);
+//     return sendResponse(res, 500, true, "Server error");
+//   }
+// });
 
 router.get("/event-posts/:eventId", async (req, res) => {
   try {
@@ -806,33 +852,240 @@ router.get("/event-posts/:eventId", async (req, res) => {
       return sendResponse(res, 400, true, "Invalid event ID");
     }
 
-    // Get page & limit from query
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 25;
-
-    const skip = (page - 1) * limit;
-
-    // Get total count
-    const totalPosts = await eventPosts.countDocuments({ eventId });
-
-    // Fetch paginated posts
+    // Fetch all posts without pagination
     const posts = await eventPosts
       .find({ eventId })
       .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
       .lean();
 
     return sendResponse(res, 200, false, "Posts fetched successfully", {
       posts,
-      currentPage: page,
-      totalPages: Math.ceil(totalPosts / limit),
-      totalPosts,
+      totalPosts: posts.length,
     });
-
   } catch (err) {
     console.error("Get Posts Error:", err);
     return sendResponse(res, 500, true, "Server error");
+  }
+});
+
+router.post("/delete-post/:postId", async (req, res) => {
+  const { postId } = req.params;
+
+  try {
+    // Find the image in MongoDB
+    const image = await eventPosts.findById(postId);
+    if (!image) {
+      return res.status(404).json({ message: "Image not found" });
+    }
+
+    // Build list of S3 keys to delete
+    const keysToDelete = [];
+
+    if (image.postKey) keysToDelete.push({ Key: image.postKey });
+    if (image.postWebpKey) keysToDelete.push({ Key: image.postWebpKey });
+    // if (image.videoClipKey) keysToDelete.push({ Key: image.videoClipKey });
+
+    if (keysToDelete.length > 0) {
+      // await s3
+      //   .deleteObjects({
+      //     Bucket: process.env.S3_BUCKET_NAME,
+      //     Delete: { Objects: keysToDelete },
+      //   })
+      //   .promise();
+      keysToDelete.forEach(async (k) => {
+        try {
+          await deleteFromS3(k.Key);
+        } catch (err) {
+          console.error(`Failed to delete ${k.Key} from S3:`, err);
+        }
+      });
+    }
+
+    // Delete document from MongoDB
+    await eventPosts.findByIdAndDelete(postId);
+
+    res.json({ message: "Image deleted successfully" });
+  } catch (err) {
+    console.error("Delete failed:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// Create Event Subfolder
+router.post(
+  "/create-event-subfolder/:eventId",
+  uploadSingle2.single("file"),
+  async (req, res) => {
+    try {
+      const { eventId } = req.params;
+
+      const { folderName, type, userId, subFolderName } = req.body;
+
+      // ================= VALIDATION =================
+      if (!mongoose.Types.ObjectId.isValid(eventId)) {
+        return sendResponse(res, 400, true, "Invalid event ID");
+      }
+
+      if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+        return sendResponse(res, 400, true, "Invalid userId");
+      }
+
+      if (!folderName || !type) {
+        return sendResponse(res, 400, true, "folderName and type are required");
+      }
+
+      if (!["my_photos", "others"].includes(type)) {
+        return sendResponse(res, 400, true, "Invalid folder type");
+      }
+
+      // ================= FIND EVENT =================
+      const event = await EventInvite.findById(eventId);
+
+      if (!event) {
+        return sendResponse(res, 404, true, "Event not found");
+      }
+
+      // ================= CHECK DUPLICATE =================
+      if (type === "my_photos") {
+        const alreadyExists = event.subFolders.some(
+          (sf) =>
+            sf.userId.toString() === userId.toString() &&
+            sf.type === "my_photos",
+        );
+
+        if (alreadyExists) {
+          return sendResponse(
+            res,
+            409,
+            true,
+            "My Photos subfolder already exists",
+          );
+        }
+      }
+
+      let folderDp = {};
+
+      // ================= HANDLE IMAGE =================
+      if (req.file) {
+        const file = req.file;
+
+        const filePath = file.path;
+        const fileName = file.filename;
+
+        const thumbName = `thumb_${fileName}.webp`;
+        const thumbPath = path.join(path.dirname(filePath), thumbName);
+
+        try {
+          // generate thumbnail
+          await generateThumbnail(filePath, thumbPath);
+
+          // upload original
+          const originalUpload = await uploadImageToS3(
+            filePath,
+            fileName,
+            userId,
+            eventId,
+            file.mimetype,
+            folderName,
+          );
+
+          // upload thumbnail
+          const thumbUpload = await uploadImageToS3(
+            thumbPath,
+            thumbName,
+            userId,
+            eventId,
+            "image/webp",
+            folderName,
+          );
+
+          folderDp = {
+            fileUrl: originalUpload.Location,
+            thumbnailUrl: thumbUpload.Location,
+            s3Key: originalUpload.Key,
+            thumbnailKey: thumbUpload.Key,
+          };
+        } finally {
+          // cleanup
+          const paths = [filePath, thumbPath];
+
+          for (const p of paths) {
+            if (!p) continue;
+
+            try {
+              await fs.promises.unlink(p);
+            } catch {}
+          }
+        }
+      }
+
+      // ================= CREATE SUBFOLDER =================
+      const newSubFolder = {
+        folderName:
+          type === "my_photos"
+            ? "My Photos"
+            : subFolderName || "Untitled Folder",
+
+        type,
+
+        userId,
+
+        folderDp,
+
+        createdAt: new Date(),
+      };
+
+      event.subFolders.push(newSubFolder);
+
+      await event.save();
+
+      const savedSubFolder = event.subFolders[event.subFolders.length - 1];
+
+      return sendResponse(
+        res,
+        201,
+        false,
+        "Subfolder created successfully",
+        savedSubFolder,
+      );
+    } catch (error) {
+      console.error("Create Event Subfolder Error:", error);
+
+      return sendResponse(res, 500, true, "Server error");
+    }
+  },
+);
+
+router.put("/assign-to-subfolder", async (req, res) => {
+  try {
+    const { subFolderId, addImageIds = [], removeImageIds = [] } = req.body;
+
+    if (!subFolderId) {
+      return res.status(400).json({ message: "subFolderId is required" });
+    }
+
+    if (addImageIds.length > 0) {
+      await eventPosts.updateMany(
+        { _id: { $in: addImageIds } },
+        { $addToSet: { folderIds: subFolderId } },
+      );
+    }
+
+    if (removeImageIds.length > 0) {
+      await eventPosts.updateMany(
+        { _id: { $in: removeImageIds } },
+        { $pull: { folderIds: subFolderId } },
+      );
+    }
+
+    return res.status(200).json({
+      message: "Subfolder updated successfully",
+      added: addImageIds.length,
+      removed: removeImageIds.length,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error" });
   }
 });
 
@@ -926,6 +1179,59 @@ router.post("/:postId/comment", async (req, res) => {
   } catch (error) {
     console.error("Error adding comment:", error);
     res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.get("/liked-posts/:eventId/:userId", async (req, res) => {
+  try {
+    const { eventId, userId } = req.params;
+
+    // ================= VALIDATION =================
+    if (!mongoose.Types.ObjectId.isValid(eventId)) {
+      return res.status(400).json({ message: "Invalid eventId" });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: "Invalid userId" });
+    }
+
+    // ================= STEP 1: GET USER LIKES =================
+    const likedPosts = await postLikes
+      .find({
+        likedById: userId,
+      })
+      .select("postId")
+      .lean();
+
+    if (!likedPosts.length) {
+      return res.status(200).json({
+        message: "No liked posts found",
+        posts: [],
+      });
+    }
+
+    // ================= STEP 2: UNIQUE POST IDS =================
+    const postIds = [...new Set(likedPosts.map((l) => l.postId.toString()))];
+
+    // ================= STEP 3: FILTER BY EVENT =================
+    const posts = await eventPosts
+      .find({
+        _id: { $in: postIds },
+        eventId: eventId,
+      })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.status(200).json({
+      message: "Liked posts fetched successfully",
+      total: posts.length,
+      posts,
+    });
+  } catch (error) {
+    console.error("Get liked posts error:", error);
+    return res.status(500).json({
+      message: "Server error",
+    });
   }
 });
 
@@ -1180,15 +1486,15 @@ router.post("/admin_all_details", async (req, res) => {
 
       // Convert to map for unique data
       const hostedObj = Object.fromEntries(
-        hostedMap.map((i) => [i._id.toString(), i.count])
+        hostedMap.map((i) => [i._id.toString(), i.count]),
       );
 
       const guestObj = Object.fromEntries(
-        guestMap.map((i) => [i._id.toString(), i.count])
+        guestMap.map((i) => [i._id.toString(), i.count]),
       );
 
       const postsObj = Object.fromEntries(
-        postsMap.map((i) => [i._id.toString(), i.count])
+        postsMap.map((i) => [i._id.toString(), i.count]),
       );
 
       // Fetch users
@@ -1221,7 +1527,7 @@ router.post("/admin_all_details", async (req, res) => {
           (u) =>
             u.hostedEventsCount > 0 ||
             u.guestEventsCount > 0 ||
-            u.fromWonderland
+            u.fromWonderland,
         );
 
       // Pagination AFTER filter

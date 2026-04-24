@@ -48,9 +48,15 @@ const orderSchema = new mongoose.Schema({
     balance_amount: { type: String, default: '' },
     vendor_amount: { type: String, default: '' },
     order_taken_by: { type: String, default: '' },
-    eventName: { type: String, default: '' },
-    call_checklist: { type: Object, default: {} },
-    call_checklist_exists: { type: Boolean, default: false },
+    eventName : { type: String, default: '' },
+    call_checklist: {type: Object, default: {}},
+    call_checklist_exists: {type: Boolean, default: false},
+    imageUploadCounts: {
+    totalFromDrive: { type: Number, default: 0 },
+    totalWeblink: { type: Number, default: 0 },
+    driveProvidedAt: {type:Date, default: ''},
+    AllImagesUploadedAt:{type:Date, default: ''},
+    },
 }, {
     strict: false,
     timestamps: true

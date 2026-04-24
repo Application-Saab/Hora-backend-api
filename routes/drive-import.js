@@ -201,29 +201,87 @@ router.post("/import-drive-folder", async (req, res) => {
     const { folderUrl, vendorId } = req.body;
 
     if (!folderUrl || !vendorId) {
-      return res
-        .status(400)
-        .json({ message: "Folder URL and Vendor ID are required." });
+      return res.status(400).json({
+        message: "Folder URL, Vendor ID are required.",
+      });
     }
 
-    // Turant response bhej do
-    res.status(202).json({
-      message: "Upload started, processing in background.",
-      vendorId,
+    const folderId = getFolderIdFromUrl(folderUrl);
+    if (!folderId) throw new Error("Invalid Google Drive folder URL");
+
+    if (!apiKey) throw new Error("Google Drive API key not configured");
+
+    const order_id = vendorId-10800;
+
+    // Order check
+    const order = await OrderModel.findOne({ order_id });
+    if (!order) throw new Error("Order not found");
+
+    // Drive public check
+    const isPublic = await isFolderPubliclyAccessible(folderId, apiKey);
+    if (!isPublic)
+      throw new Error("Google Drive folder is not publicly accessible");
+
+    const customerId = order.fromId;
+    const phoneNo = order.phone_no;
+    const folderName = `${order_id}_${customerId}_${phoneNo}`;
+    const fulfillmentDate = order?.order_date;
+
+    let folder = await FolderModel.findOne({ folderName, customerId });
+
+    if (!folder) {
+      folder = new FolderModel({
+        folderName,
+        customerId,
+        orderId: vendorId,
+      });
+      await folder.save();
+    }
+
+    const mainFolderId = folder._id;
+
+    const webLink = `https://horaservices.com/weblink-gallery?folderName=${folderName}&customerId=${customerId}`;
+
+    // MongoDB update
+    await OrderModel.updateOne(
+      { order_id },
+      {
+        $set: {
+          orderDriveLink: folderUrl,
+          orderWebLink: webLink,
+       "imageUploadCounts.driveProvidedAt": new Date(),
+        },
+      }
+    );
+
+    res.status(201).json({
+      message: "Drive link added successfully",
+      webLink,
+      phoneNo:phoneNo,
+      fulfillmentDate:fulfillmentDate,
+      folderName:folderName,
+      customerId:customerId,
     });
 
-    // Background processing
-    process.nextTick(async () => {
-      try {
-        await handleDriveFolderUpload(folderUrl, vendorId);
-      } catch (err) {
-        console.error("Background upload failed:", err);
-      }
-    });
+    axios
+      .post(`${process.env.MEDIA_WORKER_URL}/process-drive`, {
+        folderUrl,
+        order_id,
+        customerId,
+        phoneNo,
+        mainFolderId,
+      })
+      .catch((err) => {
+        console.error(
+          "Media worker API call failed:",
+          err.response?.data || err.message
+        );
+      });
+
   } catch (error) {
     console.error("Drive Upload error:", error);
     if (!res.headersSent) {
-      res.status(500).json({ message: "Server error", error: error.message });
+      res.status(500).json({ message: error.message });
     }
   }
 });
@@ -243,7 +301,7 @@ router.post("/add-order-drive-link", async (req, res) => {
     if (!apiKey) throw new Error("Google Drive API key not configured");
 
     // Order check
-    const order = await OrderModel.findOne({ order_id });
+    const order = await OrderModel.findOne({ order_id }); 
     if (!order) throw new Error("Order not found");
 
     // Drive public check
@@ -266,7 +324,7 @@ let folder = await FolderModel.findOne({ folderName, customerId });
       await folder.save();
     }
 let mainFolderId = folder._id;
-     const webLink = `https://horaservices.com/photo-gallery?folderName=${folderName}&customerId=${customerId}`;
+     const webLink = `https://horaservices.com/weblink-gallery?folderName=${folderName}&customerId=${customerId}`;
 
     // MongoDB update (IMMEDIATE)
     await OrderModel.updateOne(
@@ -274,7 +332,8 @@ let mainFolderId = folder._id;
       {
         $set: {
           orderDriveLink: folderUrl,
-          // orderWebLink: webLink,
+          orderWebLink: webLink,
+          "imageUploadCounts.driveProvidedAt": new Date(),
         },
       }
     );
@@ -282,7 +341,7 @@ let mainFolderId = folder._id;
     // Frontend ko turant response
     res.status(201).json({
       message: "Drive link added successfully",
-      // webLink,
+      webLink,
     });
 
  // Trigger EC2 worker to process media in background

@@ -51,11 +51,13 @@ const orderSchema = new mongoose.Schema({
     eventName : { type: String, default: '' },
     call_checklist: {type: Object, default: {}},
     call_checklist_exists: {type: Boolean, default: false},
+    orderDriveLink: {type: String, default:""},
+    orderWebLink: {type:String, default:""},
     imageUploadCounts: {
     totalFromDrive: { type: Number, default: 0 },
     totalWeblink: { type: Number, default: 0 },
-    driveProvidedAt: {type:Date, default: ''},
-    AllImagesUploadedAt:{type:Date, default: ''},
+    driveProvidedAt: {type:Date},
+    AllImagesUploadedAt:{type:Date},
     },
 }, {
     strict: false,

@@ -210,7 +210,6 @@ router.get("/event-invites/:id", async (req, res) => {
     return sendResponse(res, 500, true, "Server error");
   }
 });
-
 // Fetch all event invites for a user as a guest or host
 // Updated
 router.get("/event-invites/all/:userId", async (req, res) => {

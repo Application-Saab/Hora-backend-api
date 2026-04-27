@@ -233,6 +233,7 @@ const analyticsRoutes = require("./routes/analytics");
 const FoodPackageRoutes = require("./routes/food-package");
 const MaterialListRoutes = require("./routes/material-list");
 const CelebrationBoosterRoutes = require("./routes/celebration-booster");
+const PartyHallVenueRoutes = require("./routes/createPartyVenue");
 let passportAuth = require("./store/passportAuth").passportAuth;
 
 app.use("/api/admin", AdminRoutes);
@@ -262,6 +263,7 @@ app.use("/api/analytics", analyticsRoutes);
 app.use("/api/food-package", FoodPackageRoutes);
 app.use("/api/material-list", MaterialListRoutes);
 app.use("/api/celebration-booster", CelebrationBoosterRoutes);
+app.use("/api/party-venue" , PartyHallVenueRoutes);
 
 const notificationFunction = require("./store/notifications");
 const UserModel = require("./models/user");

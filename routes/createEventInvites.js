@@ -669,181 +669,6 @@ const uploadImageToS3 = async (
   return data;
 };
 
-router.post("/get-presigned-url", async (req, res) => {
-  try {
-    const { fileName, fileType, folder, userId, eventId } = req.body;
-    if (!fileName || !fileType)
-      return res.status(400).json({ message: "Missing file data" });
-
-    const key = `${folder}/${userId}/${eventId}/${Date.now()}-${fileName}`;
-
-    const params = {
-      Bucket: S3_BUCKET,
-      Key: key,
-      ContentType: fileType,
-      Expires: 300,
-    };
-
-    const uploadURL = await s3.getSignedUrlPromise("putObject", params);
-    res.json({ uploadURL, key });
-  } catch (err) {
-    console.error("Presign error:", err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-// Create A Post Route for already-uploaded S3 media
-router.post("/event-posts/:eventId", async (req, res) => {
-  try {
-    const { eventId } = req.params;
-    const {
-      postById,
-      postByName,
-      postType,
-      badgeId,
-      taggedUserIds,
-      postUrl,
-      postKey,
-      postWebpUrl,
-      postWebpKey,
-    } = req.body;
-
-    // Basic validations
-    if (!mongoose.Types.ObjectId.isValid(eventId))
-      return sendResponse(res, 400, true, "Invalid event ID");
-    if (!postById || !mongoose.Types.ObjectId.isValid(postById))
-      return sendResponse(res, 400, true, "Invalid postById");
-    if (!postByName)
-      return sendResponse(res, 400, true, "postByName is required");
-    if (!postUrl || !postKey)
-      return sendResponse(res, 400, true, "postUrl and postKey are required");
-    if (
-      !["selfUploaded", "thankYouNote", "postBadge", "luckyDraw"].includes(
-        postType,
-      )
-    )
-      return sendResponse(res, 400, true, "Invalid postType");
-
-    // LuckyDraw ticketNumber handling
-    let ticketNumber = null;
-    if (postType === "luckyDraw") {
-      const counter = await TicketCounter.findOneAndUpdate(
-        { _id: "luckyDrawCounter" },
-        { $inc: { sequenceValue: 1 } },
-        { new: true, upsert: true },
-      ).lean();
-      ticketNumber = counter.sequenceValue.toString();
-    }
-
-    // Prepare new Post object
-    const newPost = new eventPosts({
-      eventId,
-      postById,
-      postByName,
-      postType,
-      postUrl,
-      postKey,
-      postWebpUrl,
-      postWebpKey,
-      ...(postType === "luckyDraw" && { ticketNumber }),
-      ...(postType === "postBadge" && {
-        badgeId,
-        taggedUserIds: Array.isArray(taggedUserIds)
-          ? taggedUserIds
-          : taggedUserIds
-            ? [taggedUserIds]
-            : [],
-      }),
-    });
-
-    await newPost.save();
-
-    // Response object
-    const responseData = {
-      _id: newPost._id,
-      eventId: newPost.eventId,
-      postById: newPost.postById,
-      postByName: newPost.postByName,
-      postUrl: newPost.postUrl,
-      postWebpUrl: newPost.postWebpUrl,
-      postType: newPost.postType,
-      ...(ticketNumber && { ticketNumber }),
-      ...(badgeId && { badgeId }),
-      createdAt: newPost.createdAt,
-    };
-
-    return sendResponse(
-      res,
-      200,
-      false,
-      "Post uploaded successfully",
-      responseData,
-    );
-  } catch (err) {
-    console.error("Upload Post Error:", err);
-    return sendResponse(res, 500, true, "Server error");
-  }
-});
-
-// Get all posts for an event
-// router.get("/event-posts/:eventId", async (req, res) => {
-//   try {
-//     const { eventId } = req.params;
-
-//     if (!mongoose.Types.ObjectId.isValid(eventId)) {
-//       return sendResponse(res, 400, true, "Invalid event ID");
-//     }
-
-//     const posts = await eventPosts
-//       .find({ eventId })
-//       .sort({ createdAt: -1 })
-//       .lean();
-
-//     return sendResponse(res, 200, false, "Posts fetched successfully", posts);
-//   } catch (err) {
-//     console.error("Get Posts Error:", err);
-//     return sendResponse(res, 500, true, "Server error");
-//   }
-// });
-
-// router.get("/event-posts/:eventId", async (req, res) => {
-//   try {
-//     const { eventId } = req.params;
-
-//     if (!mongoose.Types.ObjectId.isValid(eventId)) {
-//       return sendResponse(res, 400, true, "Invalid event ID");
-//     }
-
-//     // Get page & limit from query
-//     const page = parseInt(req.query.page) || 1;
-//     const limit = parseInt(req.query.limit) || 25;
-
-//     const skip = (page - 1) * limit;
-
-//     // Get total count
-//     const totalPosts = await eventPosts.countDocuments({ eventId });
-
-//     // Fetch paginated posts
-//     const posts = await eventPosts
-//       .find({ eventId })
-//       .sort({ createdAt: -1 })
-//       .skip(skip)
-//       .limit(limit)
-//       .lean();
-
-//     return sendResponse(res, 200, false, "Posts fetched successfully", {
-//       posts,
-//       currentPage: page,
-//       totalPages: Math.ceil(totalPosts / limit),
-//       totalPosts,
-//     });
-
-//   } catch (err) {
-//     console.error("Get Posts Error:", err);
-//     return sendResponse(res, 500, true, "Server error");
-//   }
-// });
-
 router.get("/event-posts/:eventId", async (req, res) => {
   try {
     const { eventId } = req.params;
@@ -852,7 +677,6 @@ router.get("/event-posts/:eventId", async (req, res) => {
       return sendResponse(res, 400, true, "Invalid event ID");
     }
 
-    // Fetch all posts without pagination
     const posts = await eventPosts
       .find({ eventId })
       .sort({ createdAt: -1 })
@@ -883,15 +707,8 @@ router.post("/delete-post/:postId", async (req, res) => {
 
     if (image.postKey) keysToDelete.push({ Key: image.postKey });
     if (image.postWebpKey) keysToDelete.push({ Key: image.postWebpKey });
-    // if (image.videoClipKey) keysToDelete.push({ Key: image.videoClipKey });
 
     if (keysToDelete.length > 0) {
-      // await s3
-      //   .deleteObjects({
-      //     Bucket: process.env.S3_BUCKET_NAME,
-      //     Delete: { Objects: keysToDelete },
-      //   })
-      //   .promise();
       keysToDelete.forEach(async (k) => {
         try {
           await deleteFromS3(k.Key);

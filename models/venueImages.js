@@ -4,11 +4,11 @@ const mongoose = require("mongoose");
 
 const venueImageItemSchema = new mongoose.Schema({
   name: { type: String, default: "" },
-  category: {
-    type: String,
-    enum: ["hall", "pool", "garden", "resort", "other"],
-    default: "other",
-  },
+  folderId: {
+  type: mongoose.Schema.Types.ObjectId,
+  default: null, // ✅ IMPORTANT
+  index: true,
+},
   imageUrl: { type: String, required: true },
   imageKey: { type: String, required: true },
   thumbnailUrl: { type: String, default: "" },

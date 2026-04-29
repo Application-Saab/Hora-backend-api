@@ -59,6 +59,7 @@ const userSchema = new mongoose.Schema(
         lastRatingUpdate: {type: Date} ,
         supplierOrderLimit:{type:Number, default:4},
         fromWonderland: {type: Boolean, default: false}, 
+        fromCapsule: {type: Boolean, default: false}, 
     }, 
     { strict: false,timestamps: true }
 );

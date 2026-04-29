@@ -4,7 +4,7 @@ const WebLink = require("../models/weblink-images");
 const Order = require("../models/order");
 const Folder = require("../models/folder");
 const Users = require("../models/user");
-const capsuleDailyClicks = require("../models/capsuleDailyClicks") 
+const capsuleDailyClicks = require("../models/capsuleDailyClicks")
 
 router.put("/assign-to-subfolder", async (req, res) => {
   try {
@@ -86,125 +86,6 @@ router.put("/toggle-like", async (req, res) => {
   }
 });
 
-// router.get("/capsule-tracking", async (req, res) => {
-//   try {
-//     const page = parseInt(req.query.page) || 1;
-//     const limit = parseInt(req.query.limit) || 10;
-//     const skip = (page - 1) * limit;
-
-//     const query = {
-//       type: 8,
-//       orderWebLink: {
-//         $exists: true,
-//         $ne: "",
-//         $nin: [null, " "],
-//       }
-//     };
-
-//     // Fetch orders
-//     const orders = await Order.find(query)
-//       .select("order_id orderWebLink fromId")
-//       .sort({ createdAt: -1 })
-//       .skip(skip)
-//       .limit(limit)
-//       .lean();
-
-//     const totalOrders = await Order.countDocuments(query);
-
-//     // Enrich orders with counts
-//     const ordersWithCount = await Promise.all(
-//       orders.map(async (order) => {
-
-//         const folder = await Folder.findOne({ orderId: order.order_id })
-//           .select("_id subFolders")
-//           .lean();
-
-//         let imageCount = 0;
-//         let videoCount = 0;
-//         let totalLikes = 0;
-//         let totalDownloads = 0;
-//         let totalShares = 0;
-//         let faceRecognitionCount = 0;
-//         let otherSubFoldersCount = 0;
-
-//         if (folder) {
-
-//           // Subfolder counts
-//           if (folder.subFolders?.length) {
-//             faceRecognitionCount = folder.subFolders.filter(
-//               (sub) => sub.type === "my_photos"
-//             ).length;
-
-//             otherSubFoldersCount = folder.subFolders.filter(
-//               (sub) => sub.type !== "my_photos"
-//             ).length;
-//           }
-
-//           // Media data fetch
-//           const [imgs, vids, mediaData] = await Promise.all([
-//             WebLink.countDocuments({
-//               mainFolderId: folder._id,
-//               type: "image"
-//             }),
-//             WebLink.countDocuments({
-//               mainFolderId: folder._id,
-//               type: "video"
-//             }),
-//             WebLink.find({ mainFolderId: folder._id })
-//               .select("likedBy downloadCount shareCount")
-//               .lean()
-//           ]);
-
-//           imageCount = imgs;
-//           videoCount = vids;
-
-//           // Single loop (optimized)
-//           mediaData.forEach((item) => {
-//             totalLikes += item.likedBy?.length || 0;
-//             totalDownloads += item.downloadCount || 0;
-//             totalShares += item.shareCount || 0;
-//           });
-//         }
-
-//         return {
-//           ...order,
-//           mainFolderId: folder?._id || null,
-//           counts: {
-//             imageCount,
-//             videoCount,
-//             totalMedia: imageCount + videoCount,
-//             totalLikes,
-//             totalDownloads,
-//             totalShares,
-//             faceRecognitionCount,
-//             otherSubFoldersCount
-//           }
-//         };
-//       })
-//     );
-
-//     // Response
-//     return res.status(200).json({
-//       success: true,
-//       message: "Data fetched successfully",
-//       pagination: {
-//         totalItems: totalOrders,
-//         totalPages: Math.ceil(totalOrders / limit),
-//         currentPage: page,
-//         pageSize: ordersWithCount.length
-//       },
-//       data: ordersWithCount
-//     });
-
-//   } catch (error) {
-//     console.error("Error:", error);
-//     res.status(500).json({
-//       success: false,
-//       message: "Server error"
-//     });
-//   }
-// });
-
 router.get("/capsule-tracking", async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -251,9 +132,21 @@ router.get("/capsule-tracking", async (req, res) => {
 
           totalViews = folder.viewedBy?.length || 0;
 
+          const { startDate, endDate } = req.query;
+
+          const today = new Date().toISOString().split("T")[0];
+          const start = startDate || today;
+          const end = endDate || today;
+
           const clickAgg = await capsuleDailyClicks.aggregate([
             {
-              $match: { mainFolderId: folder._id }
+              $match: {
+                mainFolderId: folder._id,
+                date: {
+                  $gte: start,
+                  $lte: end
+                }
+              }
             },
             {
               $group: {
@@ -344,7 +237,7 @@ router.get("/capsule-tracking", async (req, res) => {
 router.post("/track-activity/:mediaId", async (req, res) => {
   try {
     const { mediaId } = req.params;
-    const { action } = req.body; 
+    const { action } = req.body;
 
     let updateQuery = {};
     if (action === "download") {
@@ -356,7 +249,7 @@ router.post("/track-activity/:mediaId", async (req, res) => {
     }
 
     await WebLink.findByIdAndUpdate(mediaId, updateQuery);
-    
+
     return res.status(200).json({ success: true });
   } catch (error) {
     console.error("Tracking Error:", error);
@@ -411,32 +304,32 @@ router.post("/track-gallery-view", async (req, res) => {
 });
 
 router.post('/track-click', async (req, res) => {
-    const { mainFolderId } = req.body; 
+  const { mainFolderId } = req.body;
 
-    if (!mainFolderId) return res.status(400).send("mainFolderId is required");
+  if (!mainFolderId) return res.status(400).send("mainFolderId is required");
 
-    const today = new Date().toISOString().split('T')[0]; 
+  const today = new Date().toISOString().split('T')[0];
 
-    try {
-        const stats = await capsuleDailyClicks.findOneAndUpdate(
-            { mainFolderId: mainFolderId, date: today }, 
-            { $inc: { clickCount: 1 } },
-            { 
-              upsert: true,
-              new: true,       
-              setDefaultsOnInsert: true 
-            }
-        );
+  try {
+    const stats = await capsuleDailyClicks.findOneAndUpdate(
+      { mainFolderId: mainFolderId, date: today },
+      { $inc: { clickCount: 1 } },
+      {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true
+      }
+    );
 
-        res.status(200).json({ 
-            success: true, 
-            currentDailyClicks: stats.clickCount,
-            date: stats.date 
-        });
-    } catch (error) {
-        console.error("Tracking Error:", error);
-        res.status(500).send("Server Error");
-    }
+    res.status(200).json({
+      success: true,
+      currentDailyClicks: stats.clickCount,
+      date: stats.date
+    });
+  } catch (error) {
+    console.error("Tracking Error:", error);
+    res.status(500).send("Server Error");
+  }
 });
 
 

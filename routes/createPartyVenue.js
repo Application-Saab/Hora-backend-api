@@ -1,18 +1,28 @@
 const express = require("express");
 const router = express.Router();
 const mongoose = require("mongoose");
+const fs = require("fs");
+const path = require("path");
 const multer = require("multer");
 const Venues = require("../models/party-venue");
 const User = require("../models/user"); // ✅ added
 const VenueVisitors = require("../models/venue-visitors"); // ✅ added
 const { s3, S3_BUCKET } = require("../utils/awsConfigs");
 const VenueImages = require("../models/venueImages");
+const {
+  generateThumbnail,
+} = require("../store/multerS3Config");
 
 const sendResponse = (res, status, error, message, data = null) =>
-  res.status(status).json({ error, status, message, data });
+res.status(status).json({ error, status, message, data });
 
 
-//  created veune for party hall
+
+// =============================================
+// CREATE VENUE
+// Creates a new party venue for a user
+// Validates userId and ensures user exists
+// =============================================
 router.post("/create-party-venue", async (req, res) => {
   try {
     const {
@@ -65,7 +75,12 @@ router.post("/create-party-venue", async (req, res) => {
   }
 });
 
-// fetch venue details by id
+
+// =============================================
+// GET VENUE DETAILS
+// Fetches a single venue by ID
+// Returns basic venue info
+// =============================================
 router.get("/venue-details/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -112,7 +127,12 @@ router.get("/venue-details/:id", async (req, res) => {
   }
 });
 
-// update venue details by id
+
+// =============================================
+// UPDATE VENUE DETAILS
+// Updates venue fields (partial update allowed)
+// Only updates fields provided in request body
+// =============================================
 router.put("/venue-details/:id", async (req, res) => {
   const { id } = req.params;
 
@@ -172,7 +192,12 @@ router.put("/venue-details/:id", async (req, res) => {
   }
 });
 
-// Venue visited by user(Registering a visit to the venue)
+
+// =============================================
+// REGISTER VENUE VISITOR
+// Logs that a user visited a venue
+// Prevents duplicate entries (same user + venue)
+// =============================================
 router.post("/venue-visitor", async (req, res) => {
   try {
     const { userId, venueId } = req.body;
@@ -229,7 +254,12 @@ router.post("/venue-visitor", async (req, res) => {
   }
 });  
 
-// get all visitors of a venue
+
+// =============================================
+// GET ALL VISITORS OF A VENUE
+// Returns list of users who visited a venue
+// Includes user details via aggregation
+// =============================================
 router.get("/venue-visitors/all/:venueId", async (req, res) => {
   try {
     const { venueId } = req.params;
@@ -287,120 +317,149 @@ router.get("/venue-visitors/all/:venueId", async (req, res) => {
 });
 
 
-// Generate presigned URL for uploading
-router.post("/get-presigned-url", async (req, res) => {
-  try {
-    const {
-      fileName,
-      fileType,
-      userId,
-      venueId,
-      folderId = null, // ✅ NEW
-    } = req.body;
-
-    if (!fileName || !fileType || !userId || !venueId) {
-      return res.status(400).json({ message: "Missing required fields" });
-    }
-
-    // ✅ Build correct S3 path
-    let key;
-
-    if (folderId) {
-      key = `venue-images/${userId}/${venueId}/${folderId}/${Date.now()}-${fileName}`;
-    } else {
-      key = `venue-images/${userId}/${venueId}/general/${Date.now()}-${fileName}`;
-    }
-
-    const params = {
-      Bucket: S3_BUCKET,
-      Key: key,
-      ContentType: fileType,
-      Expires: 300,
-    };
-
-    const uploadURL = await s3.getSignedUrlPromise("putObject", params);
-
-    const fileUrl = `https://${S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
-
-    return res.json({ uploadURL, key, fileUrl });
-  } catch (err) {
-    console.error("Presign error:", err);
-    res.status(500).json({ message: "Server error" });
-  }
+const storage = multer.diskStorage({
+  destination: "./uploads/",
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`);
+  },
 });
 
-// Save images after S3 upload
-router.post("/venue-images/upload/:venueId", async (req, res) => {
-  try {
-    const { venueId } = req.params;
-    const { userId, images, folderId = null } = req.body;
+const uploadSingle = multer({
+  storage,
+  limits: { fileSize: 100 * 1024 * 1024 },
+}).single("image");
 
-    if (!mongoose.Types.ObjectId.isValid(venueId)) {
-      return res.status(400).json({ message: "Invalid venueId" });
-    }
+// =============================================
+// UPLOAD IMAGE TO S3 HELPER
+// Uploads file to AWS S3
+// Supports folder-based structure in S3
+// =============================================
+const uploadImageToS3 = async (
+  filePath,
+  fileName,
+  userId,
+  venueId,
+  mimeType,
+  folderId = null, // ✅ NEW
+  folderName = "venue-images"
+) => {
+  const params = {
+    Bucket: S3_BUCKET,
 
-    if (folderId && !mongoose.Types.ObjectId.isValid(folderId)) {
-      return res.status(400).json({ message: "Invalid folderId" });
-    }
+    // ✅ UPDATED PATH (supports folders)
+    Key: `${folderName}/${userId}/${venueId}/${folderId || "general"}/${fileName}`,
 
-    // ✅ CHECK 1: images array exists
-    if (!images || !Array.isArray(images) || images.length === 0) {
-      return res.status(400).json({ message: "Images array required" });
-    }
+    Body: fs.createReadStream(filePath),
+    ContentType: mimeType,
+  };
 
-    // ✅ 👉 ADD VALIDATION HERE (THIS IS THE RIGHT PLACE)
-    for (const img of images) {
-      if (!img.imageUrl || !img.imageKey) {
-        return res.status(400).json({ message: "Invalid image data" });
-      }
-    }
+  return await s3.upload(params).promise();
+};
 
-    // ✅ Validate folder if provided
-    if (folderId) {
-      const venue = await Venues.findById(venueId);
-      const folder = venue?.subFolders.id(folderId);
-
-      if (!venue || !folder) {
-        return res.status(404).json({ message: "Folder not found" });
-      }
-    }
-
-    // ✅ FORMAT AFTER VALIDATION
-    const formattedImages = images.map((img) => ({
-      name: img.name || "",
-      imageUrl: img.imageUrl,
-      imageKey: img.imageKey,
-      thumbnailUrl: img.thumbnailUrl || "",
-      thumbnailKey: img.thumbnailKey || "",
-      folderId: folderId || null,
-      uploadedBy: userId,
-    }));
-
-    const updated = await VenueImages.findOneAndUpdate(
-      { venueId },
-      { $push: { images: { $each: formattedImages } } },
-      { new: true, upsert: true }
-    );
-
-    // ✅ Update folder count
-    if (folderId) {
-      await Venues.updateOne(
-        { _id: venueId, "subFolders._id": folderId },
-        { $inc: { "subFolders.$.imageCount": images.length } }
-      );
-    }
-
-    return res.status(201).json({
-      message: "Images saved successfully",
-      data: updated.images,
+// =============================================
+// UPLOAD VENUE IMAGE (WITH THUMBNAIL)
+// 1. Accepts image via multer
+// 2. Generates compressed thumbnail
+// 3. Uploads original + thumbnail to S3
+// 4. Stores metadata in DB
+// 5. Supports assigning image to a folder
+// =============================================
+router.post(
+  "/venue-images/upload-processed/:venueId",
+  (req, res, next) => {
+    uploadSingle(req, res, (err) => {
+      if (err) return sendResponse(res, 400, true, err.message);
+      next();
     });
+  },
+  async (req, res) => {
+    try {
+      const { venueId } = req.params;
+      const { userId, folderId = null } = req.body;
 
-  } catch (err) {
-    console.error("Save images error:", err);
-    res.status(500).json({ message: "Server error" });
+      if (!mongoose.Types.ObjectId.isValid(venueId)) {
+        return sendResponse(res, 400, true, "Invalid venueId");
+      }
+
+      const file = req.file;
+      if (!file) {
+        return sendResponse(res, 400, true, "Image file required");
+      }
+
+      const filePath = file.path;
+      const fileName = file.filename;
+
+      const thumbName = `thumb_${fileName}.webp`;
+      const thumbPath = path.join(path.dirname(filePath), thumbName);
+
+      let uploadResult, thumbUpload;
+
+      try {
+        // 🔥 Generate thumbnail (same as event)
+        await generateThumbnail(filePath, thumbPath);
+
+        // Upload original
+        uploadResult = await uploadImageToS3(
+          filePath,
+          fileName,
+          userId,
+          venueId,
+          file.mimetype,
+          folderId // ✅ NEW
+        );
+
+        // Upload thumbnail
+        thumbUpload = await uploadImageToS3(
+          thumbPath,
+          thumbName,
+          userId,
+          venueId,
+          "image/webp",
+           folderId // ✅ NEW
+        );
+
+      } finally {
+        // Cleanup local files
+        for (const p of [filePath, thumbPath]) {
+          if (!p) continue;
+          try {
+            await fs.promises.unlink(p);
+          } catch {}
+        }
+      }
+
+      // Save to DB
+      const imageData = {
+        name: file.originalname,
+        imageUrl: uploadResult.Location,
+        imageKey: uploadResult.Key,
+        thumbnailUrl: thumbUpload.Location,
+        thumbnailKey: thumbUpload.Key,
+       folderIds: folderId ? [folderId] : [],
+        uploadedBy: userId,
+      };
+
+      const updated = await VenueImages.findOneAndUpdate(
+        { venueId },
+        { $push: { images: imageData } },
+        { new: true, upsert: true }
+      );
+
+      return sendResponse(res, 201, false, "Image uploaded successfully", imageData);
+
+    } catch (err) {
+      console.error("Processed Upload Error:", err);
+      return sendResponse(res, 500, true, "Server error");
+    }
   }
-});
+);
 
+
+// =============================================
+// GET ALL IMAGES OF A VENUE
+// Returns all images (no folder filtering)
+// Used for "All" tab
+// =============================================
 router.get("/venue-images/:venueId", async (req, res) => {
   try {
     const { venueId } = req.params;
@@ -416,7 +475,12 @@ router.get("/venue-images/:venueId", async (req, res) => {
   }
 });
 
-// create folder inside venue
+// =============================================
+// CREATE SUB-FOLDER INSIDE VENUE
+// Adds a new folder (category) to venue
+// - Max 50 folders allowed
+// - Prevents duplicate names
+// =============================================
 router.post("/venue-folder/:venueId", async (req, res) => {
   try {
     const { venueId } = req.params;
@@ -431,23 +495,15 @@ router.post("/venue-folder/:venueId", async (req, res) => {
     if (!venue) {
       return res.status(404).json({ message: "Venue not found" });
     }
-
-    // ✅ LIMIT
-    if (venue.subFolders.length >= 50) {
-      return res.status(400).json({ message: "Max 50 folders allowed" });
+     // ✅ VALIDATE NAME
+    if (!folderName || !folderName.trim()) {
+      return res.status(400).json({
+        message: "Folder name is required",
+      });
     }
 
     // ✅ FINAL NAME
     const finalName = (folderName || "Untitled Folder").trim();
-
-    // ✅ DUPLICATE CHECK
-    const exists = venue.subFolders.some(
-      (f) => f.folderName.toLowerCase() === finalName.toLowerCase()
-    );
-
-    if (exists) {
-      return res.status(409).json({ message: "Folder already exists" });
-    }
 
     // ✅ CREATE
     venue.subFolders.push({
@@ -469,6 +525,13 @@ router.post("/venue-folder/:venueId", async (req, res) => {
 });
 
 
+// =============================================
+// GET IMAGES BY FOLDER
+// Filters images that belong to a specific folder
+// Works with multi-folder support (folderIds array)
+// Returns latest images first
+// =============================================
+// fetch images of a folder
 router.get("/venue-images/:venueId/folder/:folderId", async (req, res) => {
   try {
     const { venueId, folderId } = req.params;
@@ -494,7 +557,10 @@ router.get("/venue-images/:venueId/folder/:folderId", async (req, res) => {
     // ✅ Filter by folderId
     const filtered =
       data.images.filter(
-        (img) => img.folderId?.toString() === folderId
+    (img) =>
+  img.folderIds?.some(
+    (id) => id.toString() === folderId
+  )
       ) || [];
 
     // ✅ 👉 SORT (latest first)
@@ -511,6 +577,112 @@ router.get("/venue-images/:venueId/folder/:folderId", async (req, res) => {
   } catch (err) {
     console.error("Fetch folder images error:", err);
     return res.status(500).json({ message: "Server error" });
+  }
+});
+
+
+
+// Rename FOlder
+router.put("/venue-folder/rename/:venueId/:folderId", async (req, res) => {
+  try {
+    const { venueId, folderId } = req.params;
+    const { folderName } = req.body;
+
+    const venue = await Venues.findById(venueId);
+
+    const folder = venue.subFolders.id(folderId);
+
+    if (!folder) {
+      return res.status(404).json({ message: "Folder not found" });
+    }
+
+    folder.folderName = folderName.trim();
+
+    await venue.save();
+
+    res.json({ message: "Folder renamed", folders: venue.subFolders });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// get folder with image count
+router.get("/venue-folders/:venueId", async (req, res) => {
+  const { venueId } = req.params;
+
+  const venue = await Venues.findById(venueId).lean();
+  const data = await VenueImages.findOne({ venueId }).lean();
+
+  const images = data?.images || [];
+
+  const folders = venue.subFolders.map((folder) => {
+    const count = images.filter((img) =>
+      img.folderIds?.some((id) => id.toString() === folder._id.toString())
+    ).length;
+
+    return {
+      ...folder,
+      imageCount: count,
+    };
+  });
+
+  res.json(folders);
+});
+
+
+// =============================================
+// ASSIGN / REMOVE IMAGES TO/FROM FOLDER
+// - addImageIds → adds folder to images
+// - removeImageIds → removes folder from images
+// Uses MongoDB arrayFilters for nested updates
+// Supports multi-folder tagging
+// =============================================
+router.put("/assign-to-subfolder", async (req, res) => {
+  try {
+    const { subFolderId, addImageIds = [], removeImageIds = [] } = req.body;
+
+    if (!subFolderId) {
+      return res.status(400).json({ message: "subFolderId is required" });
+    }
+
+    // ✅ ADD images to folder
+    if (addImageIds.length > 0) {
+      await VenueImages.updateMany(
+        { "images._id": { $in: addImageIds } },
+        {
+          $addToSet: {
+            "images.$[elem].folderIds": subFolderId,
+          },
+        },
+        {
+          arrayFilters: [{ "elem._id": { $in: addImageIds } }],
+        }
+      );
+    }
+
+    // ✅ REMOVE images from folder
+    if (removeImageIds.length > 0) {
+      await VenueImages.updateMany(
+        { "images._id": { $in: removeImageIds } },
+        {
+          $pull: {
+            "images.$[elem].folderIds": subFolderId,
+          },
+        },
+        {
+          arrayFilters: [{ "elem._id": { $in: removeImageIds } }],
+        }
+      );
+    }
+
+    return res.status(200).json({
+      message: "Subfolder updated successfully",
+      added: addImageIds.length,
+      removed: removeImageIds.length,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error" });
   }
 });
 

@@ -4,7 +4,6 @@ const WebLink = require("../models/weblink-images");
 const Order = require("../models/order");
 const Folder = require("../models/folder");
 const Users = require("../models/user");
-const capsuleDailyClicks = require("../models/capsuleDailyClicks")
 
 router.put("/assign-to-subfolder", async (req, res) => {
   try {
@@ -102,7 +101,7 @@ router.get("/capsule-tracking", async (req, res) => {
     };
 
     const orders = await Order.find(query)
-      .select("order_id orderWebLink fromId")
+      .select("order_id orderWebLink imageUploadCounts.AllImagesUploadedAt")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -114,7 +113,7 @@ router.get("/capsule-tracking", async (req, res) => {
       orders.map(async (order) => {
 
         const folder = await Folder.findOne({ orderId: order.order_id })
-          .select("_id subFolders viewedBy")
+          .select("_id subFolders viewedBy clickCount")
           .lean();
 
         let imageCount = 0;
@@ -131,32 +130,7 @@ router.get("/capsule-tracking", async (req, res) => {
         if (folder) {
 
           totalViews = folder.viewedBy?.length || 0;
-
-          const { startDate, endDate } = req.query;
-
-          const today = new Date().toISOString().split("T")[0];
-          const start = startDate || today;
-          const end = endDate || today;
-
-          const clickAgg = await capsuleDailyClicks.aggregate([
-            {
-              $match: {
-                mainFolderId: folder._id,
-                date: {
-                  $gte: start,
-                  $lte: end
-                }
-              }
-            },
-            {
-              $group: {
-                _id: null,
-                totalClicks: { $sum: "$clickCount" }
-              }
-            }
-          ]);
-
-          totalClicks = clickAgg[0]?.totalClicks || 0;
+          totalClicks = folder.clickCount || 0;
 
           // Subfolder counts
           if (folder.subFolders?.length) {
@@ -308,23 +282,16 @@ router.post('/track-click', async (req, res) => {
 
   if (!mainFolderId) return res.status(400).send("mainFolderId is required");
 
-  const today = new Date().toISOString().split('T')[0];
-
   try {
-    const stats = await capsuleDailyClicks.findOneAndUpdate(
-      { mainFolderId: mainFolderId, date: today },
+    const stats = await Folder.findByIdAndUpdate(
+       mainFolderId,
       { $inc: { clickCount: 1 } },
-      {
-        upsert: true,
-        new: true,
-        setDefaultsOnInsert: true
-      }
+       { new: true },
     );
 
     res.status(200).json({
       success: true,
       currentDailyClicks: stats.clickCount,
-      date: stats.date
     });
   } catch (error) {
     console.error("Tracking Error:", error);

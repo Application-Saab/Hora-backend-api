@@ -63,4 +63,7 @@ const userSchema = new mongoose.Schema(
     { strict: false,timestamps: true }
 );
 userSchema.index({ phone: 1 });
+
+userSchema.index({ phone: 1, createdAt: -1 });
+
 module.exports = mongoose.model('Users', userSchema)

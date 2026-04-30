@@ -88,8 +88,14 @@ const eventPostsSchema = new mongoose.Schema(
         message: "At least one tagged user ID is required for postBadge type.",
       },
     },
+
+    folderIds: {
+      type: [String],
+      default: [],
+      index: true,
+    },
   },
-  { timestamps: true, versionKey: false },
+  { timestamps: true, strict: false, versionKey: false },
 );
 eventPostsSchema.index({ postById: 1, eventId: 1 });
 eventPostsSchema.index({ postById: 1 });

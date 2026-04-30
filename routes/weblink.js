@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const WebLink = require("../models/weblink-images");
+const FolderModel = require ("../models/folder")
 
 router.put("/assign-to-subfolder", async (req, res) => {
   try {
@@ -82,6 +83,28 @@ router.put("/toggle-like", async (req, res) => {
   }
 });
 
+router.get("/getSubFolders", async (req, res) => {
+  try {
+    const { folderName } = req.query;
+
+    if (!folderName) {
+      return res.status(400).json({ message: "folderName is required" });
+    }
+
+    const folder = await FolderModel.findOne({ folderName }).lean();
+
+    if (!folder) {
+      return res.status(404).json({ message: "Folder not found" });
+    }
+
+    res.status(200).json({
+      folder,
+    });
+
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error });
+  }
+});
 
 
 module.exports = router;

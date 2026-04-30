@@ -89,4 +89,6 @@ const weblinkSchema = new mongoose.Schema(
   }
 );
 
+weblinkSchema.index({ mainFolderId: 1, folderIds: 1, createdAt: -1 });
+
 module.exports = mongoose.model("weblinks", weblinkSchema);

@@ -12,7 +12,7 @@ const fs = require("fs");
 const AWS = require("aws-sdk");
 const path = require("path");
 const sharp = require("sharp");
-const WebLink = require("../models/weblink-images"); 
+const WebLink = require("../models/weblink-images");
 
 // AWS S3 Configuration
 const s3 = new AWS.S3({
@@ -380,7 +380,11 @@ router.post("/upload", upload.array("files", 300), async (req, res) => {
 
 router.get("/thumbnailsWithinProject", async (req, res) => {
   try {
-    const { folderName, customerId } = req.query;
+    const { folderName, customerId, subFolderId, page = 1, limit = 10 } = req.query;
+
+    const pageNumber = parseInt(page);
+    const limitNumber = parseInt(limit);
+    const skip = (pageNumber - 1) * limitNumber;
 
     if (!folderName) {
       return res.status(400).json({
@@ -391,21 +395,31 @@ router.get("/thumbnailsWithinProject", async (req, res) => {
     const folderNames = folderName.split(",");
 
     const folders = await FolderModel.find({
-     folderName: { $in: folderNames },
+      folderName: { $in: folderNames },
     }).lean();
 
     if (!folders.length) {
-    return res.status(404).json({
-    message: "No folders found.",
-    });
-   }
+      return res.status(404).json({
+        message: "No folders found.",
+      });
+    }
 
     const folderIds = folders.map((f) => f._id);
 
-    const images = await WebLink.find({
-    mainFolderId: { $in: folderIds },
-    })
+     let query = {
+      mainFolderId: { $in: folderIds },
+    };
+
+    if (subFolderId) {
+      query.folderIds = { $in: [subFolderId] };
+    }
+
+    const totalCount = await WebLink.countDocuments(query);
+
+    const images = await WebLink.find(query)
       .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNumber)
       .lean();
 
     const thumbnails = images.map((img) => ({
@@ -416,8 +430,13 @@ router.get("/thumbnailsWithinProject", async (req, res) => {
            4Final Response
         ========================= */
     res.status(200).json({
-      folders,
       thumbnails,
+      pagination: {
+        currentPage: pageNumber,
+        totalPages: Math.ceil(totalCount / limitNumber),
+        totalItems: totalCount,
+        limit: limitNumber,
+      }
     });
   } catch (error) {
     console.error("Error fetching thumbnails:", error);

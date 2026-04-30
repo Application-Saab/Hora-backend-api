@@ -5,7 +5,6 @@ const Joi = require("joi");
 const EventInvite = require("../models/event-invite");
 const EventGuest = require("../models/event-guest");
 const TicketCounter = require("../models/ticket-counter-luckydraw");
-const EventImages = require("../models/eventImages");
 const EventMessage = require("../models/eventMessage");
 const multer = require("multer");
 const fs = require("fs");
@@ -63,7 +62,6 @@ const sendResponse = (res, status, error, message, data = null) =>
   res.status(status).json({ error, status, message, data });
 
 // Combined route: Create event + register host as guest + create new room
-// Updated
 router.post("/create-event-invite", async (req, res) => {
   try {
     const {
@@ -179,7 +177,6 @@ router.post("/create-event-invite", async (req, res) => {
 });
 
 // Fetch event details by eventId(_id)
-// Updated
 router.get("/event-invites/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -216,7 +213,6 @@ router.get("/event-invites/:id", async (req, res) => {
 });
 
 // Fetch all event invites for a user as a guest or host
-// Updated
 router.get("/event-invites/all/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
@@ -417,7 +413,6 @@ router.post("/event-guest", async (req, res) => {
 });
 
 //  Get all Guest details by event and user id for a particular event
-// Updated
 router.get("/event-guest/:eventId/user/:userId", async (req, res) => {
   try {
     const { eventId, userId } = req.params;
@@ -467,7 +462,6 @@ router.get("/event-guest/:eventId/user/:userId", async (req, res) => {
 });
 
 // Get all guests details for an event by eventId
-// Updated
 router.get("/event-guests/all/:eventId", async (req, res) => {
   try {
     const { eventId } = req.params;

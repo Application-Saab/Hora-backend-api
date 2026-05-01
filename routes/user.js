@@ -84,7 +84,7 @@ router.post("/otp_generate_backup", async (req, res) => {
 });
 
 router.post("/otp_generate", async (req, res) => {
-  const { phone } = req.body;
+  const { phone, fromCapsule = false } = req.body;
 
   if (!phone) {
     return res.json({
@@ -157,6 +157,7 @@ router.post("/otp_generate", async (req, res) => {
         is_veg: true,
         isPersonalStatus: 0,
         isProfessionStatus: 0,
+        fromCapsule: fromCapsule,
       });
 
       // Send OTP via SMS for new user
@@ -187,7 +188,7 @@ router.post("/otp_generate", async (req, res) => {
 });
 
 router.post("/otp_verify", async (req, res) => {
-  const { phone, otp, role, fromCapsule = false } = req.body;
+  const { phone, otp, role} = req.body;
   if (!phone) {
     return res.json({
       error: true,
@@ -278,13 +279,6 @@ router.post("/otp_verify", async (req, res) => {
           .status(503)
           .json({ error: true, status: 503, message: "Account Deleted" });
       }
-      
-      // && role === "customer" 
-      if (fromCapsule && !user.fromCapsule) {
-          await UserModel.findByIdAndUpdate(user._id, {
-          $set: { fromCapsule: true }
-      });
-    }
 
       return res.status(200).json({
         error: false,

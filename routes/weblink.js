@@ -90,6 +90,7 @@ router.get("/capsule-tracking", async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
+    const search = req.query.search;
 
     const query = {
       type: 8,
@@ -99,6 +100,10 @@ router.get("/capsule-tracking", async (req, res) => {
         $nin: [null, " "],
       }
     };
+
+    if (search) {
+      query.order_id = Number(search);
+    }
 
     const orders = await Order.find(query)
       .select("order_id orderWebLink imageUploadCounts.AllImagesUploadedAt")
@@ -247,24 +252,14 @@ router.post("/track-gallery-view", async (req, res) => {
       return res.status(404).json({ success: false, message: "Invalid link" });
     }
 
-    const user = await Users.findById(userId).select("fromCapsule");
 
-    console.log("User:", user);
-    console.log("Before viewedBy:", folder.viewedBy);
-
-    let updatedFolder = folder;
-
-    if (user?.fromCapsule) {
-      updatedFolder = await Folder.findByIdAndUpdate(
-        mainFolderId,
-        {
-          $addToSet: { viewedBy: userId },
-        },
-        { new: true }
-      );
-    } else {
-      console.log("fromCapsule false or user not found");
-    }
+    const updatedFolder = await Folder.findByIdAndUpdate(
+      mainFolderId,
+      {
+        $addToSet: { viewedBy: userId },
+      },
+      { new: true }
+    );
 
     return res.json({
       success: true,
@@ -284,9 +279,9 @@ router.post('/track-click', async (req, res) => {
 
   try {
     const stats = await Folder.findByIdAndUpdate(
-       mainFolderId,
+      mainFolderId,
       { $inc: { clickCount: 1 } },
-       { new: true },
+      { new: true },
     );
 
     res.status(200).json({
@@ -296,6 +291,310 @@ router.post('/track-click', async (req, res) => {
   } catch (error) {
     console.error("Tracking Error:", error);
     res.status(500).send("Server Error");
+  }
+});
+
+router.get("/capsule-users", async (req, res) => {
+  try {
+    let { page = 1, limit = 10, search } = req.query;
+
+    page = parseInt(page);
+    limit = parseInt(limit);
+    const skip = (page - 1) * limit;
+
+    const orderQuery = {
+      type: 8,
+      orderWebLink: {
+        $exists: true,
+        $ne: "",
+        $nin: [null, " "],
+      },
+    };
+
+    const pipeline = [
+      // -------------------------------
+      // ORDERS USERS
+      // -------------------------------
+      { $match: orderQuery },
+
+      {
+        $group: {
+          _id: "$fromId",
+          phone: { $first: "$phone_no" },
+          totalOrders: { $sum: 1 },
+        },
+      },
+
+      // -------------------------------
+      // MERGE GUEST USERS
+      // -------------------------------
+      {
+        $unionWith: {
+          coll: "folders",
+          pipeline: [
+            {
+              $project: {
+                viewedBy: {
+                  $cond: [
+                    { $isArray: "$viewedBy" },
+                    "$viewedBy",
+                    [],
+                  ],
+                },
+              },
+            },
+            { $unwind: "$viewedBy" },
+
+            {
+              $group: {
+                _id: "$viewedBy",
+                phone: { $first: null },
+                totalOrders: { $sum: 0 },
+              },
+            },
+          ],
+        },
+      },
+
+      // -------------------------------
+      // REMOVE DUPLICATES
+      // -------------------------------
+      {
+        $group: {
+          _id: "$_id",
+          phone: { $first: "$phone" },
+          totalOrders: { $max: "$totalOrders" },
+        },
+      },
+
+      // -------------------------------
+      // USER LOOKUP
+      // -------------------------------
+      {
+        $addFields: {
+          userObjectId: {
+            $cond: [
+              { $eq: [{ $type: "$_id" }, "objectId"] },
+              "$_id",
+              { $toObjectId: "$_id" },
+            ],
+          },
+        },
+      },
+
+      {
+        $lookup: {
+          from: "users",
+          localField: "userObjectId",
+          foreignField: "_id",
+          as: "userData",
+        },
+      },
+      {
+        $unwind: {
+          path: "$userData",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      // -------------------------------
+      // UPLOADS
+      // -------------------------------
+      {
+        $lookup: {
+          from: "weblinks",
+          let: { userId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $eq: [
+                    "$orderById",
+                    { $toString: "$$userId" },
+                  ],
+                },
+              },
+            },
+          ],
+          as: "uploadData",
+        },
+      },
+      {
+        $addFields: {
+          totalUploads: { $size: "$uploadData" },
+        },
+      },
+      {
+        $addFields: {
+          totalUploads: { $size: "$uploadData" },
+        },
+      },
+
+      // -------------------------------
+      // LIKES (FIXED)
+      // -------------------------------
+      {
+        $lookup: {
+          from: "weblinks",
+          let: { userId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $in: [
+                    "$$userId",
+                    {
+                      $cond: [
+                        { $isArray: "$likedBy" },
+                        "$likedBy",
+                        [],
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+            { $count: "totalLikes" },
+          ],
+          as: "likesData",
+        },
+      },
+      {
+        $addFields: {
+          totalLikes: {
+            $ifNull: [
+              { $arrayElemAt: ["$likesData.totalLikes", 0] },
+              0,
+            ],
+          },
+        },
+      },
+      {
+        $addFields: {
+          totalLikes: { $size: "$likesData" },
+        },
+      },
+
+      // -------------------------------
+      // GUEST CAPSULE COUNT (FIXED ERROR)
+      // -------------------------------
+      {
+        $lookup: {
+          from: "folders",
+          let: { userId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $in: [
+                    "$$userId",
+                    {
+                      $cond: [
+                        { $isArray: "$viewedBy" },
+                        "$viewedBy",
+                        [],
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+            { $count: "guestCapsulesCount" },
+          ],
+          as: "guestData",
+        },
+      },
+
+      {
+        $addFields: {
+          guestCapsulesCount: {
+            $ifNull: [
+              { $arrayElemAt: ["$guestData.guestCapsulesCount", 0] },
+              0,
+            ],
+          },
+        },
+      },
+
+      // -------------------------------
+      // FINAL PROJECT
+      // -------------------------------
+      {
+        $project: {
+          _id: 0,
+          userId: "$_id",
+
+          phone: {
+            $cond: [
+              { $ne: ["$phone", null] },
+              "$phone",
+              "$userData.phone",
+            ],
+          },
+
+          totalOrders: 1,
+          fromCapsule: {
+            $ifNull: ["$userData.fromCapsule", false],
+          },
+
+          totalUploads: 1,
+          totalLikes: 1,
+          guestCapsulesCount: 1,
+        },
+      },
+
+      // -------------------------------
+      // SEARCH (AFTER MERGE)
+      // -------------------------------
+      ...(search
+        ? [
+          {
+            $match: {
+              phone: { $regex: search, $options: "i" },
+            },
+          },
+        ]
+        : []),
+
+      { $sort: { totalOrders: -1 } },
+    ];
+
+    // -------------------------------
+    // TOTAL COUNT
+    // -------------------------------
+    const totalResult = await Order.aggregate([
+      ...pipeline,
+      { $count: "total" },
+    ]);
+
+    const total = totalResult[0]?.total || 0;
+
+    // -------------------------------
+    //  PAGINATED DATA
+    // -------------------------------
+    const users = await Order.aggregate([
+      ...pipeline,
+      { $skip: skip },
+      { $limit: limit },
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      message: "User data fetched successfully",
+      data: users,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    console.error("Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
 });
 

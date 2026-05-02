@@ -98,4 +98,5 @@ const eventPostsSchema = new mongoose.Schema(
   { timestamps: true, strict: false, versionKey: false },
 );
 eventPostsSchema.index({ postById: 1, eventId: 1 });
+eventPostsSchema.index({ postById: 1 });
 module.exports = mongoose.model("event-posts", eventPostsSchema);

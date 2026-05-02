@@ -1068,7 +1068,7 @@ const deleteFileWithRetry = async (filePath, retries = 3, delay = 100) => {
   }
 };
 
-// Save external template image for an event invite
+// Save external template image/video for an event invite
 router.put(
   "/event-invites/external-template/:eventId",
   (req, res, next) => {
@@ -1083,6 +1083,7 @@ router.put(
       if (!mongoose.Types.ObjectId.isValid(eventId)) {
         return sendResponse(res, 400, true, "Invalid event ID");
       }
+
       const file = req.file;
       const userId = req.body.userId;
 
@@ -1097,55 +1098,74 @@ router.put(
 
       // If no file is provided and not clearing, return error
       if (!file && req.body.clearImage !== "true") {
-        return sendResponse(
-          res,
-          400,
-          true,
-          "External template image is required or set clearImage to true",
-        );
+        return sendResponse(res, 400, true, "File is required or set clearImage=true");
       }
 
       // Handle image upload
       if (file) {
-        // Delete existing external template image from S3 if it exists
+        const mime = file.mimetype;
+        const isAnimated = mime === "image/gif" || mime.startsWith("video/");
+
         if (existing.externalTemplateImageKey) {
           await deleteFromS3(existing.externalTemplateImageKey);
         }
 
-        // Generate unique filename for WebP
-        const webpFileName = `external-template-${Date.now()}.webp`;
-        const webpPath = file.path.replace(/\.(png|jpeg|jpg)$/i, "") + ".webp";
+        let finalUrl, finalKey;
 
-        // Generate WebP image
-        await generateTemplateThumbnail(file.path, webpPath);
+        if (isAnimated) {
+          const fileName = `external-template-${Date.now()}${path.extname(file.originalname)}`;
+          
+          const uploadResult = await uploadImageToS3(
+            file.path,
+            fileName,
+            userId,
+            eventId,
+            mime,
+            "event-invites"
+          );
 
-        // Upload WebP image to S3
-        const uploadResult = await uploadImageToS3(
-          webpPath,
-          webpFileName,
-          userId,
-          eventId,
-          "image/webp",
-          "event-invites",
-        );
+          finalUrl = uploadResult.Location;
+          finalKey = uploadResult.Key;
 
-        // Update document with new image details
-        existing.externalTemplateImageUrl = uploadResult.Location;
-        existing.externalTemplateImageKey = uploadResult.Key;
+        } else {
+          const webpFileName = `external-template-${Date.now()}.webp`;
+          const webpPath = file.path.replace(/\.(png|jpeg|jpg)$/i, "") + ".webp";
+
+          await generateTemplateThumbnail(file.path, webpPath);
+
+          const uploadResult = await uploadImageToS3(
+            webpPath,
+            webpFileName,
+            userId,
+            eventId,
+            "image/webp",
+            "event-invites"
+          );
+
+          finalUrl = uploadResult.Location;
+          finalKey = uploadResult.Key;
+
+          // Cleanup webp
+          if (fs.existsSync(webpPath)) await deleteFileWithRetry(webpPath);
+        }
+
+        // Update in Database
+        existing.externalTemplateImageUrl = finalUrl;
+        existing.externalTemplateImageKey = finalKey;
         existing.templateId = null;
 
+        // Chat room profile bhi update kar do
         await ChatRoom.findOneAndUpdate(
           { eventId },
-          { roomProfileUrl: uploadResult.Location },
+          { roomProfileUrl: finalUrl }
         );
 
-        // Cleanup local files with retry
-        await Promise.all([
-          deleteFileWithRetry(file.path),
-          deleteFileWithRetry(webpPath),
-        ]);
-      } else if (req.body.clearImage === "true") {
-        // Clear existing image if clearImage is true
+        // Cleanup original file
+        await deleteFileWithRetry(file.path);
+
+      } 
+      else if (req.body.clearImage === "true") {
+        // Clear image
         if (existing.externalTemplateImageKey) {
           await deleteFromS3(existing.externalTemplateImageKey);
           existing.externalTemplateImageUrl = null;
@@ -1154,25 +1174,21 @@ router.put(
         }
       }
 
-      // Save updated document
       const updated = await existing.save();
+
       return sendResponse(
         res,
         200,
         false,
-        "External template image updated successfully",
-        updated,
+        "External template updated successfully",
+        updated
       );
+
     } catch (err) {
-      console.error("Update External Template Image Error:", {
-        message: err.message,
-        stack: err.stack,
-        eventId: req.params.eventId,
-        requestBody: req.body,
-      });
+      console.error("External Template Update Error:", err);
       return sendResponse(res, 500, true, "Server error");
     }
-  },
+  }
 );
 
 router.get("/all-tracking", async (req, res) => {

@@ -284,7 +284,19 @@ app.post("/test_post", function (req, res) {
 });
 /* upload file */
 var multer = require("multer");
-const multerS3 = require('multer-s3');
+const multerS3 = require("multer-s3");
+
+// STATIC SERVE TEMPLATE ASSETS
+app.use(
+  "/api/template-assets",
+  express.static(path.join(__dirname, "uploads"), {
+    setHeaders: (res) => {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    },
+  }),
+);
+
 
 var storage = multer.diskStorage({
   destination: function (req, file, cb) {

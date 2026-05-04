@@ -84,7 +84,7 @@ router.post("/otp_generate_backup", async (req, res) => {
 });
 
 router.post("/otp_generate", async (req, res) => {
-  const { phone, fromCapsule = false } = req.body;
+  const { phone, fromCapsule = false, fromWonderland } = req.body;
 
   if (!phone) {
     return res.json({
@@ -158,6 +158,7 @@ router.post("/otp_generate", async (req, res) => {
         isPersonalStatus: 0,
         isProfessionStatus: 0,
         fromCapsule: fromCapsule,
+        fromWonderland: fromWonderland || false,
       });
 
       // Send OTP via SMS for new user

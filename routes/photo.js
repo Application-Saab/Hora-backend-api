@@ -12,7 +12,8 @@ const fs = require("fs");
 const AWS = require("aws-sdk");
 const path = require("path");
 const sharp = require("sharp");
-const WebLink = require("../models/weblink-images"); 
+const WebLink = require("../models/weblink-images");
+const multer = require("multer");
 
 // AWS S3 Configuration
 const s3 = new AWS.S3({
@@ -244,11 +245,11 @@ router.post("/upload", upload.array("files", 300), async (req, res) => {
 
         const thumbnailPath = `${filePath.replace(
           /\.(png|jpeg|jpg)$/i,
-          ""
+          "",
         )}_thumbnail.webp`;
 
         console.log(
-          `Processing file: ${fileName} at ${new Date().toLocaleTimeString()}`
+          `Processing file: ${fileName} at ${new Date().toLocaleTimeString()}`,
         );
 
         // Generate thumbnail
@@ -259,7 +260,7 @@ router.post("/upload", upload.array("files", 300), async (req, res) => {
           filePath,
           fileName,
           folderPath,
-          phoneNo
+          phoneNo,
         );
 
         await thumbnailPromise;
@@ -267,14 +268,14 @@ router.post("/upload", upload.array("files", 300), async (req, res) => {
         // Upload thumbnail
         const thumbFileName = `thumb_${fileName.replace(
           /\.(png|jpeg|jpg)$/i,
-          ""
+          "",
         )}.webp`;
 
         const s3ThumbPromise = uploadFileToS3(
           thumbnailPath,
           thumbFileName,
           folderPath,
-          phoneNo
+          phoneNo,
         );
 
         const [s3Response, s3ThumbResponse] = await Promise.all([
@@ -311,73 +312,6 @@ router.post("/upload", upload.array("files", 300), async (req, res) => {
   }
 });
 
-// router.get("/thumbnailsWithinProject", async (req, res) => {
-//   try {
-//     const { customerId, folderName } = req.query;
-
-//     if (!customerId) {
-//       return res.status(400).json({
-//         message: "Customer ID is required.",
-//       });
-//     }
-
-//     let folder = null;
-
-//     if (folderName) {
-//       folder = await FolderModel.findOne({
-//         customerId: customerId,
-//         folderName: folderName,
-//       }).lean();
-//     }
-
-//     const filter = { orderById: customerId };
-//     const hello = await WebLink.find({ orderById: customerId })
-
-// console.log(hello);
-// if (folder && folder._id) {
-//   filter.mainFolderIds = folder._id; 
-// }
-
-
-// const images = await WebLink.find(filter)
-//   .sort({ createdAt: -1 })
-//   .lean();
-
-//     const thumbnails = await Promise.all(
-//       images.map(async (img) => {
-//         return {
-//           ...img, // mongo ka saara data
-//         };
-//       })
-//     );
-
-//     /* =========================
-//        4Final Response
-//     ========================= */
-//     res.status(200).json({
-//       folder: folder
-//         ? {
-//             _id: folder._id,
-//             folderName: folder.folderName,
-//             customerId: folder.customerId,
-//             vendorId: folder.vendorId,
-//             eventId: folder.eventId,
-//             orderId: folder.orderId,
-//             subFolders: folder.subFolders || [],
-//           }
-//         : null,
-
-//       thumbnails, 
-//     });
-//   } catch (error) {
-//     console.error("Error fetching thumbnails:", error);
-//     res.status(500).json({
-//       message: "Server error",
-//       error: error.message,
-//     });
-//   }
-// });
-
 router.get("/thumbnailsWithinProject", async (req, res) => {
   try {
     const { folderName, customerId } = req.query;
@@ -391,19 +325,19 @@ router.get("/thumbnailsWithinProject", async (req, res) => {
     const folderNames = folderName.split(",");
 
     const folders = await FolderModel.find({
-     folderName: { $in: folderNames },
+      folderName: { $in: folderNames },
     }).lean();
 
     if (!folders.length) {
-    return res.status(404).json({
-    message: "No folders found.",
-    });
-   }
+      return res.status(404).json({
+        message: "No folders found.",
+      });
+    }
 
     const folderIds = folders.map((f) => f._id);
 
     const images = await WebLink.find({
-    mainFolderId: { $in: folderIds },
+      mainFolderId: { $in: folderIds },
     })
       .sort({ createdAt: -1 })
       .lean();
@@ -427,7 +361,6 @@ router.get("/thumbnailsWithinProject", async (req, res) => {
     });
   }
 });
-
 
 router.get("/originalImage", async (req, res) => {
   try {
@@ -466,7 +399,9 @@ router.get("/originalImage", async (req, res) => {
     return res.status(200).json({ originalImageUrl });
   } catch (error) {
     console.error("Error fetching original image:", error);
-    return res.status(500).json({ message: "Server error", error: error.message });
+    return res
+      .status(500)
+      .json({ message: "Server error", error: error.message });
   }
 });
 
@@ -526,110 +461,86 @@ async function deleteFromS3(key) {
   await s3.deleteObject(params).promise();
 }
 
-// Upload Template (only previewImage)
+// Template local upload
+const templateUploadPath = path.join(__dirname, "../uploads/templates");
+
+// Ensure directory exists
+if (!fs.existsSync(templateUploadPath)) {
+  fs.mkdirSync(templateUploadPath, { recursive: true });
+}
+
+const templateMulter = multer({
+  storage: multer.diskStorage({
+    destination: function (req, file, cb) {
+      if (file.fieldname === "bgImage") {
+        cb(null, path.join(__dirname, "../uploads/templates"));
+      } else {
+        cb(null, path.join(__dirname, "../uploads")); 
+      }
+    },
+    filename: function (req, file, cb) {
+      const ext = path.extname(file.originalname);
+      const baseName = path
+        .basename(file.originalname, ext)
+        .replace(/\s+/g, "-")
+        .replace(/[^a-zA-Z0-9-_]/g, "");
+
+      cb(null, `${baseName}${ext}`);
+    },
+  }),
+});
+
+// Upload new templates
 router.post(
   "/upload-template",
-  upload.single("previewImage"),
+  templateMulter.fields([
+    { name: "previewImage", maxCount: 1 },
+    { name: "bgImage", maxCount: 1 },
+  ]),
   async (req, res) => {
+    let previewFilePath = null;
+    let webpPath = null;
+    let bgFilePath = null;
+
     try {
       const { category, ...configs } = req.body;
-      const previewFile = req.file;
+      const previewFile = req.files?.previewImage?.[0];
+      const bgFile = req.files?.bgImage?.[0];
 
-      // Validation
       if (!previewFile || !category) {
-        return res
-          .status(400)
-          .json({ message: "previewImage and category are required" });
+        return res.status(400).json({
+          message: "previewImage and category are required",
+        });
       }
 
+      previewFilePath = previewFile.path;
+      if (bgFile) bgFilePath = bgFile.path;
+
+      const mime = previewFile.mimetype;
+      const isAnimated = mime === "image/gif" || mime.startsWith("video/");
       const folder = `templates/${category}`;
-      const previewFilePath = previewFile.path;
-      const previewOriginalName = path.parse(previewFile.originalname).name;
 
-      // Convert to WebP and upload to S3
-      const webpPath = `${previewFilePath}.webp`;
-      await sharp(previewFilePath).webp().toFile(webpPath);
-      const webpFileName = `${previewOriginalName}.webp`;
-      const webpUpload = await uploadToS3(
-        webpPath,
-        webpFileName,
-        folder,
-        "image/webp"
-      );
+      let previewUrl, previewKey;
 
-      // Save to DB
-      const savedTemplate = await TemplateMaster.create({
-        fileName: previewFile.originalname,
-        webpUrl: webpUpload.Location,
-        s3WebpKey: webpUpload.Key,
-        category,
-        configs,
-      });
-
-      // Cleanup local files
-      fs.unlinkSync(previewFilePath);
-      fs.unlinkSync(webpPath);
-
-      res
-        .status(201)
-        .json({ message: "Template uploaded", template: savedTemplate });
-    } catch (error) {
-      console.error("Upload error:", error);
-      res.status(500).json({ message: "Server error", error: error.message });
-    }
-  }
-);
-
-// Update Template (only previewImage)
-router.put(
-  "/update-template/:id",
-  upload.single("previewImage"),
-  async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { category, ...configs } = req.body;
-      const previewFile = req.file;
-
-      const template = await TemplateMaster.findById(id);
-      if (!template) {
-        return res.status(404).json({ message: "Template not found" });
-      }
-
-      const updateData = {};
-
-      // Category update
-      if (category) {
-        updateData.category = category;
-      }
-
-      // Merge configs
-      if (Object.keys(configs).length > 0) {
-        updateData.configs = { ...template.configs, ...configs };
-      }
-
-      const folder = `templates/${category || template.category}`;
-
-      // Handle new preview image
-      if (previewFile) {
-        const previewFilePath = previewFile.path;
+      // === Preview File Handling ===
+      if (isAnimated) {
+        console.log('%c [ isAnimated ]', 'font-size:13px; background:pink; color:#bf2c9f;', isAnimated)
+        // GIF ya Video → Direct S3 Upload (No WebP)
+        const uploadResult = await uploadToS3(
+          previewFilePath,
+          previewFile.filename,
+          folder,
+          mime
+        );
+        previewUrl = uploadResult.Location;
+        previewKey = uploadResult.Key;
+      } else {
+        // Normal Image (jpg, png, etc.) → WebP Conversion
         const previewOriginalName = path.parse(previewFile.originalname).name;
-        const webpPath = `${previewFilePath}.webp`;
+        webpPath = `${previewFilePath}.webp`;
 
-        // Delete old from S3
-        if (template.s3WebpKey) {
-          try {
-            await deleteFromS3(template.s3WebpKey);
-            console.log(
-              "Old preview image deleted from S3:",
-              template.s3WebpKey
-            );
-          } catch (err) {
-            console.warn("Failed to delete old preview image:", err.message);
-          }
-        }
+        await sharp(previewFilePath).webp({ quality: 85 }).toFile(webpPath);
 
-        // Convert and upload new image
-        await sharp(previewFilePath).webp().toFile(webpPath);
         const webpFileName = `${previewOriginalName}.webp`;
         const webpUpload = await uploadToS3(
           webpPath,
@@ -638,25 +549,165 @@ router.put(
           "image/webp"
         );
 
-        updateData.fileName = previewFile.originalname;
-        updateData.webpUrl = webpUpload.Location;
-        updateData.s3WebpKey = webpUpload.Key;
-
-        // Cleanup
-        fs.unlinkSync(previewFilePath);
-        fs.unlinkSync(webpPath);
+        previewUrl = webpUpload.Location;
+        previewKey = webpUpload.Key;
       }
 
+      // === Background File ===
+      if (bgFile) {
+        configs.bgImageName = bgFile.filename;
+      }
+
+      // Save to Database
+      const savedTemplate = await TemplateMaster.create({
+        fileName: previewFile.originalname,
+        webpUrl: previewUrl,
+        s3WebpKey: previewKey,
+        category,
+        configs,
+        isVideo: mime.startsWith("video/"),     // true only for real videos
+        isAnimated: isAnimated,                 // GIF + Video ke liye
+        mimeType: mime
+      });
+
+      // === Safe Cleanup with delay ===
+      setTimeout(() => {
+        try {
+          if (previewFilePath && fs.existsSync(previewFilePath)) {
+            fs.unlinkSync(previewFilePath);
+          }
+          if (webpPath && fs.existsSync(webpPath)) {
+            console.log('%c [ webpPath ]', 'font-size:13px; background:pink; color:#bf2c9f;', webpPath)
+            fs.unlinkSync(webpPath);
+          }
+          // if (bgFilePath && fs.existsSync(bgFilePath)) {
+          //   fs.unlinkSync(bgFilePath);
+          // }
+        } catch (cleanupErr) {
+          console.warn("Cleanup warning:", cleanupErr.message);
+        }
+      }, 1000);
+
+      res.status(201).json({
+        message: "Template uploaded successfully",
+        template: savedTemplate,
+      });
+
+    } catch (error) {
+      console.error("Upload template error:", error);
+      res.status(500).json({ 
+        message: "Server error", 
+        error: error.message 
+      });
+    }
+  }
+);
+
+// Update event templates
+router.put(
+  "/update-template/:id",
+  templateMulter.fields([
+    { name: "previewImage", maxCount: 1 },
+    { name: "bgImage", maxCount: 1 },
+  ]),
+  async (req, res) => {
+    let previewFilePath = null;
+    let webpPath = null;
+    let bgFilePath = null;
+
+    try {
+      const { id } = req.params;
+      const { category, ...newConfigsFromBody } = req.body;
+
+      const previewFile = req.files?.previewImage?.[0];
+      const bgFile = req.files?.bgImage?.[0];
+
+      const template = await TemplateMaster.findById(id);
+      if (!template) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+
+      const updateData = {};
+
+      // Category
+      if (category) {
+        updateData.category = category;
+      }
+
+      // === Preview File Update ===
+      if (previewFile) {
+        const mime = previewFile.mimetype;
+        const isAnimated = mime === "image/gif" || mime.startsWith("video/");
+        previewFilePath = previewFile.path;
+
+        // Purani S3 file delete
+        if (template.s3WebpKey) {
+          try { await deleteFromS3(template.s3WebpKey); } catch (e) {}
+        }
+
+        const folder = `templates/${category || template.category}`;
+        let previewUrl, previewKey;
+
+        if (isAnimated) {
+          const uploadResult = await uploadToS3(previewFilePath, previewFile.filename, folder, mime);
+          previewUrl = uploadResult.Location;
+          previewKey = uploadResult.Key;
+        } else {
+          const previewOriginalName = path.parse(previewFile.originalname).name;
+          webpPath = `${previewFilePath}.webp`;
+
+          await sharp(previewFilePath).webp({ quality: 85 }).toFile(webpPath);
+
+          const webpFileName = `${previewOriginalName}.webp`;
+          const webpUpload = await uploadToS3(webpPath, webpFileName, folder, "image/webp");
+
+          previewUrl = webpUpload.Location;
+          previewKey = webpUpload.Key;
+        }
+
+        updateData.fileName = previewFile.originalname;
+        updateData.webpUrl = previewUrl;
+        updateData.s3WebpKey = previewKey;
+        updateData.isVideo = mime.startsWith("video/");
+        updateData.isAnimated = isAnimated;
+        updateData.mimeType = mime;
+      }
+
+      // === Background File Update (Sabse Important Fix) ===
+      if (bgFile) {
+        bgFilePath = bgFile.path;
+
+        // Purani file delete
+        if (template.configs?.bgImageName) {
+          const oldPath = path.join(templateUploadPath, template.configs.bgImageName);
+          if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+        }
+
+        // ✅ Yeh line sabse important hai
+        updateData["configs.bgImageName"] = bgFile.filename;
+      }
+
+      // Final Update
       const updatedTemplate = await TemplateMaster.findByIdAndUpdate(
         id,
         { $set: updateData },
         { new: true, runValidators: true }
       );
 
+      // Safe Cleanup
+      setTimeout(() => {
+        try {
+          if (previewFilePath && fs.existsSync(previewFilePath)) fs.unlinkSync(previewFilePath);
+          if (webpPath && fs.existsSync(webpPath)) fs.unlinkSync(webpPath);
+          // if (bgFilePath && fs.existsSync(bgFilePath)) fs.unlinkSync(bgFilePath);
+        } catch (e) {}
+      }, 1000);
+
       res.status(200).json({
         message: "Template updated successfully",
         template: updatedTemplate,
       });
+
     } catch (error) {
       console.error("Update error:", error);
       res.status(500).json({ message: "Server error", error: error.message });
@@ -669,7 +720,7 @@ router.get("/templates", async (req, res) => {
   try {
     const templates = await TemplateMaster.find(
       {},
-      "_id webpUrl isDisabled category configs templateSize"
+      "_id webpUrl isDisabled category configs templateSize",
     ).sort({ createdAt: -1 });
     res.status(200).json({ templates });
   } catch (error) {
@@ -703,7 +754,7 @@ router.get("/templates/:id", async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Server error",
-      error: error.message
+      error: error.message,
     });
   }
 });

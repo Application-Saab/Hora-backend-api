@@ -17,6 +17,60 @@ const sendResponse = (res, status, error, message, data = null) =>
 res.status(status).json({ error, status, message, data });
 
 
+// =============================================
+// GET ALL VENUES (Party Hall List)
+// Supports pagination + search
+// =============================================
+router.get("/venues-list", async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      search = "",
+      venueType = "",
+    } = req.query;
+
+    const query = {};
+
+    // 🔍 Search by name or location
+    if (search) {
+      query.$or = [
+        { venueName: { $regex: search, $options: "i" } },
+        { location: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    // 🎯 Filter by type
+    if (venueType) {
+      query.venueType = venueType;
+    }
+
+    const skip = (page - 1) * limit;
+
+    const venues = await Venues.find(query)
+      .select("venueName venueType location googleMapLink createdAt")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(Number(limit))
+      .lean();
+
+    const total = await Venues.countDocuments(query);
+
+    return res.status(200).json({
+      message: "Party halls fetched successfully",
+      data: venues,
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (err) {
+    console.error("Fetch venues error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
 
 // =============================================
 // CREATE VENUE

@@ -37,7 +37,6 @@ const FolderSchema = new mongoose.Schema(
     orderId: {
       type: String,
       ref: "orders",
-      index: true,
     },
     subFolders: [
       {
@@ -86,6 +85,7 @@ FolderSchema.index(
     }
   }
 );
+FolderSchema.index({ orderId: 1 }, { unique: true });
 
 
 module.exports = mongoose.model("Folder", FolderSchema);

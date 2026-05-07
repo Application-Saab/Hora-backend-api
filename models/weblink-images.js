@@ -25,7 +25,6 @@ const weblinkSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
-      index: true,
     },
 
     orderByName: {
@@ -88,7 +87,12 @@ const weblinkSchema = new mongoose.Schema(
   {
     timestamps: true,
     versionKey: false,
-  }
+  },
 );
+
+weblinkSchema.index({
+  mainFolderId: 1,
+  type: 1
+});
 
 module.exports = mongoose.model("weblinks", weblinkSchema);

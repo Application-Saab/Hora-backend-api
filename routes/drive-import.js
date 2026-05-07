@@ -278,6 +278,45 @@ router.post("/import-drive-folder", async (req, res) => {
         );
       });
 
+       // =========================
+ // GOOGLE SHEET BACKGROUND
+ // =========================
+
+ let updatedPhoneNumber = phoneNo;
+
+ if (!updatedPhoneNumber.startsWith("+91")) {
+   updatedPhoneNumber = `+91${updatedPhoneNumber}`;
+ }
+
+const googlePayload = {
+  orderIdDb: order_id,
+  orderIdCustomer: order_id + 10800,
+  fulfillmentDate: order?.order_date
+    ? new Date(order.order_date).toLocaleDateString("en-GB")
+    : "N/A",
+  services: "Photography",
+  driveLink: folderUrl,
+  horaWebLink: webLink,
+  phone: updatedPhoneNumber,
+};
+
+ axios
+   .post(
+     "https://script.google.com/macros/s/AKfycbygkJKWyvk4xBpU0CZwoyCBL05v_W7kzwHb-wGOvWvzaoEVhulMfQRLatrT4FG1HPzl/exec",
+     googlePayload,
+     {
+       headers: {
+         "Content-Type": "application/json",
+       },
+     }
+   )
+   .catch((err) => {
+     console.error(
+       "Google Sheet update failed:",
+       err.response?.data || err.message
+     );
+   });
+
   } catch (error) {
     console.error("Drive Upload error:", error);
     if (!res.headersSent) {
@@ -359,6 +398,48 @@ let mainFolderId = folder._id;
           err.response?.data || err.message
         );
       });
+
+
+
+ // =========================
+ // GOOGLE SHEET BACKGROUND
+ // =========================
+
+ let updatedPhoneNumber = phoneNo;
+
+ if (!updatedPhoneNumber.startsWith("+91")) {
+   updatedPhoneNumber = `+91${updatedPhoneNumber}`;
+ }
+
+const googlePayload = {
+  orderIdDb: order_id,
+  orderIdCustomer: order_id + 10800,
+  fulfillmentDate: order?.order_date
+    ? new Date(order.order_date).toLocaleDateString("en-GB")
+    : "N/A",
+  services: "Photography",
+  driveLink: folderUrl,
+  horaWebLink: webLink,
+  phone: updatedPhoneNumber,
+};
+
+ axios
+   .post(
+     "https://script.google.com/macros/s/AKfycbygkJKWyvk4xBpU0CZwoyCBL05v_W7kzwHb-wGOvWvzaoEVhulMfQRLatrT4FG1HPzl/exec",
+     googlePayload,
+     {
+       headers: {
+         "Content-Type": "application/json",
+       },
+     }
+   )
+   .catch((err) => {
+     console.error(
+       "Google Sheet update failed:",
+       err.response?.data || err.message
+     );
+   });
+      
 
   } catch (error) {
     console.error("add-order-drive-link error:", error.message);

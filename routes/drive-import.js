@@ -278,45 +278,6 @@ router.post("/import-drive-folder", async (req, res) => {
         );
       });
 
-       // =========================
- // GOOGLE SHEET BACKGROUND
- // =========================
-
- let updatedPhoneNumber = phoneNo;
-
- if (!updatedPhoneNumber.startsWith("+91")) {
-   updatedPhoneNumber = `+91${updatedPhoneNumber}`;
- }
-
-const googlePayload = {
-  orderIdDb: order_id,
-  orderIdCustomer: order_id + 10800,
-  fulfillmentDate: order?.order_date
-    ? new Date(order.order_date).toLocaleDateString("en-GB")
-    : "N/A",
-  services: "Photography",
-  driveLink: folderUrl,
-  horaWebLink: webLink,
-  phone: updatedPhoneNumber,
-};
-
- axios
-   .post(
-     "https://script.google.com/macros/s/AKfycbzopweY3eKo4h29q_7Ow8uNpKBRNjxKqSTUI8UQ2NW1RucyL56_F-HGtKeBZrvcJRTB/exec",
-     googlePayload,
-     {
-       headers: {
-         "Content-Type": "application/json",
-       },
-     }
-   )
-   .catch((err) => {
-     console.error(
-       "Google Sheet update failed:",
-       err.response?.data || err.message
-     );
-   });
-
   } catch (error) {
     console.error("Drive Upload error:", error);
     if (!res.headersSent) {

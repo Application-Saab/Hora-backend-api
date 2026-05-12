@@ -13,6 +13,26 @@ const weblinkSchema = new mongoose.Schema(
       default: null,
     },
 
+    driveFileId: {
+      type: String,
+      index: true
+    },
+    
+    fileId: {
+      type: String,
+      unique: true,
+    },
+
+    status: {
+      type: String,
+      enum: ["uploading", "done", "failed"],
+      default: "uploading",
+    },
+    retryCount: {
+      type: Number,
+      default: 0,
+    },
+
     orderId: {
       type: String, // changed from ObjectId
       ref: "order",
@@ -23,7 +43,6 @@ const weblinkSchema = new mongoose.Schema(
 
     orderById: {
       type: String,
-      required: true,
       trim: true,
       index: true,
     },
@@ -35,21 +54,18 @@ const weblinkSchema = new mongoose.Schema(
     type: {
       type: String,
       enum: ["image", "video"],
-      required: true,
+      default: "",
       index: true,
     },
 
     originalUrl: {
       type: String,
-      required: true,
       trim: true,
     },
 
     originalKey: {
       type: String,
-      required: true,
-      trim: true,
-      unique: true,
+      default: ""
     },
 
     thumbnailImageUrl: {
@@ -89,6 +105,11 @@ const weblinkSchema = new mongoose.Schema(
     timestamps: true,
     versionKey: false,
   }
+);
+
+weblinkSchema.index(
+  { driveFileId: 1, orderId: 1 },
+  { unique: true }
 );
 
 module.exports = mongoose.model("weblinks", weblinkSchema);

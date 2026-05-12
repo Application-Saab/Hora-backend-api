@@ -14,6 +14,7 @@ const path = require("path");
 const sharp = require("sharp");
 const WebLink = require("../models/weblink-images");
 const multer = require("multer");
+const UserModel = require("../models/user")
 
 // AWS S3 Configuration
 const s3 = new AWS.S3({
@@ -334,6 +335,31 @@ router.get("/thumbnailsWithinProject", async (req, res) => {
       });
     }
 
+    const userIds = folders.flatMap(f => f.viewedBy || []);
+    const uniqueUserIds = [...new Set(userIds)];
+
+const users = await UserModel.find({
+  _id: { $in: uniqueUserIds }
+})
+.select("_id name firstName lastName phone avatar")
+.lean();
+
+const userMap = {};
+users.forEach(u => {
+  userMap[String(u._id)] = u;
+});
+
+
+const enrichedFolders = folders.map(folder => ({
+  ...folder,
+  guestDetails: (folder.viewedBy || []).map(id => userMap[id] || {
+    _id: id,
+    name: "Unknown User",
+    phone: "",
+    avatar: ""
+  })
+}));
+
     const folderIds = folders.map((f) => f._id);
 
     const images = await WebLink.find({
@@ -350,7 +376,7 @@ router.get("/thumbnailsWithinProject", async (req, res) => {
            4Final Response
         ========================= */
     res.status(200).json({
-      folders,
+      folders:enrichedFolders,
       thumbnails,
     });
   } catch (error) {

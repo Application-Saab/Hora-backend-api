@@ -472,24 +472,38 @@ if (!fs.existsSync(templateUploadPath)) {
 const templateMulter = multer({
   storage: multer.diskStorage({
     destination: function (req, file, cb) {
+      let uploadPath;
+
       if (file.fieldname === "bgImage") {
-        cb(null, path.join(__dirname, "../uploads/templates"));
+        uploadPath = path.join(
+          __dirname,
+          "../uploads/templates"
+        );
       } else {
-        cb(null, path.join(__dirname, "../uploads")); 
+        uploadPath = path.join(__dirname, "../uploads");
       }
+
+      // Ensure folder exists
+      if (!fs.existsSync(uploadPath)) {
+        fs.mkdirSync(uploadPath, { recursive: true });
+      }
+
+      cb(null, uploadPath);
     },
+
     filename: function (req, file, cb) {
       const ext = path.extname(file.originalname);
+
       const baseName = path
         .basename(file.originalname, ext)
         .replace(/\s+/g, "-")
         .replace(/[^a-zA-Z0-9-_]/g, "");
 
-      cb(null, `${baseName}${ext}`);
+      // Unique filename
+      cb(null, `${Date.now()}-${baseName}${ext}`);
     },
   }),
 });
-
 // Upload new templates
 router.post(
   "/upload-template",
@@ -524,8 +538,6 @@ router.post(
 
       // === Preview File Handling ===
       if (isAnimated) {
-        console.log('%c [ isAnimated ]', 'font-size:13px; background:pink; color:#bf2c9f;', isAnimated)
-        // GIF ya Video → Direct S3 Upload (No WebP)
         const uploadResult = await uploadToS3(
           previewFilePath,
           previewFile.filename,
@@ -535,7 +547,6 @@ router.post(
         previewUrl = uploadResult.Location;
         previewKey = uploadResult.Key;
       } else {
-        // Normal Image (jpg, png, etc.) → WebP Conversion
         const previewOriginalName = path.parse(previewFile.originalname).name;
         webpPath = `${previewFilePath}.webp`;
 
@@ -621,45 +632,93 @@ router.put(
 
       const previewFile = req.files?.previewImage?.[0];
       const bgFile = req.files?.bgImage?.[0];
-
+      // Validate Template
       const template = await TemplateMaster.findById(id);
       if (!template) {
-        return res.status(404).json({ message: "Template not found" });
+        return res.status(404).json({
+          success: false,
+          message: "Template not found",
+        });
       }
 
       const updateData = {};
-
-      // Category
+      // Update Category
       if (category) {
         updateData.category = category;
       }
+      // Update Config Fields
+      Object.keys(newConfigsFromBody).forEach((key) => {
+        updateData[`configs.${key}`] = newConfigsFromBody[key];
+      });
 
-      // === Preview File Update ===
+      // Preview Image Update
       if (previewFile) {
-        const mime = previewFile.mimetype;
-        const isAnimated = mime === "image/gif" || mime.startsWith("video/");
         previewFilePath = previewFile.path;
+        if (!fs.existsSync(previewFilePath)) {
+          throw new Error("Preview image upload failed");
+        }
 
-        // Purani S3 file delete
+        const mime = previewFile.mimetype;
+        const isAnimated =
+          mime === "image/gif" || mime.startsWith("video/");
+
+        // Delete old S3 file
         if (template.s3WebpKey) {
-          try { await deleteFromS3(template.s3WebpKey); } catch (e) {}
+          try {
+            await deleteFromS3(template.s3WebpKey);
+          } catch (deleteErr) {
+            console.warn(
+              "Failed to delete old preview:",
+              deleteErr.message
+            );
+          }
         }
 
         const folder = `templates/${category || template.category}`;
-        let previewUrl, previewKey;
+        let previewUrl;
+        let previewKey;
 
+        // GIF / VIDEO
         if (isAnimated) {
-          const uploadResult = await uploadToS3(previewFilePath, previewFile.filename, folder, mime);
+          const uniqueFileName = `${Date.now()}-${
+            previewFile.filename
+          }`;
+
+          const uploadResult = await uploadToS3(
+            previewFilePath,
+            uniqueFileName,
+            folder,
+            mime
+          );
+
           previewUrl = uploadResult.Location;
           previewKey = uploadResult.Key;
-        } else {
-          const previewOriginalName = path.parse(previewFile.originalname).name;
+        }
+
+        // NORMAL IMAGE
+        else {
+          const previewOriginalName = path.parse(
+            previewFile.originalname
+          ).name;
+
           webpPath = `${previewFilePath}.webp`;
 
-          await sharp(previewFilePath).webp({ quality: 85 }).toFile(webpPath);
+          await sharp(previewFilePath)
+            .webp({ quality: 85 })
+            .toFile(webpPath);
 
-          const webpFileName = `${previewOriginalName}.webp`;
-          const webpUpload = await uploadToS3(webpPath, webpFileName, folder, "image/webp");
+          if (!fs.existsSync(webpPath)) {
+            throw new Error("WebP conversion failed");
+          }
+
+          const webpFileName = `${Date.now()}-${previewOriginalName}.webp`;
+
+          const webpUpload = await uploadToS3(
+            webpPath,
+            webpFileName,
+            folder,
+            "image/webp"
+          );
 
           previewUrl = webpUpload.Location;
           previewKey = webpUpload.Key;
@@ -673,44 +732,88 @@ router.put(
         updateData.mimeType = mime;
       }
 
-      // === Background File Update (Sabse Important Fix) ===
+      // Background Image Update
       if (bgFile) {
         bgFilePath = bgFile.path;
-
-        // Purani file delete
-        if (template.configs?.bgImageName) {
-          const oldPath = path.join(templateUploadPath, template.configs.bgImageName);
-          if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+        // Ensure uploaded properly
+        if (!fs.existsSync(bgFilePath)) {
+          throw new Error(
+            "Background image was not uploaded properly"
+          );
         }
 
-        // ✅ Yeh line sabse important hai
+        // Delete old bg image ONLY if exists
+        if (template.configs?.bgImageName) {
+          const oldBgPath = path.join(
+            templateUploadPath,
+            template.configs.bgImageName
+          );
+
+          console.log("Old BG Path:", oldBgPath);
+
+          if (fs.existsSync(oldBgPath)) {
+            try {
+              fs.unlinkSync(oldBgPath);
+              console.log("Old background deleted");
+            } catch (deleteErr) {
+              console.warn(
+                "Old bg delete failed:",
+                deleteErr.message
+              );
+            }
+          } else {
+            console.log("Old background not found");
+          }
+        }
+
+        // Save new bg image name
         updateData["configs.bgImageName"] = bgFile.filename;
       }
 
-      // Final Update
-      const updatedTemplate = await TemplateMaster.findByIdAndUpdate(
-        id,
-        { $set: updateData },
-        { new: true, runValidators: true }
-      );
+      // Final DB Update
+      const updatedTemplate =
+        await TemplateMaster.findByIdAndUpdate(
+          id,
+          { $set: updateData },
+          {
+            new: true,
+            runValidators: true,
+          }
+        );
 
-      // Safe Cleanup
+      // Cleanup Temp Files
       setTimeout(() => {
         try {
-          if (previewFilePath && fs.existsSync(previewFilePath)) fs.unlinkSync(previewFilePath);
-          if (webpPath && fs.existsSync(webpPath)) fs.unlinkSync(webpPath);
-          // if (bgFilePath && fs.existsSync(bgFilePath)) fs.unlinkSync(bgFilePath);
-        } catch (e) {}
+          if (
+            previewFilePath &&
+            fs.existsSync(previewFilePath)
+          ) {
+            fs.unlinkSync(previewFilePath);
+          }
+
+          if (webpPath && fs.existsSync(webpPath)) {
+            fs.unlinkSync(webpPath);
+          }
+
+        } catch (cleanupErr) {
+          console.warn(
+            "Cleanup warning:",
+            cleanupErr.message
+          );
+        }
       }, 1000);
 
-      res.status(200).json({
+      return res.status(200).json({
+        success: true,
         message: "Template updated successfully",
         template: updatedTemplate,
       });
-
     } catch (error) {
-      console.error("Update error:", error);
-      res.status(500).json({ message: "Server error", error: error.message });
+      return res.status(500).json({
+        success: false,
+        message: "Server error",
+        error: error.message,
+      });
     }
   }
 );

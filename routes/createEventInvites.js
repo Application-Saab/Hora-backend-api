@@ -912,18 +912,27 @@ router.post("/:postId/like", async (req, res) => {
     }
 
     const post = await eventPosts.findById(postId);
+
     if (!post) {
       return res.status(404).json({ message: "Post not found" });
     }
 
-    const existingLike = await postLikes.findOne({ postId, likedById });
+    const existingLike = await postLikes.findOne({
+      postId,
+      likedById,
+    });
+
+    // Always convert to number first
+    const currentLikes = parseInt(post.likeCounts || "0", 10);
 
     if (existingLike) {
-      // If  already liked -> Unlike it
+      // Unlike
       await postLikes.findByIdAndDelete(existingLike._id);
 
-      // Decrement like count safely
-      post.likeCounts = Math.max(0, (post.likeCounts || 0) - 1);
+      post.likeCounts = String(
+        Math.max(currentLikes - 1, 0),
+      );
+
       await post.save();
 
       return res.status(200).json({
@@ -931,25 +940,33 @@ router.post("/:postId/like", async (req, res) => {
         action: "unliked",
         likeCounts: post.likeCounts,
       });
-    } else {
-      // Not liked -> Add new like
-      const newLike = new postLikes({ postId, likedById, likedByName });
-      await newLike.save();
-
-      // Increment like count
-      post.likeCounts = (post.likeCounts || 0) + 1;
-      await post.save();
-
-      return res.status(201).json({
-        message: "Post liked successfully",
-        action: "liked",
-        likeCounts: post.likeCounts,
-        like: newLike,
-      });
     }
+
+    // Like
+    const newLike = new postLikes({
+      postId,
+      likedById,
+      likedByName,
+    });
+
+    await newLike.save();
+
+    post.likeCounts = String(currentLikes + 1);
+
+    await post.save();
+
+    return res.status(201).json({
+      message: "Post liked successfully",
+      action: "liked",
+      likeCounts: post.likeCounts,
+      like: newLike,
+    });
   } catch (error) {
     console.error("Error toggling like:", error);
-    res.status(500).json({ error: "Server error" });
+
+    res.status(500).json({
+      error: "Server error",
+    });
   }
 });
 

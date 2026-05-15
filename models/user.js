@@ -60,6 +60,7 @@ const userSchema = new mongoose.Schema(
         supplierOrderLimit:{type:Number, default:4},
         fromWonderland: {type: Boolean, default: false}, 
         fromCapsule: {type: Boolean, default: false}, 
+        fromWonderlandInternational: {type: Boolean, default: false}, 
     }, 
     { strict: false,timestamps: true }
 );

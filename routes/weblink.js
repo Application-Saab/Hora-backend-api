@@ -4,6 +4,8 @@ const WebLink = require("../models/weblink-images");
 const Order = require("../models/order");
 const Folder = require("../models/folder");
 const User = require("../models/user");
+const Users = require("../models/user");
+const mongoose = require("mongoose");
 
 router.put("/assign-to-subfolder", async (req, res) => {
   try {
@@ -342,6 +344,27 @@ router.post("/track-gallery-view", async (req, res) => {
         message: "userId and mainFolderId are required",
       });
     }
+    // Validate Mongo IDs
+if (
+  !mongoose.Types.ObjectId.isValid(userId) ||
+  !mongoose.Types.ObjectId.isValid(mainFolderId)
+) {
+  return res.status(400).json({
+    success: false,
+    message: "Invalid ID format",
+  });
+}
+
+// Check user exists
+const userExists = await Users.findById(userId).select("_id");
+
+if (!userExists) {
+  return res.status(404).json({
+    success: false,
+    message: "User not found",
+  });
+}
+
 
     const folder = await Folder.findById(mainFolderId);
     if (!folder) {

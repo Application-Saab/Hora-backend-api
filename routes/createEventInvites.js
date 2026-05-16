@@ -302,6 +302,7 @@ router.get("/event-invites/all/:userId", async (req, res) => {
 });
 
 // Update event invite
+// Update event invite
 router.put("/event-invites/:id", async (req, res) => {
   const { id } = req.params;
 
@@ -310,9 +311,12 @@ router.put("/event-invites/:id", async (req, res) => {
   }
 
   try {
-    // Find the existing invite
+    // Find existing invite
     const existing = await EventInvite.findById(id);
-    if (!existing) return sendResponse(res, 404, true, "Invite not found");
+
+    if (!existing) {
+      return sendResponse(res, 404, true, "Invite not found");
+    }
 
     const {
       eventType,
@@ -321,38 +325,69 @@ router.put("/event-invites/:id", async (req, res) => {
       eventTime,
       location,
       googleMapLink,
+      names,
     } = req.body;
 
-    // Check if this is the first event for the user and hostName is not already set
+    // Check if first event
     const oldestEvent = await EventInvite.findOne({
       userId: existing.userId,
     }).sort({ createdAt: 1 });
-    const isFirstEvent = oldestEvent && oldestEvent._id.equals(existing._id);
 
+    const isFirstEvent =
+      oldestEvent && oldestEvent._id.equals(existing._id);
+
+    // Update user name if needed
     if (isFirstEvent && !existing.hostName && hostName) {
       const user = await User.findById(existing.userId);
+
       if (user) {
         user.name = hostName;
         await user.save();
       }
     }
 
-    // Update other fields
-    if (eventType !== undefined) existing.eventType = eventType;
-    if (hostName !== undefined) existing.hostName = hostName;
-    if (eventDate !== undefined || "") existing.eventDate = new Date(eventDate);
-    if (eventTime !== undefined) existing.eventTime = eventTime;
-    if (location !== undefined) existing.location = location;
-    if (googleMapLink !== undefined) existing.googleMapLink = googleMapLink;
+    // Update fields
+    if (eventType !== undefined) {
+      existing.eventType = eventType;
+    }
+
+    if (hostName !== undefined) {
+      existing.hostName = hostName;
+    }
+
+    if (eventDate !== undefined) {
+      existing.eventDate = eventDate
+        ? new Date(eventDate)
+        : "";
+    }
+
+    if (eventTime !== undefined) {
+      existing.eventTime = eventTime;
+    }
+
+    if (location !== undefined) {
+      existing.location = location;
+    }
+
+    if (googleMapLink !== undefined) {
+      existing.googleMapLink = googleMapLink;
+    }
+
+    // Update names
+    existing.names = {
+      one: names?.one || "",
+      two: names?.two || "",
+    };
 
     // Save updated document
     const updated = await existing.save();
+
     return sendResponse(
       res,
       200,
       false,
       "Invite updated successfully",
-      updated,
+      updated
     );
   } catch (err) {
     console.error("Update Invite Error:", {
@@ -361,6 +396,7 @@ router.put("/event-invites/:id", async (req, res) => {
       requestBody: req.body,
       eventId: id,
     });
+
     return sendResponse(res, 500, true, "Server error");
   }
 });

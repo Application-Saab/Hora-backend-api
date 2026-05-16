@@ -16,6 +16,18 @@ const eventInviteSchema = new mongoose.Schema(
     externalTemplateImageKey: { type: String },
     externalTemplateImageUrl: { type: String },
     googleMapLink: { type: String, default: "" },
+    names: {
+      one: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      two: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+    },
     subFolders: [
       {
         _id: {
@@ -58,4 +70,4 @@ const eventInviteSchema = new mongoose.Schema(
 );
 eventInviteSchema.index({ userId: 1, createdAt: -1 });
 
-module.exports = mongoose.model('eventInvites', eventInviteSchema);
+module.exports = mongoose.model("eventInvites", eventInviteSchema);

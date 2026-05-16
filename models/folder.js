@@ -37,7 +37,6 @@ const FolderSchema = new mongoose.Schema(
     orderId: {
       type: String,
       ref: "orders",
-      index: true,
     },
     subFolders: [
       {
@@ -61,8 +60,8 @@ const FolderSchema = new mongoose.Schema(
           index: true,
         },
        folderDp: {
-  fileUrl: { type: String, required: true },
-  thumbnailUrl: { type: String, required: true },
+  fileUrl: { type: String },
+  thumbnailUrl: { type: String },
   s3Key: { type: String },
   thumbnailKey: { type: String }
 },
@@ -86,6 +85,7 @@ FolderSchema.index(
     }
   }
 );
+FolderSchema.index({ orderId: 1 }, { unique: true });
 
 
 module.exports = mongoose.model("Folder", FolderSchema);

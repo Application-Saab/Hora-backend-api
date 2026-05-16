@@ -64,4 +64,22 @@ const orderSchema = new mongoose.Schema({
     timestamps: true
 });
 
+orderSchema.index({
+  type: 1,
+  orderWebLink: 1,
+  "imageUploadCounts.driveProvidedAt": -1
+});
+
+orderSchema.index({
+  type: 1,
+  orderWebLink: 1,
+  fromId: 1
+});
+
+orderSchema.index({
+  type: 1,
+  orderWebLink: 1,
+  createdAt: -1
+});
+
 module.exports = mongoose.model('order', orderSchema)

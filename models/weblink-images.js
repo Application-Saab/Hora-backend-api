@@ -44,7 +44,6 @@ const weblinkSchema = new mongoose.Schema(
     orderById: {
       type: String,
       trim: true,
-      index: true,
     },
 
     orderByName: {
@@ -104,9 +103,13 @@ const weblinkSchema = new mongoose.Schema(
   {
     timestamps: true,
     versionKey: false,
-  }
+  },
 );
 
+weblinkSchema.index({
+  mainFolderId: 1,
+  type: 1
+});
 weblinkSchema.index(
   { driveFileId: 1, orderId: 1 },
   { unique: true }

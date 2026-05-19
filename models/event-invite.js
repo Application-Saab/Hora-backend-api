@@ -16,6 +16,7 @@ const eventInviteSchema = new mongoose.Schema(
     externalTemplateImageKey: { type: String },
     externalTemplateImageUrl: { type: String },
     googleMapLink: { type: String, default: "" },
+    fromInternational : { type: String, default: '' },
     names: {
       one: {
         type: String,
@@ -27,6 +28,12 @@ const eventInviteSchema = new mongoose.Schema(
         default: "",
         trim: true,
       },
+    },
+    shortCode: {
+      type: String,
+      unique: true,
+      sparse: true,
+      index: true,
     },
     subFolders: [
       {

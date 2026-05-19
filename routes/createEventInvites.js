@@ -107,12 +107,12 @@ router.post("/create-event-invite", async (req, res) => {
     }
 
     // Save user name if missing
-    if (!user.name && hostName) {
-      user.name = hostName;
-      await user.save();
-    }
+    // if (!user.name && hostName) {
+    //   user.name = hostName;
+    //   await user.save();
+    // }
 
-    const finalUserName = user.name || hostName || "";
+    const finalUserName = user.name || "";
 
     // Create event invite
     const event = await EventInvite.create({

@@ -22,6 +22,7 @@ const User = require("../models/user");
 const { s3, S3_BUCKET } = require("../utils/awsConfigs");
 const { getIO } = require("../socket");
 const { CustomResponse } = require("../store/commonFunction");
+const generateUniqueShortCode = require("../utils/generateUniqueShortCode");
 
 // Helper: Delete image from S3
 async function deleteFromS3(key) {
@@ -62,7 +63,10 @@ const sendResponse = (res, status, error, message, data = null) =>
   res.status(status).json({ error, status, message, data });
 
 // Combined route: Create event + register host as guest + create new room
+
 router.post("/create-event-invite", async (req, res) => {
+  let room = null;
+
   try {
     const {
       userId,
@@ -72,19 +76,29 @@ router.post("/create-event-invite", async (req, res) => {
       eventTime,
       location,
       googleMapLink,
+      fromInternational
     } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       return sendResponse(res, 400, true, "Invalid userId");
     }
 
+    // Generate unique short code
+    const shortCode = await generateUniqueShortCode();
+
     // Parallel Fetch
     const [user, counter] = await Promise.all([
       User.findById(userId),
+
       TicketCounter.findOneAndUpdate(
         { _id: "wonderland_event_id" },
+
         { $inc: { sequenceValue: 1 } },
-        { new: true, upsert: true },
+
+        {
+          new: true,
+          upsert: true,
+        },
       ),
     ]);
 
@@ -92,78 +106,123 @@ router.post("/create-event-invite", async (req, res) => {
       return sendResponse(res, 404, true, "User not found");
     }
 
-    // User name logic
-    if (!user.name && hostName) {
-      user.name = hostName;
-      await user.save();
-    }
+    // Save user name if missing
+    // if (!user.name && hostName) {
+    //   user.name = hostName;
+    //   await user.save();
+    // }
 
-    const finalUserName = user.name || hostName || "";
+    const finalUserName = user.name || "";
 
     // Create event invite
     const event = await EventInvite.create({
       userId,
       eventType,
-      hostName: hostName,
+
+      hostName,
+
       eventDate: eventDate ? new Date(eventDate) : null,
+
       eventTime,
+
       location,
+
       googleMapLink,
+
+      fromInternational,
+
       wonderland_id: counter.sequenceValue,
+
+      shortCode,
     });
 
     try {
-      // Create host to as guest
+      // Add host as guest
       await EventGuest.create({
         userId,
+
         eventId: event._id,
+
         name: finalUserName,
+
         rsvpStatus: "will Come",
+
         isHost: true,
       });
 
-      // Create chat room according to event
-      let room = await ChatRoom.create({
+      // Create chat room
+      room = await ChatRoom.create({
         eventId: event._id,
+
         roomName: hostName,
+
         createdBy: userId,
+
         members: [
           {
             userId,
+
             name: finalUserName,
+
             phone: user.phone,
+
             profileImageUrl: user.avatar,
           },
         ],
       });
+
+      // Default messages
       await EventMessage.insertMany([
         {
           groupId: room._id,
+
           senderId: userId,
+
           message:
             "Welcome to Wonderland chat — where the fun begins even before the party!",
+
           type: "text",
+
           mediaUrl: "",
+
           senderName: finalUserName || "Wonderland",
+
           senderPhone: user.phone || "",
         },
+
         {
           groupId: room._id,
+
           senderId: userId,
+
           message: "What’s on your mind? !",
+
           type: "text",
+
           mediaUrl: "",
+
           senderName: finalUserName || "Wonderland",
+
           senderPhone: user.phone || "",
         },
       ]);
     } catch (innerErr) {
-      // If any one operation will fails
       await Promise.all([
-        EventGuest.deleteMany({ eventId: event._id }),
-        ChatRoom.deleteMany({ eventId: event._id }),
+        EventGuest.deleteMany({
+          eventId: event._id,
+        }),
+
+        ChatRoom.deleteMany({
+          eventId: event._id,
+        }),
+
         EventInvite.findByIdAndDelete(event._id),
-        EventMessage.deleteMany({ groupId: room._id }),
+
+        room
+          ? EventMessage.deleteMany({
+              groupId: room._id,
+            })
+          : Promise.resolve(),
       ]);
 
       throw innerErr;
@@ -172,6 +231,7 @@ router.post("/create-event-invite", async (req, res) => {
     return sendResponse(res, 201, false, "Event created successfully", event);
   } catch (err) {
     console.error("Create Event Error:", err);
+
     return sendResponse(res, 500, true, "Server error");
   }
 });
@@ -187,7 +247,7 @@ router.get("/event-invites/:id", async (req, res) => {
 
     const invite = await EventInvite.findById(id)
       .select(
-        "userId eventType hostName eventDate eventTime location googleMapLink externalTemplateImageUrl subFolders",
+        "userId eventType hostName eventDate eventTime location googleMapLink externalTemplateImageUrl subFolders names shortCode",
       )
       .lean();
 
@@ -301,7 +361,6 @@ router.get("/event-invites/all/:userId", async (req, res) => {
   }
 });
 
-// Update event invite
 // Update event invite
 router.put("/event-invites/:id", async (req, res) => {
   const { id } = req.params;

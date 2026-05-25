@@ -18,14 +18,14 @@ router.put("/assign-to-subfolder", async (req, res) => {
     if (addImageIds.length > 0) {
       await WebLink.updateMany(
         { _id: { $in: addImageIds } },
-        { $addToSet: { folderIds: subFolderId } }
+        { $addToSet: { folderIds: subFolderId } },
       );
     }
 
     if (removeImageIds.length > 0) {
       await WebLink.updateMany(
         { _id: { $in: removeImageIds } },
-        { $pull: { folderIds: subFolderId } }
+        { $pull: { folderIds: subFolderId } },
       );
     }
 
@@ -62,12 +62,12 @@ router.put("/toggle-like", async (req, res) => {
       if (alreadyLiked) {
         await WebLink.updateOne(
           { _id: imageId },
-          { $pull: { likedBy: userId } }
+          { $pull: { likedBy: userId } },
         );
       } else {
         await WebLink.updateOne(
           { _id: imageId },
-          { $addToSet: { likedBy: userId } }
+          { $addToSet: { likedBy: userId } },
         );
       }
 
@@ -89,7 +89,6 @@ router.put("/toggle-like", async (req, res) => {
 
 router.get("/capsule-tracking", async (req, res) => {
   try {
-
     const page = Number(req.query.page) || 1;
     const limit = Number(req.query.limit) || 10;
     const skip = (page - 1) * limit;
@@ -99,8 +98,8 @@ router.get("/capsule-tracking", async (req, res) => {
       type: 8,
       orderWebLink: {
         $exists: true,
-        $nin: ["", " ", null]
-      }
+        $nin: ["", " ", null],
+      },
     };
 
     if (search) {
@@ -108,51 +107,49 @@ router.get("/capsule-tracking", async (req, res) => {
     }
 
     const [orders, totalOrders] = await Promise.all([
-
       Order.aggregate([
-
         {
-          $match: matchQuery
+          $match: matchQuery,
         },
 
         {
           $sort: {
             "imageUploadCounts.driveProvidedAt": -1,
-            createdAt: -1
-          }
+            createdAt: -1,
+          },
         },
 
         {
-          $skip: skip
+          $skip: skip,
         },
 
         {
-          $limit: limit
+          $limit: limit,
         },
 
         // Folder Lookup
-{
-  $addFields: {
-    orderIdString: {
-      $toString: "$order_id"
-    }
-  }
-},
+        {
+          $addFields: {
+            orderIdString: {
+              $toString: "$order_id",
+            },
+          },
+        },
 
-{
-  $lookup: {
-    from: "folders",
-    localField: "orderIdString",
-    foreignField: "orderId",
-    as: "folder"
-  }
-},
+        {
+          $lookup: {
+            from: "folders",
+            localField: "orderIdString",
+            foreignField: "orderId",
+            as: "folder",
+          },
+        },
 
         {
           $unwind: {
             path: "$folder",
-            preserveNullAndEmptyArrays: true
-          }
+            preserveNullAndEmptyArrays: true,
+          },
         },
 
         // Weblinks Lookup
@@ -161,23 +158,22 @@ router.get("/capsule-tracking", async (req, res) => {
             from: "weblinks",
             localField: "folder._id",
             foreignField: "mainFolderId",
-            as: "media"
-          }
+            as: "media",
+          },
         },
 
         {
           $addFields: {
-
             imageCount: {
               $size: {
                 $filter: {
                   input: "$media",
                   as: "m",
                   cond: {
-                    $eq: ["$$m.type", "image"]
-                  }
-                }
-              }
+                    $eq: ["$$m.type", "image"],
+                  },
+                },
+              },
             },
 
             videoCount: {
@@ -186,10 +182,10 @@ router.get("/capsule-tracking", async (req, res) => {
                   input: "$media",
                   as: "m",
                   cond: {
-                    $eq: ["$$m.type", "video"]
-                  }
-                }
-              }
+                    $eq: ["$$m.type", "video"],
+                  },
+                },
+              },
             },
 
             totalLikes: {
@@ -199,59 +195,63 @@ router.get("/capsule-tracking", async (req, res) => {
                   as: "m",
                   in: {
                     $size: {
-                      $ifNull: ["$$m.likedBy", []]
-                    }
-                  }
-                }
-              }
+                      $ifNull: ["$$m.likedBy", []],
+                    },
+                  },
+                },
+              },
             },
 
             totalDownloads: {
-              $sum: "$media.downloadCount"
+              $sum: "$media.downloadCount",
             },
 
             totalShares: {
-              $sum: "$media.shareCount"
+              $sum: "$media.shareCount",
             },
 
             faceRecognitionCount: {
               $size: {
                 $filter: {
                   input: {
-                    $ifNull: ["$folder.subFolders", []]
+                    $ifNull: ["$folder.subFolders", []],
                   },
                   as: "s",
                   cond: {
-                    $eq: ["$$s.type", "my_photos"]
-                  }
-                }
-              }
+                    $eq: ["$$s.type", "my_photos"],
+                  },
+                },
+              },
             },
 
             otherSubFoldersCount: {
               $size: {
                 $filter: {
                   input: {
-                    $ifNull: ["$folder.subFolders", []]
+                    $ifNull: ["$folder.subFolders", []],
                   },
                   as: "s",
                   cond: {
-                    $ne: ["$$s.type", "my_photos"]
-                  }
-                }
-              }
+                    $ne: ["$$s.type", "my_photos"],
+                  },
+                },
+              },
             },
 
             totalViews: {
               $size: {
-                $ifNull: ["$folder.viewedBy", []]
-              }
+                $ifNull: ["$folder.viewedBy", []],
+              },
             },
 
             totalClicks: {
-              $ifNull: ["$folder.clickCount", 0]
-            }
-          }
+              $ifNull: ["$folder.clickCount", 0],
+            },
+
+            shareCapsuleClicks: {
+              $ifNull: ["$folder.shareCapsuleCount", 0],
+            },
+          },
         },
 
         {
@@ -266,7 +266,7 @@ router.get("/capsule-tracking", async (req, res) => {
               imageCount: "$imageCount",
               videoCount: "$videoCount",
               totalMedia: {
-                $add: ["$imageCount", "$videoCount"]
+                $add: ["$imageCount", "$videoCount"],
               },
               totalLikes: "$totalLikes",
               totalDownloads: "$totalDownloads",
@@ -274,15 +274,14 @@ router.get("/capsule-tracking", async (req, res) => {
               faceRecognitionCount: "$faceRecognitionCount",
               otherSubFoldersCount: "$otherSubFoldersCount",
               totalViews: "$totalViews",
-              totalClicks: "$totalClicks"
-            }
-          }
-        }
-
+              totalClicks: "$totalClicks",
+              shareCapsuleClicks: "$shareCapsuleClicks",
+            },
+          },
+        },
       ]),
 
-      Order.countDocuments(matchQuery)
-
+      Order.countDocuments(matchQuery),
     ]);
 
     return res.status(200).json({
@@ -293,21 +292,18 @@ router.get("/capsule-tracking", async (req, res) => {
         totalItems: totalOrders,
         totalPages: Math.ceil(totalOrders / limit),
         currentPage: page,
-        pageSize: orders.length
+        pageSize: orders.length,
       },
 
-      data: orders
+      data: orders,
     });
-
   } catch (error) {
-
     console.error(error);
 
     return res.status(500).json({
       success: false,
-      message: "Server error"
+      message: "Server error",
     });
-
   }
 });
 
@@ -321,6 +317,10 @@ router.post("/track-activity/:mediaId", async (req, res) => {
       updateQuery = { $inc: { downloadCount: 1 } };
     } else if (action === "share") {
       updateQuery = { $inc: { shareCount: 1 } };
+    } else if (action === "share") {
+      updateQuery = { $inc: { shareCount: 1 } };
+    } else if (action === "share-event") {
+      updateQuery = { $inc: { shareEventCount: 1 } };
     } else {
       return res.status(400).json({ message: "Invalid action" });
     }
@@ -345,53 +345,50 @@ router.post("/track-gallery-view", async (req, res) => {
       });
     }
     // Validate Mongo IDs
-if (
-  !mongoose.Types.ObjectId.isValid(userId) ||
-  !mongoose.Types.ObjectId.isValid(mainFolderId)
-) {
-  return res.status(400).json({
-    success: false,
-    message: "Invalid ID format",
-  });
-}
+    if (
+      !mongoose.Types.ObjectId.isValid(userId) ||
+      !mongoose.Types.ObjectId.isValid(mainFolderId)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid ID format",
+      });
+    }
 
-// Check user exists
-const userExists = await Users.findById(userId).select("_id");
+    // Check user exists
+    const userExists = await Users.findById(userId).select("_id");
 
-if (!userExists) {
-  return res.status(404).json({
-    success: false,
-    message: "User not found",
-  });
-}
-
+    if (!userExists) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
 
     const folder = await Folder.findById(mainFolderId);
     if (!folder) {
       return res.status(404).json({ success: false, message: "Invalid link" });
     }
 
-
     const updatedFolder = await Folder.findByIdAndUpdate(
       mainFolderId,
       {
         $addToSet: { viewedBy: userId },
       },
-      { new: true }
+      { new: true },
     );
 
     return res.json({
       success: true,
       data: updatedFolder,
     });
-
   } catch (err) {
     console.error("Error:", err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-router.post('/track-click', async (req, res) => {
+router.post("/track-click", async (req, res) => {
   const { mainFolderId } = req.body;
 
   if (!mainFolderId) return res.status(400).send("mainFolderId is required");
@@ -413,9 +410,29 @@ router.post('/track-click', async (req, res) => {
   }
 });
 
+router.post("/track-capsule-share-click", async (req, res) => {
+  const { mainFolderId } = req.body;
+
+  if (!mainFolderId) return res.status(400).send("mainFolderId is required");
+  try {
+    const stats = await Folder.findByIdAndUpdate(
+      mainFolderId,
+      { $inc: { shareCapsuleCount: 1 } },
+      { new: true },
+    );
+
+    res.status(200).json({
+      success: true,
+      shareCapsuleCount: stats.shareCapsuleCount,
+    });
+  } catch (error) {
+    console.error("Tracking Error:", error);
+    res.status(500).send("Server Error");
+  }
+});
+
 router.get("/capsule-users", async (req, res) => {
   try {
-
     let { page = 1, limit = 10, search = "" } = req.query;
 
     page = Number(page);
@@ -428,39 +445,35 @@ router.get("/capsule-users", async (req, res) => {
     // =====================================
 
     const hostUsers = await Order.aggregate([
-
       {
         $match: {
           type: 8,
           orderWebLink: {
             $exists: true,
-            $nin: ["", " ", null]
-          }
-        }
+            $nin: ["", " ", null],
+          },
+        },
       },
 
       {
         $group: {
-
           _id: {
-            $toString: "$fromId"
+            $toString: "$fromId",
           },
 
           phone: {
-            $first: "$phone_no"
+            $first: "$phone_no",
           },
 
           totalOrders: {
-            $sum: 1
+            $sum: 1,
           },
 
           userType: {
-            $first: "host"
-          }
-
-        }
-      }
-
+            $first: "host",
+          },
+        },
+      },
     ]);
 
     // =====================================
@@ -468,74 +481,61 @@ router.get("/capsule-users", async (req, res) => {
     // =====================================
 
     const guestUsers = await Folder.aggregate([
-
       {
         $match: {
           viewedBy: {
             $exists: true,
-            $ne: []
-          }
-        }
-      },
-
-      {
-        $unwind: "$viewedBy"
-      },
-
-      {
-          $match: {
-            $expr: {
-              $ne: ["$viewedBy", "$customerId"]
-            }
-          }
+            $ne: [],
+          },
         },
+      },
+
+      {
+        $unwind: "$viewedBy",
+      },
+
+      {
+        $match: {
+          $expr: {
+            $ne: ["$viewedBy", "$customerId"],
+          },
+        },
+      },
 
       {
         $group: {
-
           _id: {
-            $toString: "$viewedBy"
+            $toString: "$viewedBy",
           },
 
           totalOrders: {
-            $first: 0
+            $first: 0,
           },
 
           userType: {
-            $first: "guest"
-          }
-
-        }
+            $first: "guest",
+          },
+        },
       },
-
     ]);
 
     // =====================================
     // MERGE UNIQUE USERS
     // =====================================
 
-const userMap = new Map();
+    const userMap = new Map();
 
-[...hostUsers, ...guestUsers].forEach((user) => {
+    [...hostUsers, ...guestUsers].forEach((user) => {
+      const id = user._id.toString();
 
-  const id = user._id.toString();
+      if (userMap.has(id)) {
+        const existing = userMap.get(id);
 
-  if (userMap.has(id)) {
-
-    const existing = userMap.get(id);
-
-    existing.totalOrders = Math.max(
-      existing.totalOrders,
-      user.totalOrders
-    );
-
-  } else {
-
-    userMap.set(id, user);
-
-  }
-
-});
+        existing.totalOrders = Math.max(existing.totalOrders, user.totalOrders);
+      } else {
+        userMap.set(id, user);
+      }
+    });
 
     let users = Array.from(userMap.values());
 
@@ -545,129 +545,111 @@ const userMap = new Map();
 
     const userIds = users.map((u) => u._id);
 
-    const [
+    const [uploadCounts, likeCounts, guestCapsuleCounts, userData] =
+      await Promise.all([
+        // =====================================
+        // UPLOADS
+        // =====================================
 
-      uploadCounts,
-      likeCounts,
-      guestCapsuleCounts,
-      userData
-
-    ] = await Promise.all([
-
-      // =====================================
-      // UPLOADS
-      // =====================================
-
-      WebLink.aggregate([
-
-        {
-          $match: {
-            orderById: {
-              $in: userIds
-            }
-          }
-        },
-
-        {
-          $group: {
-            _id: "$orderById",
-            totalUploads: {
-              $sum: 1
-            }
-          }
-        }
-
-      ]),
-
-      // =====================================
-      // LIKES
-      // =====================================
-
-      WebLink.aggregate([
-
-        {
-          $unwind: "$likedBy"
-        },
-
-        {
-          $match: {
-            likedBy: {
-              $in: userIds
-            }
-          }
-        },
-
-        {
-          $group: {
-
-            _id: {
-              $toString: "$likedBy"
+        WebLink.aggregate([
+          {
+            $match: {
+              orderById: {
+                $in: userIds,
+              },
             },
+          },
 
-            totalLikes: {
-              $sum: 1
-            }
-
-          }
-        }
-
-      ]),
-
-      // =====================================
-      // GUEST CAPSULES
-      // =====================================
-
-      Folder.aggregate([
-
-        {
-          $unwind: "$viewedBy"
-        },
-
-        {
-          $match: {
-            viewedBy: {
-              $in: userIds
-            }
-          }
-        },
-
-        {
-        $match: {
-          $expr: {
-            $ne: ["$viewedBy", "$customerId"]
-          }
-        }
-      },
-
-        {
-          $group: {
-
-            _id: {
-              $toString: "$viewedBy"
+          {
+            $group: {
+              _id: "$orderById",
+              totalUploads: {
+                $sum: 1,
+              },
             },
+          },
+        ]),
 
-            guestCapsulesCount: {
-              $sum: 1
-            }
+        // =====================================
+        // LIKES
+        // =====================================
 
-          }
-        }
+        WebLink.aggregate([
+          {
+            $unwind: "$likedBy",
+          },
 
-      ]),
+          {
+            $match: {
+              likedBy: {
+                $in: userIds,
+              },
+            },
+          },
 
-      // =====================================
-      // USER INFO
-      // =====================================
+          {
+            $group: {
+              _id: {
+                $toString: "$likedBy",
+              },
 
-      User.find({
-        _id: {
-          $in: userIds
-        }
-      })
-        .select("phone fromCapsule createdAt")
-        .lean()
+              totalLikes: {
+                $sum: 1,
+              },
+            },
+          },
+        ]),
 
-    ]);
+        // =====================================
+        // GUEST CAPSULES
+        // =====================================
+
+        Folder.aggregate([
+          {
+            $unwind: "$viewedBy",
+          },
+
+          {
+            $match: {
+              viewedBy: {
+                $in: userIds,
+              },
+            },
+          },
+
+          {
+            $match: {
+              $expr: {
+                $ne: ["$viewedBy", "$customerId"],
+              },
+            },
+          },
+
+          {
+            $group: {
+              _id: {
+                $toString: "$viewedBy",
+              },
+
+              guestCapsulesCount: {
+                $sum: 1,
+              },
+            },
+          },
+        ]),
+
+        // =====================================
+        // USER INFO
+        // =====================================
+
+        User.find({
+          _id: {
+            $in: userIds,
+          },
+        })
+          .select("phone fromCapsule createdAt")
+          .lean(),
+      ]);
 
     // =====================================
     // MAPS
@@ -699,40 +681,27 @@ const userMap = new Map();
     // =====================================
 
     let finalUsers = users.map((u) => {
-
-      const userInfo =
-        userDataMap[u._id] || {};
+      const userInfo = userDataMap[u._id] || {};
 
       return {
-
         userId: u._id,
 
         userType: u.userType,
 
-        phone:
-          u.phone ||
-          userInfo.phone ||
-          null,
+        phone: u.phone || userInfo.phone || null,
 
-        totalOrders:
-          u.totalOrders || 0,
+        totalOrders: u.totalOrders || 0,
 
-        totalUploads:
-          uploadMap[u._id] || 0,
+        totalUploads: uploadMap[u._id] || 0,
 
-        totalLikes:
-          likeMap[u._id] || 0,
+        totalLikes: likeMap[u._id] || 0,
 
-        guestCapsulesCount:
-          guestMap[u._id] || 0,
+        guestCapsulesCount: guestMap[u._id] || 0,
 
-        fromCapsule:
-          userInfo.fromCapsule || false,
+        fromCapsule: userInfo.fromCapsule || false,
 
-          createdAt: userInfo.createdAt || null
-
+        createdAt: userInfo.createdAt || null,
       };
-
     });
 
     // =====================================
@@ -740,25 +709,21 @@ const userMap = new Map();
     // =====================================
 
     if (search?.trim()) {
-
       finalUsers = finalUsers.filter((u) =>
-        (u.phone || "")
-          .toString()
-          .includes(search.trim())
+        (u.phone || "").toString().includes(search.trim()),
       );
-
     }
 
     // =====================================
-// SORT (Recent Users First)
-// =====================================
+    // SORT (Recent Users First)
+    // =====================================
 
-finalUsers.sort((a, b) => {
-  const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
-  const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
-  
-  return dateB - dateA; 
-});
+    finalUsers.sort((a, b) => {
+      const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+      const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
+
+      return dateB - dateA;
+    });
 
     // =====================================
     // TOTAL
@@ -770,17 +735,13 @@ finalUsers.sort((a, b) => {
     // PAGINATION
     // =====================================
 
-    finalUsers = finalUsers.slice(
-      skip,
-      skip + limit
-    );
+    finalUsers = finalUsers.slice(skip, skip + limit);
 
     // =====================================
     // RESPONSE
     // =====================================
 
     return res.status(200).json({
-
       success: true,
 
       message: "User data fetched successfully",
@@ -788,33 +749,24 @@ finalUsers.sort((a, b) => {
       data: finalUsers,
 
       pagination: {
-
         total,
 
         page,
 
         limit,
 
-        totalPages: Math.ceil(total / limit)
-
-      }
-
+        totalPages: Math.ceil(total / limit),
+      },
     });
-
   } catch (error) {
-
     console.error(error);
 
     return res.status(500).json({
-
       success: false,
 
-      message: "Server error"
-
+      message: "Server error",
     });
-
   }
 });
-
 
 module.exports = router;

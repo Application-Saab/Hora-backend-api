@@ -14,11 +14,15 @@ const FolderSchema = new mongoose.Schema(
     viewedBy: {
       type: [String], // userIds
       default: [],
-      index: true
+      index: true,
     },
     clickCount: {
       type: Number,
-      default: 0
+      default: 0,
+    },
+    shareCapsuleCount: {
+      type: Number,
+      default: 0,
     },
     customerId: {
       type: String,
@@ -59,12 +63,12 @@ const FolderSchema = new mongoose.Schema(
           required: true,
           index: true,
         },
-       folderDp: {
-  fileUrl: { type: String },
-  thumbnailUrl: { type: String },
-  s3Key: { type: String },
-  thumbnailKey: { type: String }
-},
+        folderDp: {
+          fileUrl: { type: String },
+          thumbnailUrl: { type: String },
+          s3Key: { type: String },
+          thumbnailKey: { type: String },
+        },
 
         createdAt: {
           type: Date,
@@ -73,7 +77,7 @@ const FolderSchema = new mongoose.Schema(
       },
     ],
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 FolderSchema.index(
@@ -81,11 +85,10 @@ FolderSchema.index(
   {
     unique: true,
     partialFilterExpression: {
-      eventId: { $exists: true }
-    }
-  }
+      eventId: { $exists: true },
+    },
+  },
 );
 FolderSchema.index({ orderId: 1 }, { unique: true });
-
 
 module.exports = mongoose.model("Folder", FolderSchema);

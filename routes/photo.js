@@ -354,13 +354,13 @@ users.forEach(u => {
 
 
 const enrichedFolders = folders.map(folder => ({
-  ...folder,
-  guestDetails: (folder.viewedBy || []).map(id => userMap[id] || {
-    _id: id,
-    name: "Unknown User",
-    phone: "",
-    avatar: ""
-  })
+  // ...folder,
+  // guestDetails: (folder.viewedBy || []).map(id => userMap[id] || {
+  //   _id: id,
+  //   name: "Unknown User",
+  //   phone: "",
+  //   avatar: ""
+  // })
 }));
 
     const folderIds = folders.map((f) => f._id);
@@ -389,7 +389,7 @@ const enrichedFolders = folders.map(folder => ({
            4Final Response
         ========================= */
     res.status(200).json({
-      folders:enrichedFolders,
+      // folders:enrichedFolders,
       thumbnails,
       pagination: {
         currentPage: pageNumber,

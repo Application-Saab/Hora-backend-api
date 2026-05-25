@@ -830,9 +830,30 @@ router.get("/getSubFolders", async (req, res) => {
     if (!folder) {
       return res.status(404).json({ message: "Folder not found" });
     }
+const userIds = folder.viewedBy || [];
+const uniqueUserIds = [...new Set(userIds)];
+
+
+    const users = await User.find({
+      _id: { $in: uniqueUserIds }
+    })
+    .select("_id name firstName lastName phone avatar")
+    .lean();
+
+    const userMap = {};
+users.forEach(u => {
+  userMap[String(u._id)] = u;
+});
+
 
     res.status(200).json({
       folder,
+      guestDetails: (folder.viewedBy || []).map(id => userMap[id] || {
+    _id: id,
+    name: "",
+    phone: "",
+    avatar: ""
+  })
     });
 
   } catch (error) {

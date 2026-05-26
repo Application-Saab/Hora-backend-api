@@ -111,7 +111,6 @@ weblinkSchema.index({
   type: 1
 });
 weblinkSchema.index(
-  { driveFileId: 1, orderId: 1 },
   {
     unique: true,
     partialFilterExpression: {

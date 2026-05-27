@@ -247,7 +247,7 @@ router.get("/event-invites/:id", async (req, res) => {
 
     const invite = await EventInvite.findById(id)
       .select(
-        "userId eventType hostName eventDate eventTime location googleMapLink externalTemplateImageUrl subFolders names shortCode",
+        "userId eventType hostName eventDate eventTime location googleMapLink externalTemplateImageUrl subFolders names addresses dates times shortCode",
       )
       .lean();
 
@@ -385,6 +385,9 @@ router.put("/event-invites/:id", async (req, res) => {
       location,
       googleMapLink,
       names,
+      addresses,
+      dates,
+      times,
     } = req.body;
 
     // Check if first event
@@ -436,6 +439,48 @@ router.put("/event-invites/:id", async (req, res) => {
     existing.names = {
       one: names?.one || "",
       two: names?.two || "",
+      three: names?.three || "",
+      four: names?.four || "",
+      five: names?.five || "",
+      six: names?.six || "",
+      seven: names?.seven || "",
+      eight: names?.eight || "",
+    };
+
+    // Update addresses
+    existing.addresses = {
+      one: addresses?.one || "",
+      two: addresses?.two || "",
+      three: addresses?.three || "",
+      four: addresses?.four || "",
+      five: addresses?.five || "",
+      six: addresses?.six || "",
+      seven: addresses?.seven || "",
+      eight: addresses?.eight || "",
+    };
+
+    // Update dates
+    existing.dates = {
+      one: dates?.one || "",
+      two: dates?.two || "",
+      three: dates?.three || "",
+      four: dates?.four || "",
+      five: dates?.five || "",
+      six: dates?.six || "",
+      seven: dates?.seven || "",
+      eight: dates?.eight || "",
+    };
+
+    // Update times
+    existing.times = {
+      one: times?.one || "",
+      two: times?.two || "",
+      three: times?.three || "",
+      four: times?.four || "",
+      five: times?.five || "",
+      six: times?.six || "",
+      seven: times?.seven || "",
+      eight: times?.eight || "",
     };
 
     // Save updated document

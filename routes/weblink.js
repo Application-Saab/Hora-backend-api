@@ -318,8 +318,6 @@ router.post("/track-activity/:mediaId", async (req, res) => {
       updateQuery = { $inc: { downloadCount: 1 } };
     } else if (action === "share") {
       updateQuery = { $inc: { shareCount: 1 } };
-    } else if (action === "share") {
-      updateQuery = { $inc: { shareCount: 1 } };
     } else if (action === "share-event") {
       updateQuery = { $inc: { shareEventCount: 1 } };
     } else {
@@ -357,7 +355,7 @@ router.post("/track-gallery-view", async (req, res) => {
     }
 
     // Check user exists
-    const userExists = await Users.findById(userId).select("_id");
+    const userExists = await User.findById(userId).select("_id");
 
     if (!userExists) {
       return res.status(404).json({

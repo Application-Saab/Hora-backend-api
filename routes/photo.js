@@ -315,7 +315,10 @@ router.post("/upload", upload.array("files", 300), async (req, res) => {
 
 router.get("/thumbnailsWithinProject", async (req, res) => {
   try {
-    const { folderName, customerId } = req.query;
+    const { folderName, customerId, subFolderId, page = 1, limit = 10 } = req.query;
+        const pageNumber = parseInt(page);
+    const limitNumber = parseInt(limit);
+    const skip = (pageNumber - 1) * limitNumber;
 
     if (!folderName) {
       return res.status(400).json({
@@ -351,21 +354,31 @@ users.forEach(u => {
 
 
 const enrichedFolders = folders.map(folder => ({
-  ...folder,
-  guestDetails: (folder.viewedBy || []).map(id => userMap[id] || {
-    _id: id,
-    name: "Unknown User",
-    phone: "",
-    avatar: ""
-  })
+  // ...folder,
+  // guestDetails: (folder.viewedBy || []).map(id => userMap[id] || {
+  //   _id: id,
+  //   name: "Unknown User",
+  //   phone: "",
+  //   avatar: ""
+  // })
 }));
 
     const folderIds = folders.map((f) => f._id);
 
-    const images = await WebLink.find({
+     let query = {
       mainFolderId: { $in: folderIds },
-    })
+    };
+
+    if (subFolderId) {
+      query.folderIds = { $in: [subFolderId] };
+    }
+
+    const totalCount = await WebLink.countDocuments(query);
+
+    const images = await WebLink.find(query)
       .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNumber)
       .lean();
 
     const thumbnails = images.map((img) => ({
@@ -376,8 +389,14 @@ const enrichedFolders = folders.map(folder => ({
            4Final Response
         ========================= */
     res.status(200).json({
-      folders:enrichedFolders,
+      // folders:enrichedFolders,
       thumbnails,
+      pagination: {
+        currentPage: pageNumber,
+        totalPages: Math.ceil(totalCount / limitNumber),
+        totalItems: totalCount,
+        limit: limitNumber,
+      }
     });
   } catch (error) {
     console.error("Error fetching thumbnails:", error);

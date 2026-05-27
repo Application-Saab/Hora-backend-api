@@ -16,7 +16,7 @@ const eventInviteSchema = new mongoose.Schema(
     externalTemplateImageKey: { type: String },
     externalTemplateImageUrl: { type: String },
     googleMapLink: { type: String, default: "" },
-    fromInternational : { type: String, default: '' },
+    fromInternational: { type: String, default: "" },
     names: {
       one: {
         type: String,
@@ -24,6 +24,162 @@ const eventInviteSchema = new mongoose.Schema(
         trim: true,
       },
       two: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      three: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      four: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      five: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      six: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      seven: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      eight: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+    },
+    addresses: {
+      one: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      two: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      three: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      four: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      five: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      six: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      seven: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      eight: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+    },
+    dates: {
+      one: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      two: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      three: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      four: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      five: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      six: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      seven: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      eight: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+    },
+    times: {
+      one: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      two: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      three: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      four: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      five: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      six: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      seven: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      eight: {
         type: String,
         default: "",
         trim: true,

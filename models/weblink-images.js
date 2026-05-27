@@ -114,5 +114,6 @@ weblinkSchema.index(
   { driveFileId: 1, orderId: 1 },
   { unique: true }
 );
+weblinkSchema.index({ mainFolderId: 1, folderIds: 1, createdAt: -1 });
 
 module.exports = mongoose.model("weblinks", weblinkSchema);

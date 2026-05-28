@@ -20,6 +20,10 @@ const FolderSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    shareCapsuleCount: {
+      type: Number,
+      default: 0,
+    },
     customerId: {
       type: String,
       required: true,

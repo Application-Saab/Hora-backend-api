@@ -111,8 +111,13 @@ weblinkSchema.index({
   type: 1
 });
 weblinkSchema.index(
-  { driveFileId: 1, orderId: 1 },
-  { unique: true }
+  {
+    unique: true,
+    partialFilterExpression: {
+      driveFileId: { $ne: null },
+      orderId: { $ne: null }
+    }
+  }
 );
 weblinkSchema.index({ mainFolderId: 1, folderIds: 1, createdAt: -1 });
 

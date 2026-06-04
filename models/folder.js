@@ -38,6 +38,22 @@ const FolderSchema = new mongoose.Schema(
       type: String,
       ref: "orders",
     },
+    deviceTracking: [
+    {
+    userId: {
+      type: String,
+      index: true,
+    },
+    deviceType: {
+      type: String,
+      enum: ["ios", "android"],
+    },
+    trackedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+],
     subFolders: [
       {
         _id: {

@@ -11,11 +11,11 @@ const { s3, S3_BUCKET } = require("../utils/awsConfigs");
 const VenueImages = require("../models/venueImages");
 const {
   generateThumbnail,
+  generateTemplateThumbnail,
 } = require("../store/multerS3Config");
 
 const sendResponse = (res, status, error, message, data = null) =>
-res.status(status).json({ error, status, message, data });
-
+  res.status(status).json({ error, status, message, data });
 
 // =============================================
 // GET ALL VENUES (Party Hall List)
@@ -23,12 +23,7 @@ res.status(status).json({ error, status, message, data });
 // =============================================
 router.get("/venues-list", async (req, res) => {
   try {
-    const {
-      page = 1,
-      limit = 10,
-      search = "",
-      venueType = "",
-    } = req.query;
+    const { page = 1, limit = 10, search = "", venueType = "" } = req.query;
 
     const query = {};
 
@@ -48,7 +43,9 @@ router.get("/venues-list", async (req, res) => {
     const skip = (page - 1) * limit;
 
     const venues = await Venues.find(query)
-      .select("venueName venueType location googleMapLink createdAt")
+      .select(
+        "venueName venueType location googleMapLink createdAt venueImageUrl subFolders termsAndConditionsHtml",
+      )
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit))
@@ -77,58 +74,84 @@ router.get("/venues-list", async (req, res) => {
 // Creates a new party venue for a user
 // Validates userId and ensures user exists
 // =============================================
-router.post("/create-party-venue", async (req, res) => {
-  try {
-    const {
-      userId,
-      venueType,
-      venueName,
-      location,
-      googleMapLink
-    } = req.body;
+router.post(
+  "/create-party-venue",
+  (req, res, next) => {
+    uploadSingle(req, res, (err) => {
+      if (err) {
+        return sendResponse(res, 400, true, err.message);
+      }
 
-    console.log("API HIT");
+      next();
+    });
+  },
+  async (req, res) => {
+    try {
+      const { userId, venueType, venueName, location, googleMapLink } =
+        req.body;
 
-    // ✅ Validate userId
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return res.status(400).json({
-        message: "Invalid userId",
-        error: true
+      if (!mongoose.Types.ObjectId.isValid(userId)) {
+        return sendResponse(res, 400, true, "Invalid userId");
+      }
+
+      const user = await User.findById(userId);
+
+      if (!user) {
+        return sendResponse(res, 404, true, "Owner not found");
+      }
+
+      let venueImageUrl = "";
+      let venueImageKey = "";
+
+      const venue = await Venues.create({
+        userId,
+        venueType,
+        venueName,
+        location,
+        googleMapLink,
       });
+
+      if (req.file) {
+        const webpFileName = `venue-${Date.now()}.webp`;
+
+        const webpPath =
+          req.file.path.replace(/\.(png|jpeg|jpg)$/i, "") + ".webp";
+
+        await generateTemplateThumbnail(req.file.path, webpPath);
+
+        const uploadResult = await uploadImageToS3(
+          webpPath,
+          webpFileName,
+          userId,
+          venue._id,
+          "image/webp",
+          "venues",
+        );
+
+        venueImageUrl = uploadResult.Location;
+
+        venueImageKey = uploadResult.Key;
+
+        venue.venueImageUrl = venueImageUrl;
+
+        venue.venueImageKey = venueImageKey;
+
+        await venue.save();
+
+        await Promise.all([
+          deleteFileWithRetry(req.file.path),
+          deleteFileWithRetry(webpPath),
+        ]);
+      }
+
+      return sendResponse(res, 201, false, "Venue created successfully", venue);
+    } catch (err) {
+      console.log(err);
+
+      return sendResponse(res, 500, true, "Server error");
     }
-
-    const user = await User.findById(userId);
-
-    if (!user) {
-      return res.status(404).json({
-        message: "Owner not found",
-        error: true
-      });
-    }
-
-    const venue = await Venues.create({
-      userId,
-      venueType,
-      venueName,
-      location,
-      googleMapLink
-    });
-
-    return res.status(201).json({
-      message: "Venue created successfully",
-      error: false,
-      data: venue
-    });
-
-  } catch (err) {
-    console.error("Create Venue Error:", err);
-    return res.status(500).json({
-      message: "Server error",
-      error: true
-    });
-  }
-});
-
+  },
+);
 
 // =============================================
 // GET VENUE DETAILS
@@ -143,109 +166,166 @@ router.get("/venue-details/:id", async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         message: "Invalid venue ID",
-        error: true
+        error: true,
       });
     }
 
     // ✅ Fetch venue
     const venue = await Venues.findById(id)
       .select(
-        "userId venueType venueName location googleMapLink createdAt"
+        "userId venueType venueName location googleMapLink venueImageUrl subFolders createdAt termsAndConditionsHtml",
       )
       .lean();
 
     if (!venue) {
       return res.status(404).json({
         message: "Venue not found",
-        error: true
+        error: true,
       });
     }
 
     return res.status(200).json({
       message: "Venue fetched successfully",
       error: false,
-      data: venue
+      data: venue,
     });
-
   } catch (err) {
     console.error("Fetch Venue Error:", {
       message: err.message,
       stack: err.stack,
-      venueId: req.params.id
+      venueId: req.params.id,
     });
 
     return res.status(500).json({
       message: "Server error",
-      error: true
+      error: true,
     });
   }
 });
 
-
-// =============================================
-// UPDATE VENUE DETAILS
-// Updates venue fields (partial update allowed)
-// Only updates fields provided in request body
-// =============================================
-router.put("/venue-details/:id", async (req, res) => {
-  const { id } = req.params;
-
-  // ✅ Validate venue ID
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return res.status(400).json({
-      message: "Invalid venue ID",
-      error: true
-    });
-  }
-
+router.put("/update-terms/:id", async (req, res) => {
   try {
-    // ✅ Find existing venue
-    const existing = await Venues.findById(id);
+    const { id } = req.params;
 
-    if (!existing) {
+    const { termsAndConditionsHtml } = req.body;
+
+    const venue = await Venues.findById(id);
+
+    if (!venue) {
       return res.status(404).json({
+        error: true,
         message: "Venue not found",
-        error: true
       });
     }
 
-    const {
-      venueName,
-      venueType,
-      location,
-      googleMapLink
-    } = req.body;
+    venue.termsAndConditionsHtml = termsAndConditionsHtml;
 
-    // ✅ Update only provided fields (partial update)
-    if (venueName !== undefined) existing.venueName = venueName;
-    if (venueType !== undefined) existing.venueType = venueType;
-    if (location !== undefined) existing.location = location;
-    if (googleMapLink !== undefined) existing.googleMapLink = googleMapLink;
-
-    // ✅ Save updated document
-    const updated = await existing.save();
+    await venue.save();
 
     return res.status(200).json({
-      message: "Venue updated successfully",
       error: false,
-      data: updated
+      message: "Terms updated successfully",
     });
-
   } catch (err) {
-    console.error("Update Venue Error:", {
-      message: err.message,
-      stack: err.stack,
-      requestBody: req.body,
-      venueId: id
-    });
+    console.log(err);
 
     return res.status(500).json({
-      message: "Server error",
-      error: true
+      error: true,
+      message: "Server Error",
     });
   }
 });
 
+// Update Venue Banner Image
+router.put(
+  "/venue-banner-image/:venueId",
+  (req, res, next) => {
+    uploadSingle(req, res, (err) => {
+      if (err) {
+        return sendResponse(res, 400, true, err.message);
+      }
+
+      next();
+    });
+  },
+  async (req, res) => {
+    try {
+      const { venueId } = req.params;
+
+      const { userId } = req.body;
+
+      if (!mongoose.Types.ObjectId.isValid(venueId)) {
+        return sendResponse(res, 400, true, "Invalid venueId");
+      }
+
+      const venue = await Venues.findById(venueId);
+
+      if (!venue) {
+        return sendResponse(res, 404, true, "Venue not found");
+      }
+
+      if (!req.file && req.body.clearImage !== "true") {
+        return sendResponse(res, 400, true, "Image required");
+      }
+
+      if (req.file) {
+        if (venue.venueImageKey) {
+          await deleteFromS3(venue.venueImageKey);
+        }
+
+        const webpFileName = `venue-${Date.now()}.webp`;
+
+        const webpPath =
+          req.file.path.replace(/\.(png|jpeg|jpg)$/i, "") + ".webp";
+
+        await generateTemplateThumbnail(req.file.path, webpPath);
+
+        const uploadResult = await uploadImageToS3(
+          webpPath,
+          webpFileName,
+          userId,
+          venueId,
+          "image/webp",
+          "venues",
+        );
+
+        venue.venueImageUrl = uploadResult.Location;
+
+        venue.venueImageKey = uploadResult.Key;
+
+        await venue.save();
+
+        await Promise.all([
+          deleteFileWithRetry(req.file.path),
+          deleteFileWithRetry(webpPath),
+        ]);
+      }
+
+      if (req.body.clearImage === "true") {
+        if (venue.venueImageKey) {
+          await deleteFromS3(venue.venueImageKey);
+
+          venue.venueImageUrl = "";
+          venue.venueImageKey = "";
+
+          await venue.save();
+        }
+      }
+
+      return sendResponse(
+        res,
+        200,
+        false,
+        "Venue image updated successfully",
+        venue,
+      );
+    } catch (err) {
+      console.log(err);
+
+      return sendResponse(res, 500, true, "Server error");
+    }
+  },
+);
 
 // =============================================
 // REGISTER VENUE VISITOR
@@ -263,27 +343,27 @@ router.post("/venue-visitor", async (req, res) => {
     ) {
       return res.status(400).json({
         message: "Invalid userId or venueId",
-        error: true
+        error: true,
       });
     }
 
     // ✅ Check duplicate
     const existingVisitor = await VenueVisitors.findOne({
       userId,
-      venueId
+      venueId,
     }).lean();
 
     if (existingVisitor) {
       return res.status(409).json({
         message: "User already visited this venue",
-        error: true
+        error: true,
       });
     }
 
     // ✅ Create new visitor
     const visitor = new VenueVisitors({
       userId,
-      venueId
+      venueId,
     });
 
     const savedVisitor = await visitor.save();
@@ -291,23 +371,21 @@ router.post("/venue-visitor", async (req, res) => {
     return res.status(201).json({
       message: "Venue visitor registered",
       error: false,
-      data: savedVisitor
+      data: savedVisitor,
     });
-
   } catch (err) {
     console.error("Create Venue Visitor Error:", {
       message: err.message,
       stack: err.stack,
-      requestBody: req.body
+      requestBody: req.body,
     });
 
     return res.status(500).json({
       message: "Server error",
-      error: true
+      error: true,
     });
   }
-});  
-
+});
 
 // =============================================
 // GET ALL VISITORS OF A VENUE
@@ -362,14 +440,13 @@ router.get("/venue-visitors/all/:venueId", async (req, res) => {
       200,
       false,
       "Venue visitors fetched successfully",
-      visitors || []
+      visitors || [],
     );
   } catch (err) {
     console.error("Fetch Venue Visitors Error:", err);
     return sendResponse(res, 500, true, "Server error");
   }
 });
-
 
 const storage = multer.diskStorage({
   destination: "./uploads/",
@@ -383,6 +460,28 @@ const uploadSingle = multer({
   limits: { fileSize: 100 * 1024 * 1024 },
 }).single("image");
 
+const deleteFileWithRetry = async (filePath, retries = 3, delay = 100) => {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      await fs.unlinkSync(filePath);
+      console.log(`Successfully deleted file: ${filePath}`);
+      return;
+    } catch (err) {
+      console.error(
+        `Attempt ${attempt} to delete file ${filePath} failed:`,
+        err.message,
+      );
+      if (attempt === retries) {
+        console.error(
+          `Failed to delete file ${filePath} after ${retries} attempts`,
+        );
+        return; // Don't throw error to avoid interrupting the response
+      }
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+};
+
 // =============================================
 // UPLOAD IMAGE TO S3 HELPER
 // Uploads file to AWS S3
@@ -395,7 +494,7 @@ const uploadImageToS3 = async (
   venueId,
   mimeType,
   folderId = null, // ✅ NEW
-  folderName = "venue-images"
+  folderName = "venue-images",
 ) => {
   const params = {
     Bucket: S3_BUCKET,
@@ -409,6 +508,107 @@ const uploadImageToS3 = async (
 
   return await s3.upload(params).promise();
 };
+
+// Helper: Delete image from S3
+async function deleteFromS3(key) {
+  if (!key) return;
+  const params = {
+    Bucket: S3_BUCKET,
+    Key: key,
+  };
+  await s3.deleteObject(params).promise();
+}
+
+// Update venue details
+router.put(
+  "/venue-details/:id",
+  (req, res, next) => {
+    uploadSingle(req, res, (err) => {
+      if (err) {
+        return sendResponse(res, 400, true, err.message);
+      }
+
+      next();
+    });
+  },
+  async (req, res) => {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        message: "Invalid venue ID",
+        error: true,
+      });
+    }
+
+    try {
+      const existing = await Venues.findById(id);
+
+      if (!existing) {
+        return res.status(404).json({
+          message: "Venue not found",
+          error: true,
+        });
+      }
+
+      const { venueName, venueType, location, googleMapLink } = req.body;
+
+      if (venueName !== undefined) existing.venueName = venueName;
+
+      if (venueType !== undefined) existing.venueType = venueType;
+
+      if (location !== undefined) existing.location = location;
+
+      if (googleMapLink !== undefined) existing.googleMapLink = googleMapLink;
+
+      // IMAGE UPDATE
+      if (req.file) {
+        if (existing.venueImageKey) {
+          await deleteFromS3(existing.venueImageKey);
+        }
+
+        const webpFileName = `venue-${Date.now()}.webp`;
+
+        const webpPath =
+          req.file.path.replace(/\.(png|jpg|jpeg)$/i, "") + ".webp";
+
+        await generateTemplateThumbnail(req.file.path, webpPath);
+
+        const uploadResult = await uploadImageToS3(
+          webpPath,
+          webpFileName,
+          existing.userId.toString(),
+          id,
+          "image/webp",
+          "venues",
+        );
+
+        existing.venueImageUrl = uploadResult.Location;
+
+        existing.venueImageKey = uploadResult.Key;
+
+        await deleteFileWithRetry(req.file.path);
+
+        await deleteFileWithRetry(webpPath);
+      }
+
+      const updated = await existing.save();
+
+      return res.status(200).json({
+        message: "Venue updated successfully",
+        error: false,
+        data: updated,
+      });
+    } catch (err) {
+      console.error("Update Venue Error:", err);
+
+      return res.status(500).json({
+        message: "Server error",
+        error: true,
+      });
+    }
+  },
+);
 
 // =============================================
 // UPLOAD VENUE IMAGE (WITH THUMBNAIL)
@@ -459,7 +659,7 @@ router.post(
           userId,
           venueId,
           file.mimetype,
-          folderId // ✅ NEW
+          folderId, // ✅ NEW
         );
 
         // Upload thumbnail
@@ -469,9 +669,8 @@ router.post(
           userId,
           venueId,
           "image/webp",
-           folderId // ✅ NEW
+          folderId, // ✅ NEW
         );
-
       } finally {
         // Cleanup local files
         for (const p of [filePath, thumbPath]) {
@@ -489,25 +688,29 @@ router.post(
         imageKey: uploadResult.Key,
         thumbnailUrl: thumbUpload.Location,
         thumbnailKey: thumbUpload.Key,
-       folderIds: folderId ? [folderId] : [],
+        folderIds: folderId ? [folderId] : [],
         uploadedBy: userId,
       };
 
       const updated = await VenueImages.findOneAndUpdate(
         { venueId },
         { $push: { images: imageData } },
-        { new: true, upsert: true }
+        { new: true, upsert: true },
       );
 
-      return sendResponse(res, 201, false, "Image uploaded successfully", imageData);
-
+      return sendResponse(
+        res,
+        201,
+        false,
+        "Image uploaded successfully",
+        imageData,
+      );
     } catch (err) {
       console.error("Processed Upload Error:", err);
       return sendResponse(res, 500, true, "Server error");
     }
-  }
+  },
 );
-
 
 // =============================================
 // GET ALL IMAGES OF A VENUE
@@ -549,7 +752,7 @@ router.post("/venue-folder/:venueId", async (req, res) => {
     if (!venue) {
       return res.status(404).json({ message: "Venue not found" });
     }
-     // ✅ VALIDATE NAME
+    // ✅ VALIDATE NAME
     if (!folderName || !folderName.trim()) {
       return res.status(400).json({
         message: "Folder name is required",
@@ -577,7 +780,6 @@ router.post("/venue-folder/:venueId", async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
-
 
 // =============================================
 // GET IMAGES BY FOLDER
@@ -610,31 +812,23 @@ router.get("/venue-images/:venueId/folder/:folderId", async (req, res) => {
 
     // ✅ Filter by folderId
     const filtered =
-      data.images.filter(
-    (img) =>
-  img.folderIds?.some(
-    (id) => id.toString() === folderId
-  )
+      data.images.filter((img) =>
+        img.folderIds?.some((id) => id.toString() === folderId),
       ) || [];
 
     // ✅ 👉 SORT (latest first)
-    const sorted = filtered.sort(
-      (a, b) => b.createdAt - a.createdAt
-    );
+    const sorted = filtered.sort((a, b) => b.createdAt - a.createdAt);
 
     // ✅ Response
     return res.status(200).json({
       message: "Folder images fetched successfully",
       images: sorted,
     });
-
   } catch (err) {
     console.error("Fetch folder images error:", err);
     return res.status(500).json({ message: "Server error" });
   }
 });
-
-
 
 // Rename FOlder
 router.put("/venue-folder/rename/:venueId/:folderId", async (req, res) => {
@@ -671,7 +865,7 @@ router.get("/venue-folders/:venueId", async (req, res) => {
 
   const folders = venue.subFolders.map((folder) => {
     const count = images.filter((img) =>
-      img.folderIds?.some((id) => id.toString() === folder._id.toString())
+      img.folderIds?.some((id) => id.toString() === folder._id.toString()),
     ).length;
 
     return {
@@ -682,7 +876,6 @@ router.get("/venue-folders/:venueId", async (req, res) => {
 
   res.json(folders);
 });
-
 
 // =============================================
 // ASSIGN / REMOVE IMAGES TO/FROM FOLDER
@@ -710,7 +903,7 @@ router.put("/assign-to-subfolder", async (req, res) => {
         },
         {
           arrayFilters: [{ "elem._id": { $in: addImageIds } }],
-        }
+        },
       );
     }
 
@@ -725,7 +918,7 @@ router.put("/assign-to-subfolder", async (req, res) => {
         },
         {
           arrayFilters: [{ "elem._id": { $in: removeImageIds } }],
-        }
+        },
       );
     }
 
@@ -739,6 +932,5 @@ router.put("/assign-to-subfolder", async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
-
 
 module.exports = router;

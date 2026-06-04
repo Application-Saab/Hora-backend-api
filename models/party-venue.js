@@ -12,7 +12,19 @@ const venueSchema = new mongoose.Schema(
     venueName: { type: String, default: "" },
     location: { type: String, default: "" },
     googleMapLink: { type: String, default: "" },
+    venueImageUrl: {
+      type: String,
+      default: "",
+    },
 
+    venueImageKey: {
+      type: String,
+      default: "",
+    },
+    termsAndConditionsHtml: {
+      type: String,
+      default: "",
+    },
     subFolders: [
       {
         // ❌ REMOVED manual _id → Mongo will auto create ObjectId
@@ -56,7 +68,7 @@ const venueSchema = new mongoose.Schema(
   {
     strict: false,
     timestamps: true,
-  }
+  },
 );
 
 module.exports = mongoose.model("Venues", venueSchema);

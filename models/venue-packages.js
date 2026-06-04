@@ -1,22 +1,51 @@
 const mongoose = require("mongoose");
 
-const venueSchema = new mongoose.Schema(
+const venuePackagesSchema = new mongoose.Schema(
   {
-    userId: {
+    venueId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Users",
+      ref: "Venues",
       required: true,
     },
+    title: { type: String, trim: true, required: true },
+    subTitle: { type: String, trim: true, required: true },
+    discountedPrice: { type: Number, default: 0, min: 0 },
+    actualPrice: { type: Number, min: 0, required: true },
+    maxGuests: { type: Number, default: 0, min: 0 },
+    tag: { type: String, default: "", trim: true },
+    packageImageUrl: {
+      type: String,
+      default: "",
+    },
 
-    venueType: { type: String, default: "" },
-    venueName: { type: String, default: "" },
-    location: { type: String, default: "" },
-    googleMapLink: { type: String, default: "" },
+    packageImageKey: {
+      type: String,
+      default: "",
+    },
+    packageItems: {
+      type: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "venue-package-items",
+        },
+      ],
+      default: [],
+    },
+    packageAddons: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
+    packageStatus: {
+      type: Number,
+      enum: [1, 2, 3],
+      default: 1,
+    } /* 1-active 2-inactive 3-delete  */,
   },
   {
-    strict: false,
     timestamps: true,
-  }
+  },
 );
 
-module.exports = mongoose.model("Venues", venueSchema);
+module.exports = mongoose.model("venue-packages", venuePackagesSchema);

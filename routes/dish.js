@@ -132,56 +132,9 @@ router.post("/add", async (req, res) => {
     const cuisineId = req.body?.cuisineId?.[0];
 
     // ------------------------------------
-    // CASE 1: DECORATION
-    // ------------------------------------
-    if (cuisineId === "65a2c9d3513d9389d34e2ec9") {
-      const data = new decorationModel({
-        name: req.body.name,
-        short_link: "",
-        featured_image: req.body.image,
-        caption: req.body.description,
-        badge: null,
-        price: req.body.dish_rate,
-        cost_price: req.body.price,
-        type: null,
-        is_wishlisted: null,
-        ratings: null,
-        attributes: null,
-        inclusion: req.body.preperationtext,
-        tag: req.body.mealId,
-        vendorMaterialPrice: req.body.vendorMaterialPrice,
-        executionPrice: req.body.executionPrice,
-        horaAdvance: req.body.horaAdvance,
-        inclusionVariables: req.body.inclusionVariables,
-      });
-
-      // Check existing
-      const existing = await decorationModel.findOne({
-        name: data.name,
-        type: data.type,
-      });
-
-      if (existing) {
-        return res.json({
-          error: true,
-          status: 503,
-          message: "Decoration already added.",
-        });
-      }
-
-      const savedData = await data.save();
-      return res.json({
-        error: false,
-        status: 200,
-        message: "Decoration added successfully.",
-        data: savedData,
-      });
-    }
-
-    // ------------------------------------
     // CASE 2: PHOTOGRAPHY
     // ------------------------------------
-    else if (cuisineId === "66c96b2a22ed47b72117e089") {
+    if (cuisineId === "66c96b2a22ed47b72117e089") {
       const data = new photographyModel({
         name: req.body.name,
         short_link: "",

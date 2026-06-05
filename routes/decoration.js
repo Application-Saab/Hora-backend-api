@@ -566,6 +566,7 @@ router.get("/searchByTag/v2/:tag", async (req, res) => {
                 name: 1,
                 short_link: 1,
                 featured_image: 1,
+                featured_images: 1,
                 price: 1,
                 cost_price: 1,
                 ratings: 1,

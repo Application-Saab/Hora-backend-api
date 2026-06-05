@@ -19,25 +19,12 @@ const decorationSchema = new mongoose.Schema(
     featured_images: [
       {
         fileName: String,
-        url: String, // optional (future CDN use)
         createdAt: {
           type: Date,
           default: Date.now,
         },
       },
     ],
-    // featured_images: {
-    //   url: String,
-    //   caption: String,
-    //   small: String,
-    //   webp_small: String,
-    //   thumbnail: String,
-    //   large: String,
-    //   original: String,
-    //   webp_thumbnail: String,
-    //   webp_large: String,
-    //   webp_original: String,
-    // },
     badge: String,
     price: {
       type: String,

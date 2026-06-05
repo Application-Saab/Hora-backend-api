@@ -53,7 +53,7 @@ router.post(
 
       const outputFolder = path.resolve(
         __dirname,
-        "../uploads/compressed_webp"
+        "../uploads/compressed_webp",
       );
 
       if (!fs.existsSync(outputFolder)) {
@@ -88,10 +88,25 @@ router.post(
 
       const data = new decorationModel({
         name: req.body.name,
-        featured_images: images,   // 👈 MAIN CHANGE
+        short_link: "",
+        featured_images: images, // 👈 MAIN CHANGE
         caption: req.body.description || "",
+        badge: null,
         price: req.body.dish_rate || 0,
+        cost_price: req.body.price,
+        type: null,
+        is_wishlisted: null,
+        ratings: null,
+        attributes: null,
+        inclusion: req.body.preperationtext,
         tag: req.body.mealId ? JSON.parse(req.body.mealId) : [],
+        vendorMaterialPrice: req.body.vendorMaterialPrice,
+        executionPrice: req.body.executionPrice,
+        horaAdvance: req.body.horaAdvance,
+        inclusionVariables:
+          typeof req.body.inclusionVariables === "string"
+            ? JSON.parse(req.body.inclusionVariables)
+            : req.body.inclusionVariables,
       });
 
       const saved = await data.save();
@@ -109,7 +124,7 @@ router.post(
         message: err.message,
       });
     }
-  }
+  },
 );
 
 router.post("/add", async (req, res) => {

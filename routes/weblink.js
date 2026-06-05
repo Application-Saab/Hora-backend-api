@@ -155,6 +155,36 @@ router.get("/capsule-tracking", async (req, res) => {
           }
         },
 
+{
+  $addFields: {
+    firstDeviceType: {
+      $arrayElemAt: [
+        {
+          $map: {
+            input: { $ifNull: ["$folder.deviceTracking", []] },
+            as: "d",
+            in: "$$d.deviceType"
+          }
+        },
+        0
+      ]
+    },
+
+    secondDeviceType: {
+      $arrayElemAt: [
+        {
+          $map: {
+            input: { $ifNull: ["$folder.deviceTracking", []] },
+            as: "d",
+            in: "$$d.deviceType"
+          }
+        },
+        1
+      ]
+    }
+  }
+},
+
         // Weblinks Lookup
         {
           $lookup: {
@@ -274,7 +304,10 @@ router.get("/capsule-tracking", async (req, res) => {
               faceRecognitionCount: "$faceRecognitionCount",
               otherSubFoldersCount: "$otherSubFoldersCount",
               totalViews: "$totalViews",
-              totalClicks: "$totalClicks"
+              totalClicks: "$totalClicks",
+
+              firstDeviceType: "$firstDeviceType",
+              secondDeviceType: "$secondDeviceType"
             }
           }
         }
@@ -813,6 +846,61 @@ finalUsers.sort((a, b) => {
 
     });
 
+  }
+});
+
+router.post("/track-device", async (req, res) => {
+  try {
+    const { mainFolderId, userId, deviceType } = req.body;
+
+    if (!mainFolderId || !userId || !deviceType) {
+      return res.status(400).json({
+        success: false,
+        message: "mainFolderId, userId and deviceType are required",
+      });
+    }
+
+    const folder = await Folder.findById(mainFolderId);
+
+    if (!folder) {
+      return res.status(404).json({
+        success: false,
+        message: "Folder not found",
+      });
+    }
+
+    // Same user ko duplicate save nahi karna
+    const alreadyTracked = folder.deviceTracking?.some(
+      (item) => item.userId === userId
+    );
+
+    if (!alreadyTracked) {
+      await Folder.findByIdAndUpdate(
+        mainFolderId,
+        {
+          $push: {
+            deviceTracking: {
+              userId,
+              deviceType,
+            },
+          },
+        },
+        { new: true }
+      );
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: alreadyTracked
+        ? "Device already tracked"
+        : "Device tracked successfully",
+    });
+  } catch (error) {
+    console.error("Track Device Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server Error",
+    });
   }
 });
 

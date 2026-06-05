@@ -51,15 +51,35 @@ const orderSchema = new mongoose.Schema({
     eventName : { type: String, default: '' },
     call_checklist: {type: Object, default: {}},
     call_checklist_exists: {type: Boolean, default: false},
+    orderDriveLink: {type: String, default:""},
+    orderWebLink: {type:String, default:""},
     imageUploadCounts: {
     totalFromDrive: { type: Number, default: 0 },
     totalWeblink: { type: Number, default: 0 },
-    driveProvidedAt: {type:Date, default: ''},
-    AllImagesUploadedAt:{type:Date, default: ''},
+    driveProvidedAt: {type:Date},
+    AllImagesUploadedAt:{type:Date},
     },
 }, {
     strict: false,
     timestamps: true
+});
+
+orderSchema.index({
+  type: 1,
+  orderWebLink: 1,
+  "imageUploadCounts.driveProvidedAt": -1
+});
+
+orderSchema.index({
+  type: 1,
+  orderWebLink: 1,
+  fromId: 1
+});
+
+orderSchema.index({
+  type: 1,
+  orderWebLink: 1,
+  createdAt: -1
 });
 
 module.exports = mongoose.model('order', orderSchema)

@@ -84,7 +84,12 @@ router.post("/otp_generate_backup", async (req, res) => {
 });
 
 router.post("/otp_generate", async (req, res) => {
-  const { phone } = req.body;
+  const {
+    phone,
+    fromCapsule = false,
+    fromWonderland,
+    fromWonderlandInternational,
+  } = req.body;
 
   if (!phone) {
     return res.json({
@@ -110,11 +115,14 @@ router.post("/otp_generate", async (req, res) => {
       await UserModel.findByIdAndUpdate(user._id, { $set: update });
 
       // Send OTP via SMS using Fast2SMS API (with Axios)
-      const smsUrl = `https://www.fast2sms.com/dev/bulkV2?authorization=${process.env.FAST2SMS_API_KEY}&route=dlt&sender_id=HORASR&message=207805&variables_values=${otp}|${otp}&numbers=${phone}`;
-      try {
-        await axios.get(smsUrl); // Send OTP SMS
-      } catch (smsError) {
-        console.error("Error sending OTP SMS:", smsError);
+      if (fromWonderlandInternational !== true) {
+        const smsUrl = `https://www.fast2sms.com/dev/bulkV2?authorization=${process.env.FAST2SMS_API_KEY}&route=dlt&sender_id=HORASR&message=207805&variables_values=${otp}|${otp}&numbers=${phone}`;
+        try {
+          console.log('Sending OTP');
+          await axios.get(smsUrl); // Send OTP SMS
+        } catch (smsError) {
+          console.error("Error sending OTP SMS:", smsError);
+        }
       }
 
       return res.json({
@@ -157,15 +165,19 @@ router.post("/otp_generate", async (req, res) => {
         is_veg: true,
         isPersonalStatus: 0,
         isProfessionStatus: 0,
+        fromCapsule: fromCapsule,
+        fromWonderland: fromWonderland || false,
+        fromWonderlandInternational: fromWonderlandInternational || false,
       });
 
       // Send OTP via SMS for new user
-      const newSmsUrl = `https://www.fast2sms.com/dev/bulkV2?authorization=${process.env.FAST2SMS_API_KEY}&route=dlt&sender_id=HORASR&message=207805&variables_values=${otp}|${otp}&numbers=${phone}`;
-
-      try {
-        await axios.get(newSmsUrl); // Send OTP SMS
-      } catch (smsError) {
-        console.log("error>>>>>>>>>>>22222222222222", smsError);
+      if (fromWonderlandInternational !== true) {
+        const newSmsUrl = `https://www.fast2sms.com/dev/bulkV2?authorization=${process.env.FAST2SMS_API_KEY}&route=dlt&sender_id=HORASR&message=207805&variables_values=${otp}|${otp}&numbers=${phone}`;
+        try {
+          await axios.get(newSmsUrl); // Send OTP SMS
+        } catch (smsError) {
+          console.log("error>>>>>>>>>>>22222222222222", smsError);
+        }
       }
 
       // Save new user to the database
@@ -188,6 +200,7 @@ router.post("/otp_generate", async (req, res) => {
 
 router.post("/otp_verify", async (req, res) => {
   const { phone, otp, role } = req.body;
+
   if (!phone) {
     return res.json({
       error: true,
@@ -195,13 +208,7 @@ router.post("/otp_verify", async (req, res) => {
       data: [{ path: "phone", message: "Phone is required." }],
     });
   }
-  if (!otp) {
-    return res.json({
-      error: true,
-      status: 422,
-      data: [{ path: "otp", message: "OTP is required." }],
-    });
-  }
+
   if (!role) {
     return res.json({
       error: true,
@@ -213,79 +220,146 @@ router.post("/otp_verify", async (req, res) => {
   try {
     const user = await UserModel.findOne({ phone });
 
+    // User not found
+    if (!user) {
+      return res.status(404).json({
+        error: true,
+        status: 404,
+        message: "User not found",
+      });
+    }
+
+    // Skip OTP verification
+    // For Wonderland International users
+    if (user?.fromWonderlandInternational === true) {
+      if (role !== user.role) {
+        return res.status(503).json({
+          error: true,
+          status: 503,
+          message: `The number is already used for ${commonFunction.capitalizeFirstLetter(
+            user.role,
+          )} login. Please use a different number.`,
+        });
+      }
+
+      // Check account blocked
+      if (user.status === 0 && user.role !== "supplier") {
+        return res.status(503).json({
+          error: true,
+          status: 503,
+          message: "Account Blocked",
+        });
+      }
+
+      // Check deleted account
+      if (user.status === 2) {
+        return res.status(503).json({
+          error: true,
+          status: 503,
+          message: "Account Deleted",
+        });
+      }
+
+      return res.status(200).json({
+        error: false,
+        status: 200,
+        data: user,
+        token: passportAuth.signToken(user),
+        message: "Login successful",
+      });
+    }
+
+    // OTP required for normal users
+    if (!otp) {
+      return res.json({
+        error: true,
+        status: 422,
+        data: [{ path: "otp", message: "OTP is required." }],
+      });
+    }
+
+    // MASTER OTP
     if (otp === "1234") {
       if (role !== user.role) {
         return res.status(503).json({
           error: true,
           status: 503,
-          message: `The number is already used for ${commonFunction.capitalizeFirstLetter(user.role)} login. Please use a different number.`,
+          message: `The number is already used for ${commonFunction.capitalizeFirstLetter(
+            user.role,
+          )} login. Please use a different number.`,
         });
       }
 
-      if (user.status === 2) {
-        return res
-          .status(503)
-          .json({ error: true, status: 503, message: "Account Deleted" });
-      }
-
-      // Check account status
+      // Check blocked account
       if (user.status === 0 && user.role !== "supplier") {
-        return res
-          .status(503)
-          .json({ error: true, status: 503, message: "Account Blocked" });
-      }
-      if (user.status === 2) {
-        return res
-          .status(503)
-          .json({ error: true, status: 503, message: "Account Deleted" });
-      }
-
-      return res.status(200).json({
-        error: false,
-        status: 200,
-        data: user,
-        token: passportAuth.signToken(user), // Generate token for the user
-      });
-    } else {
-      if (otp !== user.otp) {
-        return res
-          .status(503)
-          .json({ error: true, status: 503, message: "OTP Mismatch" });
-      }
-
-      if (role !== user.role) {
         return res.status(503).json({
           error: true,
           status: 503,
-          message: `The number is already used for ${commonFunction.capitalizeFirstLetter(user.role)} login. Please use a different number.`,
+          message: "Account Blocked",
         });
       }
 
-      // Check account status
-      if (user.status === 0 && user.role !== "supplier") {
-        return res
-          .status(503)
-          .json({ error: true, status: 503, message: "Account Blocked" });
-      }
-
+      // Check deleted account
       if (user.status === 2) {
-        return res
-          .status(503)
-          .json({ error: true, status: 503, message: "Account Deleted" });
-      }
-      if (user.status === 2) {
-        return res
-          .status(503)
-          .json({ error: true, status: 503, message: "Account Deleted" });
+        return res.status(503).json({
+          error: true,
+          status: 503,
+          message: "Account Deleted",
+        });
       }
 
       return res.status(200).json({
         error: false,
         status: 200,
         data: user,
-        token: passportAuth.signToken(user), // Generate token for the user
+        token: passportAuth.signToken(user),
       });
     }
+    // NORMAL OTP VALIDATION
+    if (otp !== user.otp) {
+      return res.status(503).json({
+        error: true,
+        status: 503,
+        message: "OTP Mismatch",
+      });
+    }
+
+    // Role validation
+    if (role !== user.role) {
+      return res.status(503).json({
+        error: true,
+        status: 503,
+        message: `The number is already used for ${commonFunction.capitalizeFirstLetter(
+          user.role,
+        )} login. Please use a different number.`,
+      });
+    }
+
+    // Check blocked account
+    if (user.status === 0 && user.role !== "supplier") {
+      return res.status(503).json({
+        error: true,
+        status: 503,
+        message: "Account Blocked",
+      });
+    }
+
+    // Check deleted account
+    if (user.status === 2) {
+      return res.status(503).json({
+        error: true,
+        status: 503,
+        message: "Account Deleted",
+      });
+    }
+
+    // Success login
+    return res.status(200).json({
+      error: false,
+      status: 200,
+      data: user,
+      token: passportAuth.signToken(user),
+    });
   } catch (error) {
     return res.status(400).json({
       message: error.message,
@@ -370,12 +444,35 @@ const sendResponse = (res, status, error, message, data = null) =>
   res.status(status).json({ error, status, message, data });
 
 //  Get user details by ID
+//  Get user details by phone
 router.get("/user-details-by-phone/:phone", async (req, res) => {
   try {
+
     const { phone } = req.params;
 
-    if (phone.length < 10) {
-      return sendResponse(res, 400, true, "Invalid phone number");
+    // query param
+    const { isWonderlandInternational } = req.query;
+    const isInternational =
+      isWonderlandInternational === "true";
+
+    // NORMAL FLOW VALIDATION
+    if (!isInternational && phone.length < 10) {
+      return sendResponse(
+        res,
+        400,
+        true,
+        "Invalid phone number"
+      );
+    }
+    
+    // INTERNATIONAL FLOW VALIDATION
+    if (isInternational && phone.length < 4) {
+      return sendResponse(
+        res,
+        400,
+        true,
+        "Invalid phone number"
+      );
     }
 
     const user = await UserModel.findOne({ phone })
@@ -383,13 +480,33 @@ router.get("/user-details-by-phone/:phone", async (req, res) => {
       .lean();
 
     if (!user) {
-      return sendResponse(res, 200, false, 'User not found', null);
+      return sendResponse(
+        res,
+        200,
+        false,
+        "User not found",
+        null
+      );
     }
 
-    return sendResponse(res, 200, false, "User fetched successfully", user);
+    return sendResponse(
+      res,
+      200,
+      false,
+      "User fetched successfully",
+      user
+    );
+
   } catch (err) {
+
     console.error("Fetch user error:", err.message);
-    return sendResponse(res, 500, true, "Server error");
+
+    return sendResponse(
+      res,
+      500,
+      true,
+      "Server error"
+    );
   }
 });
 

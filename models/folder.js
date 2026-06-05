@@ -11,6 +11,15 @@ const FolderSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    viewedBy: {
+      type: [String], // userIds
+      default: [],
+      index: true
+    },
+    clickCount: {
+      type: Number,
+      default: 0
+    },
     customerId: {
       type: String,
       required: true,
@@ -28,8 +37,23 @@ const FolderSchema = new mongoose.Schema(
     orderId: {
       type: String,
       ref: "orders",
+    },
+    deviceTracking: [
+    {
+    userId: {
+      type: String,
       index: true,
     },
+    deviceType: {
+      type: String,
+      enum: ["ios", "android"],
+    },
+    trackedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+],
     subFolders: [
       {
         _id: {
@@ -52,8 +76,8 @@ const FolderSchema = new mongoose.Schema(
           index: true,
         },
        folderDp: {
-  fileUrl: { type: String, required: true },
-  thumbnailUrl: { type: String, required: true },
+  fileUrl: { type: String },
+  thumbnailUrl: { type: String },
   s3Key: { type: String },
   thumbnailKey: { type: String }
 },
@@ -77,6 +101,7 @@ FolderSchema.index(
     }
   }
 );
+FolderSchema.index({ orderId: 1 }, { unique: true });
 
 
 module.exports = mongoose.model("Folder", FolderSchema);

@@ -5,12 +5,15 @@ const Joi = require("joi");
 const EventInvite = require("../models/event-invite");
 const EventGuest = require("../models/event-guest");
 const TicketCounter = require("../models/ticket-counter-luckydraw");
-const EventImages = require("../models/eventImages");
 const EventMessage = require("../models/eventMessage");
 const multer = require("multer");
 const fs = require("fs");
+const path = require("path");
 
-const { generateTemplateThumbnail } = require("../store/multerS3Config");
+const {
+  generateTemplateThumbnail,
+  generateThumbnail,
+} = require("../store/multerS3Config");
 const eventPosts = require("../models/event-posts");
 const postLikes = require("../models/post-likes");
 const postComment = require("../models/post-comment");
@@ -19,6 +22,7 @@ const User = require("../models/user");
 const { s3, S3_BUCKET } = require("../utils/awsConfigs");
 const { getIO } = require("../socket");
 const { CustomResponse } = require("../store/commonFunction");
+const generateUniqueShortCode = require("../utils/generateUniqueShortCode");
 
 // Helper: Delete image from S3
 async function deleteFromS3(key) {
@@ -59,8 +63,10 @@ const sendResponse = (res, status, error, message, data = null) =>
   res.status(status).json({ error, status, message, data });
 
 // Combined route: Create event + register host as guest + create new room
-// Updated
+
 router.post("/create-event-invite", async (req, res) => {
+  let room = null;
+
   try {
     const {
       userId,
@@ -70,19 +76,29 @@ router.post("/create-event-invite", async (req, res) => {
       eventTime,
       location,
       googleMapLink,
+      fromInternational
     } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       return sendResponse(res, 400, true, "Invalid userId");
     }
 
+    // Generate unique short code
+    const shortCode = await generateUniqueShortCode();
+
     // Parallel Fetch
     const [user, counter] = await Promise.all([
       User.findById(userId),
+
       TicketCounter.findOneAndUpdate(
         { _id: "wonderland_event_id" },
+
         { $inc: { sequenceValue: 1 } },
-        { new: true, upsert: true },
+
+        {
+          new: true,
+          upsert: true,
+        },
       ),
     ]);
 
@@ -90,78 +106,123 @@ router.post("/create-event-invite", async (req, res) => {
       return sendResponse(res, 404, true, "User not found");
     }
 
-    // User name logic
-    if (!user.name && hostName) {
-      user.name = hostName;
-      await user.save();
-    }
+    // Save user name if missing
+    // if (!user.name && hostName) {
+    //   user.name = hostName;
+    //   await user.save();
+    // }
 
-    const finalUserName = user.name || hostName || "";
+    const finalUserName = user.name || "";
 
     // Create event invite
     const event = await EventInvite.create({
       userId,
       eventType,
-      hostName: hostName,
+
+      hostName,
+
       eventDate: eventDate ? new Date(eventDate) : null,
+
       eventTime,
+
       location,
+
       googleMapLink,
+
+      fromInternational,
+
       wonderland_id: counter.sequenceValue,
+
+      shortCode,
     });
 
     try {
-      // Create host to as guest
+      // Add host as guest
       await EventGuest.create({
         userId,
+
         eventId: event._id,
+
         name: finalUserName,
+
         rsvpStatus: "will Come",
+
         isHost: true,
       });
 
-      // Create chat room according to event
-      let room = await ChatRoom.create({
+      // Create chat room
+      room = await ChatRoom.create({
         eventId: event._id,
+
         roomName: hostName,
+
         createdBy: userId,
+
         members: [
           {
             userId,
+
             name: finalUserName,
+
             phone: user.phone,
+
             profileImageUrl: user.avatar,
           },
         ],
       });
+
+      // Default messages
       await EventMessage.insertMany([
         {
           groupId: room._id,
+
           senderId: userId,
+
           message:
             "Welcome to Wonderland chat — where the fun begins even before the party!",
+
           type: "text",
+
           mediaUrl: "",
+
           senderName: finalUserName || "Wonderland",
+
           senderPhone: user.phone || "",
         },
+
         {
           groupId: room._id,
+
           senderId: userId,
+
           message: "What’s on your mind? !",
+
           type: "text",
+
           mediaUrl: "",
+
           senderName: finalUserName || "Wonderland",
+
           senderPhone: user.phone || "",
         },
       ]);
     } catch (innerErr) {
-      // If any one operation will fails
       await Promise.all([
-        EventGuest.deleteMany({ eventId: event._id }),
-        ChatRoom.deleteMany({ eventId: event._id }),
+        EventGuest.deleteMany({
+          eventId: event._id,
+        }),
+
+        ChatRoom.deleteMany({
+          eventId: event._id,
+        }),
+
         EventInvite.findByIdAndDelete(event._id),
-        EventMessage.deleteMany({ groupId: room._id }),
+
+        room
+          ? EventMessage.deleteMany({
+              groupId: room._id,
+            })
+          : Promise.resolve(),
       ]);
 
       throw innerErr;
@@ -170,12 +231,12 @@ router.post("/create-event-invite", async (req, res) => {
     return sendResponse(res, 201, false, "Event created successfully", event);
   } catch (err) {
     console.error("Create Event Error:", err);
+
     return sendResponse(res, 500, true, "Server error");
   }
 });
 
 // Fetch event details by eventId(_id)
-// Updated
 router.get("/event-invites/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -186,7 +247,7 @@ router.get("/event-invites/:id", async (req, res) => {
 
     const invite = await EventInvite.findById(id)
       .select(
-        "userId eventType hostName eventDate eventTime location googleMapLink externalTemplateImageUrl",
+        "userId eventType hostName eventDate eventTime location googleMapLink externalTemplateImageUrl subFolders names addresses dates times shortCode",
       )
       .lean();
 
@@ -211,7 +272,6 @@ router.get("/event-invites/:id", async (req, res) => {
   }
 });
 // Fetch all event invites for a user as a guest or host
-// Updated
 router.get("/event-invites/all/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
@@ -309,9 +369,12 @@ router.put("/event-invites/:id", async (req, res) => {
   }
 
   try {
-    // Find the existing invite
+    // Find existing invite
     const existing = await EventInvite.findById(id);
-    if (!existing) return sendResponse(res, 404, true, "Invite not found");
+
+    if (!existing) {
+      return sendResponse(res, 404, true, "Invite not found");
+    }
 
     const {
       eventType,
@@ -320,38 +383,114 @@ router.put("/event-invites/:id", async (req, res) => {
       eventTime,
       location,
       googleMapLink,
+      names,
+      addresses,
+      dates,
+      times,
     } = req.body;
 
-    // Check if this is the first event for the user and hostName is not already set
+    // Check if first event
     const oldestEvent = await EventInvite.findOne({
       userId: existing.userId,
     }).sort({ createdAt: 1 });
-    const isFirstEvent = oldestEvent && oldestEvent._id.equals(existing._id);
 
+    const isFirstEvent =
+      oldestEvent && oldestEvent._id.equals(existing._id);
+
+    // Update user name if needed
     if (isFirstEvent && !existing.hostName && hostName) {
       const user = await User.findById(existing.userId);
+
       if (user) {
         user.name = hostName;
         await user.save();
       }
     }
 
-    // Update other fields
-    if (eventType !== undefined) existing.eventType = eventType;
-    if (hostName !== undefined) existing.hostName = hostName;
-    if (eventDate !== undefined || "") existing.eventDate = new Date(eventDate);
-    if (eventTime !== undefined) existing.eventTime = eventTime;
-    if (location !== undefined) existing.location = location;
-    if (googleMapLink !== undefined) existing.googleMapLink = googleMapLink;
+    // Update fields
+    if (eventType !== undefined) {
+      existing.eventType = eventType;
+    }
+
+    if (hostName !== undefined) {
+      existing.hostName = hostName;
+    }
+
+    if (eventDate !== undefined) {
+      existing.eventDate = eventDate
+        ? new Date(eventDate)
+        : "";
+    }
+
+    if (eventTime !== undefined) {
+      existing.eventTime = eventTime;
+    }
+
+    if (location !== undefined) {
+      existing.location = location;
+    }
+
+    if (googleMapLink !== undefined) {
+      existing.googleMapLink = googleMapLink;
+    }
+
+    // Update names
+    existing.names = {
+      one: names?.one || "",
+      two: names?.two || "",
+      three: names?.three || "",
+      four: names?.four || "",
+      five: names?.five || "",
+      six: names?.six || "",
+      seven: names?.seven || "",
+      eight: names?.eight || "",
+    };
+
+    // Update addresses
+    existing.addresses = {
+      one: addresses?.one || "",
+      two: addresses?.two || "",
+      three: addresses?.three || "",
+      four: addresses?.four || "",
+      five: addresses?.five || "",
+      six: addresses?.six || "",
+      seven: addresses?.seven || "",
+      eight: addresses?.eight || "",
+    };
+
+    // Update dates
+    existing.dates = {
+      one: dates?.one || "",
+      two: dates?.two || "",
+      three: dates?.three || "",
+      four: dates?.four || "",
+      five: dates?.five || "",
+      six: dates?.six || "",
+      seven: dates?.seven || "",
+      eight: dates?.eight || "",
+    };
+
+    // Update times
+    existing.times = {
+      one: times?.one || "",
+      two: times?.two || "",
+      three: times?.three || "",
+      four: times?.four || "",
+      five: times?.five || "",
+      six: times?.six || "",
+      seven: times?.seven || "",
+      eight: times?.eight || "",
+    };
 
     // Save updated document
     const updated = await existing.save();
+
     return sendResponse(
       res,
       200,
       false,
       "Invite updated successfully",
-      updated,
+      updated
     );
   } catch (err) {
     console.error("Update Invite Error:", {
@@ -360,6 +499,7 @@ router.put("/event-invites/:id", async (req, res) => {
       requestBody: req.body,
       eventId: id,
     });
+
     return sendResponse(res, 500, true, "Server error");
   }
 });
@@ -412,7 +552,6 @@ router.post("/event-guest", async (req, res) => {
 });
 
 //  Get all Guest details by event and user id for a particular event
-// Updated
 router.get("/event-guest/:eventId/user/:userId", async (req, res) => {
   try {
     const { eventId, userId } = req.params;
@@ -462,7 +601,6 @@ router.get("/event-guest/:eventId/user/:userId", async (req, res) => {
 });
 
 // Get all guests details for an event by eventId
-// Updated
 router.get("/event-guests/all/:eventId", async (req, res) => {
   try {
     const { eventId } = req.params;
@@ -641,6 +779,11 @@ const uploadSingle = multer({
   limits: { fileSize: 100 * 1024 * 1024 },
 }).single("image");
 
+const uploadSingle2 = multer({
+  storage,
+  limits: { fileSize: 100 * 1024 * 1024 },
+});
+
 const uploadImageToS3 = async (
   filePath,
   fileName,
@@ -659,144 +802,6 @@ const uploadImageToS3 = async (
   return data;
 };
 
-router.post("/get-presigned-url", async (req, res) => {
-  try {
-    const { fileName, fileType, folder, userId, eventId } = req.body;
-    if (!fileName || !fileType)
-      return res.status(400).json({ message: "Missing file data" });
-
-    const key = `${folder}/${userId}/${eventId}/${Date.now()}-${fileName}`;
-
-    const params = {
-      Bucket: S3_BUCKET,
-      Key: key,
-      ContentType: fileType,
-      Expires: 300,
-    };
-
-    const uploadURL = await s3.getSignedUrlPromise("putObject", params);
-    res.json({ uploadURL, key });
-  } catch (err) {
-    console.error("Presign error:", err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-// Create A Post Route for already-uploaded S3 media
-router.post("/event-posts/:eventId", async (req, res) => {
-  try {
-    const { eventId } = req.params;
-    const {
-      postById,
-      postByName,
-      postType,
-      badgeId,
-      taggedUserIds,
-      postUrl,
-      postKey,
-      postWebpUrl,
-      postWebpKey,
-    } = req.body;
-
-    // Basic validations
-    if (!mongoose.Types.ObjectId.isValid(eventId))
-      return sendResponse(res, 400, true, "Invalid event ID");
-    if (!postById || !mongoose.Types.ObjectId.isValid(postById))
-      return sendResponse(res, 400, true, "Invalid postById");
-    if (!postByName)
-      return sendResponse(res, 400, true, "postByName is required");
-    if (!postUrl || !postKey)
-      return sendResponse(res, 400, true, "postUrl and postKey are required");
-    if (
-      !["selfUploaded", "thankYouNote", "postBadge", "luckyDraw"].includes(
-        postType,
-      )
-    )
-      return sendResponse(res, 400, true, "Invalid postType");
-
-    // LuckyDraw ticketNumber handling
-    let ticketNumber = null;
-    if (postType === "luckyDraw") {
-      const counter = await TicketCounter.findOneAndUpdate(
-        { _id: "luckyDrawCounter" },
-        { $inc: { sequenceValue: 1 } },
-        { new: true, upsert: true },
-      ).lean();
-      ticketNumber = counter.sequenceValue.toString();
-    }
-
-    // Prepare new Post object
-    const newPost = new eventPosts({
-      eventId,
-      postById,
-      postByName,
-      postType,
-      postUrl,
-      postKey,
-      postWebpUrl,
-      postWebpKey,
-      ...(postType === "luckyDraw" && { ticketNumber }),
-      ...(postType === "postBadge" && {
-        badgeId,
-        taggedUserIds: Array.isArray(taggedUserIds)
-          ? taggedUserIds
-          : taggedUserIds
-            ? [taggedUserIds]
-            : [],
-      }),
-    });
-
-    await newPost.save();
-
-    // Response object
-    const responseData = {
-      _id: newPost._id,
-      eventId: newPost.eventId,
-      postById: newPost.postById,
-      postByName: newPost.postByName,
-      postUrl: newPost.postUrl,
-      postWebpUrl: newPost.postWebpUrl,
-      postType: newPost.postType,
-      ...(ticketNumber && { ticketNumber }),
-      ...(badgeId && { badgeId }),
-      createdAt: newPost.createdAt,
-    };
-
-    return sendResponse(
-      res,
-      200,
-      false,
-      "Post uploaded successfully",
-      responseData,
-    );
-  } catch (err) {
-    console.error("Upload Post Error:", err);
-    return sendResponse(res, 500, true, "Server error");
-  }
-});
-
-// Get all posts for an event
-// router.get("/event-posts/:eventId", async (req, res) => {
-//   try {
-//     const { eventId } = req.params;
-
-//     if (!mongoose.Types.ObjectId.isValid(eventId)) {
-//       return sendResponse(res, 400, true, "Invalid event ID");
-//     }
-
-//     const posts = await eventPosts
-//       .find({ eventId })
-//       .sort({ createdAt: -1 })
-//       .lean();
-
-//     return sendResponse(res, 200, false, "Posts fetched successfully", posts);
-//   } catch (err) {
-//     console.error("Get Posts Error:", err);
-//     return sendResponse(res, 500, true, "Server error");
-//   }
-// });
-
-
 router.get("/event-posts/:eventId", async (req, res) => {
   try {
     const { eventId } = req.params;
@@ -805,33 +810,232 @@ router.get("/event-posts/:eventId", async (req, res) => {
       return sendResponse(res, 400, true, "Invalid event ID");
     }
 
-    // Get page & limit from query
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 25;
-
-    const skip = (page - 1) * limit;
-
-    // Get total count
-    const totalPosts = await eventPosts.countDocuments({ eventId });
-
-    // Fetch paginated posts
     const posts = await eventPosts
       .find({ eventId })
       .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
       .lean();
 
     return sendResponse(res, 200, false, "Posts fetched successfully", {
       posts,
-      currentPage: page,
-      totalPages: Math.ceil(totalPosts / limit),
-      totalPosts,
+      totalPosts: posts.length,
     });
-
   } catch (err) {
     console.error("Get Posts Error:", err);
     return sendResponse(res, 500, true, "Server error");
+  }
+});
+
+router.post("/delete-post/:postId", async (req, res) => {
+  const { postId } = req.params;
+
+  try {
+    // Find the image in MongoDB
+    const image = await eventPosts.findById(postId);
+    if (!image) {
+      return res.status(404).json({ message: "Image not found" });
+    }
+
+    // Build list of S3 keys to delete
+    const keysToDelete = [];
+
+    if (image.postKey) keysToDelete.push({ Key: image.postKey });
+    if (image.postWebpKey) keysToDelete.push({ Key: image.postWebpKey });
+
+    if (keysToDelete.length > 0) {
+      keysToDelete.forEach(async (k) => {
+        try {
+          await deleteFromS3(k.Key);
+        } catch (err) {
+          console.error(`Failed to delete ${k.Key} from S3:`, err);
+        }
+      });
+    }
+
+    // Delete document from MongoDB
+    await eventPosts.findByIdAndDelete(postId);
+
+    res.json({ message: "Image deleted successfully" });
+  } catch (err) {
+    console.error("Delete failed:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// Create Event Subfolder
+router.post(
+  "/create-event-subfolder/:eventId",
+  uploadSingle2.single("file"),
+  async (req, res) => {
+    try {
+      const { eventId } = req.params;
+
+      const { folderName, type, userId, subFolderName } = req.body;
+
+      // ================= VALIDATION =================
+      if (!mongoose.Types.ObjectId.isValid(eventId)) {
+        return sendResponse(res, 400, true, "Invalid event ID");
+      }
+
+      if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+        return sendResponse(res, 400, true, "Invalid userId");
+      }
+
+      if (!folderName || !type) {
+        return sendResponse(res, 400, true, "folderName and type are required");
+      }
+
+      if (!["my_photos", "others"].includes(type)) {
+        return sendResponse(res, 400, true, "Invalid folder type");
+      }
+
+      // ================= FIND EVENT =================
+      const event = await EventInvite.findById(eventId);
+
+      if (!event) {
+        return sendResponse(res, 404, true, "Event not found");
+      }
+
+      // ================= CHECK DUPLICATE =================
+      if (type === "my_photos") {
+        const alreadyExists = event.subFolders.some(
+          (sf) =>
+            sf.userId.toString() === userId.toString() &&
+            sf.type === "my_photos",
+        );
+
+        if (alreadyExists) {
+          return sendResponse(
+            res,
+            409,
+            true,
+            "My Photos subfolder already exists",
+          );
+        }
+      }
+
+      let folderDp = {};
+
+      // ================= HANDLE IMAGE =================
+      if (req.file) {
+        const file = req.file;
+
+        const filePath = file.path;
+        const fileName = file.filename;
+
+        const thumbName = `thumb_${fileName}.webp`;
+        const thumbPath = path.join(path.dirname(filePath), thumbName);
+
+        try {
+          // generate thumbnail
+          await generateThumbnail(filePath, thumbPath);
+
+          // upload original
+          const originalUpload = await uploadImageToS3(
+            filePath,
+            fileName,
+            userId,
+            eventId,
+            file.mimetype,
+            folderName,
+          );
+
+          // upload thumbnail
+          const thumbUpload = await uploadImageToS3(
+            thumbPath,
+            thumbName,
+            userId,
+            eventId,
+            "image/webp",
+            folderName,
+          );
+
+          folderDp = {
+            fileUrl: originalUpload.Location,
+            thumbnailUrl: thumbUpload.Location,
+            s3Key: originalUpload.Key,
+            thumbnailKey: thumbUpload.Key,
+          };
+        } finally {
+          // cleanup
+          const paths = [filePath, thumbPath];
+
+          for (const p of paths) {
+            if (!p) continue;
+
+            try {
+              await fs.promises.unlink(p);
+            } catch {}
+          }
+        }
+      }
+
+      // ================= CREATE SUBFOLDER =================
+      const newSubFolder = {
+        folderName:
+          type === "my_photos"
+            ? "My Photos"
+            : subFolderName || "Untitled Folder",
+
+        type,
+
+        userId,
+
+        folderDp,
+
+        createdAt: new Date(),
+      };
+
+      event.subFolders.push(newSubFolder);
+
+      await event.save();
+
+      const savedSubFolder = event.subFolders[event.subFolders.length - 1];
+
+      return sendResponse(
+        res,
+        201,
+        false,
+        "Subfolder created successfully",
+        savedSubFolder,
+      );
+    } catch (error) {
+      console.error("Create Event Subfolder Error:", error);
+
+      return sendResponse(res, 500, true, "Server error");
+    }
+  },
+);
+
+router.put("/assign-to-subfolder", async (req, res) => {
+  try {
+    const { subFolderId, addImageIds = [], removeImageIds = [] } = req.body;
+
+    if (!subFolderId) {
+      return res.status(400).json({ message: "subFolderId is required" });
+    }
+
+    if (addImageIds.length > 0) {
+      await eventPosts.updateMany(
+        { _id: { $in: addImageIds } },
+        { $addToSet: { folderIds: subFolderId } },
+      );
+    }
+
+    if (removeImageIds.length > 0) {
+      await eventPosts.updateMany(
+        { _id: { $in: removeImageIds } },
+        { $pull: { folderIds: subFolderId } },
+      );
+    }
+
+    return res.status(200).json({
+      message: "Subfolder updated successfully",
+      added: addImageIds.length,
+      removed: removeImageIds.length,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error" });
   }
 });
 
@@ -847,18 +1051,27 @@ router.post("/:postId/like", async (req, res) => {
     }
 
     const post = await eventPosts.findById(postId);
+
     if (!post) {
       return res.status(404).json({ message: "Post not found" });
     }
 
-    const existingLike = await postLikes.findOne({ postId, likedById });
+    const existingLike = await postLikes.findOne({
+      postId,
+      likedById,
+    });
+
+    // Always convert to number first
+    const currentLikes = parseInt(post.likeCounts || "0", 10);
 
     if (existingLike) {
-      // If  already liked -> Unlike it
+      // Unlike
       await postLikes.findByIdAndDelete(existingLike._id);
 
-      // Decrement like count safely
-      post.likeCounts = Math.max(0, (post.likeCounts || 0) - 1);
+      post.likeCounts = String(
+        Math.max(currentLikes - 1, 0),
+      );
+
       await post.save();
 
       return res.status(200).json({
@@ -866,25 +1079,33 @@ router.post("/:postId/like", async (req, res) => {
         action: "unliked",
         likeCounts: post.likeCounts,
       });
-    } else {
-      // Not liked -> Add new like
-      const newLike = new postLikes({ postId, likedById, likedByName });
-      await newLike.save();
-
-      // Increment like count
-      post.likeCounts = (post.likeCounts || 0) + 1;
-      await post.save();
-
-      return res.status(201).json({
-        message: "Post liked successfully",
-        action: "liked",
-        likeCounts: post.likeCounts,
-        like: newLike,
-      });
     }
+
+    // Like
+    const newLike = new postLikes({
+      postId,
+      likedById,
+      likedByName,
+    });
+
+    await newLike.save();
+
+    post.likeCounts = String(currentLikes + 1);
+
+    await post.save();
+
+    return res.status(201).json({
+      message: "Post liked successfully",
+      action: "liked",
+      likeCounts: post.likeCounts,
+      like: newLike,
+    });
   } catch (error) {
     console.error("Error toggling like:", error);
-    res.status(500).json({ error: "Server error" });
+
+    res.status(500).json({
+      error: "Server error",
+    });
   }
 });
 
@@ -928,6 +1149,59 @@ router.post("/:postId/comment", async (req, res) => {
   }
 });
 
+router.get("/liked-posts/:eventId/:userId", async (req, res) => {
+  try {
+    const { eventId, userId } = req.params;
+
+    // ================= VALIDATION =================
+    if (!mongoose.Types.ObjectId.isValid(eventId)) {
+      return res.status(400).json({ message: "Invalid eventId" });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: "Invalid userId" });
+    }
+
+    // ================= STEP 1: GET USER LIKES =================
+    const likedPosts = await postLikes
+      .find({
+        likedById: userId,
+      })
+      .select("postId")
+      .lean();
+
+    if (!likedPosts.length) {
+      return res.status(200).json({
+        message: "No liked posts found",
+        posts: [],
+      });
+    }
+
+    // ================= STEP 2: UNIQUE POST IDS =================
+    const postIds = [...new Set(likedPosts.map((l) => l.postId.toString()))];
+
+    // ================= STEP 3: FILTER BY EVENT =================
+    const posts = await eventPosts
+      .find({
+        _id: { $in: postIds },
+        eventId: eventId,
+      })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.status(200).json({
+      message: "Liked posts fetched successfully",
+      total: posts.length,
+      posts,
+    });
+  } catch (error) {
+    console.error("Get liked posts error:", error);
+    return res.status(500).json({
+      message: "Server error",
+    });
+  }
+});
+
 const deleteFileWithRetry = async (filePath, retries = 3, delay = 100) => {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
@@ -950,7 +1224,7 @@ const deleteFileWithRetry = async (filePath, retries = 3, delay = 100) => {
   }
 };
 
-// Save external template image for an event invite
+// Save external template image/video for an event invite
 router.put(
   "/event-invites/external-template/:eventId",
   (req, res, next) => {
@@ -965,6 +1239,7 @@ router.put(
       if (!mongoose.Types.ObjectId.isValid(eventId)) {
         return sendResponse(res, 400, true, "Invalid event ID");
       }
+
       const file = req.file;
       const userId = req.body.userId;
 
@@ -979,55 +1254,74 @@ router.put(
 
       // If no file is provided and not clearing, return error
       if (!file && req.body.clearImage !== "true") {
-        return sendResponse(
-          res,
-          400,
-          true,
-          "External template image is required or set clearImage to true",
-        );
+        return sendResponse(res, 400, true, "File is required or set clearImage=true");
       }
 
       // Handle image upload
       if (file) {
-        // Delete existing external template image from S3 if it exists
+        const mime = file.mimetype;
+        const isAnimated = mime === "image/gif" || mime.startsWith("video/");
+
         if (existing.externalTemplateImageKey) {
           await deleteFromS3(existing.externalTemplateImageKey);
         }
 
-        // Generate unique filename for WebP
-        const webpFileName = `external-template-${Date.now()}.webp`;
-        const webpPath = file.path.replace(/\.(png|jpeg|jpg)$/i, "") + ".webp";
+        let finalUrl, finalKey;
 
-        // Generate WebP image
-        await generateTemplateThumbnail(file.path, webpPath);
+        if (isAnimated) {
+          const fileName = `external-template-${Date.now()}${path.extname(file.originalname)}`;
+          
+          const uploadResult = await uploadImageToS3(
+            file.path,
+            fileName,
+            userId,
+            eventId,
+            mime,
+            "event-invites"
+          );
 
-        // Upload WebP image to S3
-        const uploadResult = await uploadImageToS3(
-          webpPath,
-          webpFileName,
-          userId,
-          eventId,
-          "image/webp",
-          "event-invites",
-        );
+          finalUrl = uploadResult.Location;
+          finalKey = uploadResult.Key;
 
-        // Update document with new image details
-        existing.externalTemplateImageUrl = uploadResult.Location;
-        existing.externalTemplateImageKey = uploadResult.Key;
+        } else {
+          const webpFileName = `external-template-${Date.now()}.webp`;
+          const webpPath = file.path.replace(/\.(png|jpeg|jpg)$/i, "") + ".webp";
+
+          await generateTemplateThumbnail(file.path, webpPath);
+
+          const uploadResult = await uploadImageToS3(
+            webpPath,
+            webpFileName,
+            userId,
+            eventId,
+            "image/webp",
+            "event-invites"
+          );
+
+          finalUrl = uploadResult.Location;
+          finalKey = uploadResult.Key;
+
+          // Cleanup webp
+          if (fs.existsSync(webpPath)) await deleteFileWithRetry(webpPath);
+        }
+
+        // Update in Database
+        existing.externalTemplateImageUrl = finalUrl;
+        existing.externalTemplateImageKey = finalKey;
         existing.templateId = null;
 
+        // Chat room profile bhi update kar do
         await ChatRoom.findOneAndUpdate(
           { eventId },
-          { roomProfileUrl: uploadResult.Location },
+          { roomProfileUrl: finalUrl }
         );
 
-        // Cleanup local files with retry
-        await Promise.all([
-          deleteFileWithRetry(file.path),
-          deleteFileWithRetry(webpPath),
-        ]);
-      } else if (req.body.clearImage === "true") {
-        // Clear existing image if clearImage is true
+        // Cleanup original file
+        await deleteFileWithRetry(file.path);
+
+      } 
+      else if (req.body.clearImage === "true") {
+        // Clear image
         if (existing.externalTemplateImageKey) {
           await deleteFromS3(existing.externalTemplateImageKey);
           existing.externalTemplateImageUrl = null;
@@ -1036,25 +1330,21 @@ router.put(
         }
       }
 
-      // Save updated document
       const updated = await existing.save();
+
       return sendResponse(
         res,
         200,
         false,
-        "External template image updated successfully",
-        updated,
+        "External template updated successfully",
+        updated
       );
+
     } catch (err) {
-      console.error("Update External Template Image Error:", {
-        message: err.message,
-        stack: err.stack,
-        eventId: req.params.eventId,
-        requestBody: req.body,
-      });
+      console.error("External Template Update Error:", err);
       return sendResponse(res, 500, true, "Server error");
     }
-  },
+  }
 );
 
 router.get("/all-tracking", async (req, res) => {
@@ -1116,6 +1406,7 @@ router.get("/all-tracking", async (req, res) => {
     });
   }
 });
+
 const getDateFilter = (dateFilter) => {
   const now = new Date();
 
@@ -1144,92 +1435,172 @@ router.post("/admin_all_details", async (req, res) => {
     let data = [];
     let total = 0;
 
-    // By Users handler
+    // BY USERS (OPTIMIZED)
     if (type === "byUsers") {
-      // Pre-aggregate counts
-      const [hostedMap, guestMap, postsMap] = await Promise.all([
-        EventInvite.aggregate([
-          ...(date ? [{ $match: { createdAt: { $gte: date } } }] : []),
-          {
-            $group: {
-              _id: "$userId",
-              count: { $sum: 1 },
-            },
-          },
-        ]),
+      const date = getDateFilter(dateFilter);
 
-        EventGuest.aggregate([
-          {
-            $group: {
-              _id: "$userId",
-              count: { $sum: 1 },
-            },
-          },
-        ]),
+      const hostedMatch = {};
 
-        eventPosts.aggregate([
-          {
-            $group: {
-              _id: "$postById",
-              count: { $sum: 1 },
-            },
-          },
-        ]),
-      ]);
-
-      // Convert to map for unique data
-      const hostedObj = Object.fromEntries(
-        hostedMap.map((i) => [i._id.toString(), i.count])
-      );
-
-      const guestObj = Object.fromEntries(
-        guestMap.map((i) => [i._id.toString(), i.count])
-      );
-
-      const postsObj = Object.fromEntries(
-        postsMap.map((i) => [i._id.toString(), i.count])
-      );
-
-      // Fetch users
-      let userQuery = {};
-
-      if (search) {
-        userQuery.phone = { $regex: search, $options: "i" };
+      if (date) {
+        hostedMatch.createdAt = { $gte: date };
       }
 
-      const users = await User.find(userQuery)
-        .select("name phone fromWonderland createdAt")
-        .sort({ createdAt: -1 });
+      // =========================
+      // SINGLE PIPELINE
+      // =========================
 
-      // Attach counts + filter
-      const enrichedUsers = users
-        .map((user) => {
-          const id = user._id.toString();
+      const pipeline = [
+        // hosted events
+        {
+          $unionWith: {
+            coll: "eventinvites",
+            pipeline: [
+              {
+                $match: hostedMatch,
+              },
+              {
+                $project: {
+                  userId: 1,
+                  hosted: { $literal: 1 },
+                  guest: { $literal: 0 },
+                  posts: { $literal: 0 },
+                },
+              },
+            ],
+          },
+        },
 
-          return {
-            name: user.name,
-            phone: user.phone,
-            fromWonderland: user.fromWonderland,
-            hostedEventsCount: hostedObj[id] || 0,
-            guestEventsCount: guestObj[id] || 0,
-            postsCount: postsObj[id] || 0,
-            createdAt: user.createdAt,
-          };
-        })
-        .filter(
-          (u) =>
-            u.hostedEventsCount > 0 ||
-            u.guestEventsCount > 0 ||
-            u.fromWonderland
-        );
+        // guest events
+        {
+          $unionWith: {
+            coll: "eventguests",
+            pipeline: [
+              {
+                $project: {
+                  userId: 1,
+                  hosted: { $literal: 0 },
+                  guest: { $literal: 1 },
+                  posts: { $literal: 0 },
+                },
+              },
+            ],
+          },
+        },
 
-      // Pagination AFTER filter
-      total = enrichedUsers.length;
+        // posts
+        {
+          $unionWith: {
+            coll: "event-posts",
+            pipeline: [
+              {
+                $project: {
+                  userId: "$postById",
+                  hosted: { $literal: 0 },
+                  guest: { $literal: 0 },
+                  posts: { $literal: 1 },
+                },
+              },
+            ],
+          },
+        },
 
-      data = enrichedUsers.slice(skip, skip + limit);
+        // group counts
+        {
+          $group: {
+            _id: "$userId",
+
+            hostedEventsCount: {
+              $sum: "$hosted",
+            },
+
+            guestEventsCount: {
+              $sum: "$guest",
+            },
+
+            postsCount: {
+              $sum: "$posts",
+            },
+          },
+        },
+
+        // join users
+        {
+          $lookup: {
+            from: "users",
+            localField: "_id",
+            foreignField: "_id",
+            as: "user",
+          },
+        },
+
+        {
+          $unwind: "$user",
+        },
+
+        // search
+        ...(search
+          ? [
+              {
+                $match: {
+                  "user.phone": {
+                    $regex: `^${search}`,
+                    $options: "i",
+                  },
+                },
+              },
+            ]
+          : []),
+
+        // include wonderland users
+        {
+          $match: {
+            $or: [
+              { hostedEventsCount: { $gt: 0 } },
+              { guestEventsCount: { $gt: 0 } },
+              { "user.fromWonderland": true },
+            ],
+          },
+        },
+
+        {
+          $project: {
+            _id: 0,
+            name: "$user.name",
+            phone: "$user.phone",
+            fromWonderland: "$user.fromWonderland",
+
+            hostedEventsCount: 1,
+            guestEventsCount: 1,
+            postsCount: 1,
+
+            createdAt: "$user.createdAt",
+          },
+        },
+
+        {
+          $sort: {
+            createdAt: -1,
+          },
+        },
+
+        {
+          $facet: {
+            data: [{ $skip: skip }, { $limit: limit }],
+
+            totalCount: [{ $count: "count" }],
+          },
+        },
+      ];
+
+      const result = await EventInvite.aggregate(pipeline);
+
+      data = result[0]?.data || [];
+      total = result[0]?.totalCount?.[0]?.count || 0;
     }
 
-    // By Users
+    // ===========================
+    // BY EVENTS
+    // ===========================
     else if (type === "byEvents") {
       const matchStage = {};
 
@@ -1329,7 +1700,6 @@ router.post("/admin_all_details", async (req, res) => {
       total = await EventInvite.countDocuments(matchStage);
     }
 
-    // Pagination
     const lastPage = Math.ceil(total / limit) || 1;
 
     const paginate = {

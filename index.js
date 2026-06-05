@@ -237,6 +237,7 @@ const PartyHallVenueRoutes = require("./routes/createPartyVenue");
 const venuePackageRoutes = require("./routes/venue-package");
 const venuePackageCategoryRoutes = require("./routes/venue-package-categories");
 const venuePackageItemRoutes = require("./routes/venue-package-items");
+const EventShareRoutes = require("./routes/event-share");
 let passportAuth = require("./store/passportAuth").passportAuth;
 
 app.use("/api/admin", AdminRoutes);
@@ -270,6 +271,7 @@ app.use("/api/party-venue" , PartyHallVenueRoutes);
 app.use("/api/party-venue/package" , venuePackageRoutes);
 app.use("/api/party-venue/package-category" , venuePackageCategoryRoutes);
 app.use("/api/party-venue/package-item" , venuePackageItemRoutes);
+app.use("/smartinvite/share", EventShareRoutes);
 
 const notificationFunction = require("./store/notifications");
 const UserModel = require("./models/user");
@@ -292,7 +294,19 @@ app.post("/test_post", function (req, res) {
 });
 /* upload file */
 var multer = require("multer");
-const multerS3 = require('multer-s3');
+const multerS3 = require("multer-s3");
+
+// STATIC SERVE TEMPLATE ASSETS
+app.use(
+  "/api/template-assets",
+  express.static(path.join(__dirname, "uploads"), {
+    setHeaders: (res) => {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    },
+  }),
+);
+
 
 var storage = multer.diskStorage({
   destination: function (req, file, cb) {

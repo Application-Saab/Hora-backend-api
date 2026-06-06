@@ -16,21 +16,18 @@ const decorationSchema = new mongoose.Schema(
       type: String,
     },
     caption: String,
-    featured_images: {
-      url: String,
-      caption: String,
-      small: String,
-      webp_small: String,
-      thumbnail: String,
-      large: String,
-      original: String,
-      webp_thumbnail: String,
-      webp_large: String,
-      webp_original: String,
-    },
+    featured_images: [
+      {
+        fileName: String,
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
     badge: String,
     price: {
-        type: String,
+      type: String,
     },
     cost_price: {
       type: String,

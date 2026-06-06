@@ -413,6 +413,7 @@ app.post('/api/decoration_image_upload', compressedUpload.single('file'), async 
   }
 });
 
+app.use("/api/uploads", express.static(path.join(__dirname, "uploads")));
 
 
 app.post("/firebase/notification", async (req, res) => {

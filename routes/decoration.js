@@ -1,221 +1,471 @@
-const express = require('express');
-const orderModel = require('../models/order');
+const express = require("express");
+const orderModel = require("../models/order");
 const router = express.Router();
-const AddressModel = require('../models/address');
-const decorationModel = require('../models/decoration');
-const NodeCache = require('node-cache');
+const AddressModel = require("../models/address");
+const decorationModel = require("../models/decoration");
+const NodeCache = require("node-cache");
 const cache = new NodeCache({ stdTTL: 60 * 10 }); // Cache TTL: 10 minutes
 const path = require("path");
 const fs = require("fs");
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
-router.post('/add', async (req, res) => {
+const multer = require("multer");
+
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
+const sharp = require("sharp");
+
+const deleteFileIfExists = (filePath) => {
+  try {
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  } catch (err) {
+    console.error("File delete error:", err);
+  }
+};
+
+const compressImageToWebP = async (buffer, outputPath, targetMaxKB = 40) => {
+  let quality = 85;
+  const step = 5;
+
+  while (quality > 5) {
+    const compressedBuffer = await sharp(buffer).webp({ quality }).toBuffer();
+
+    const sizeKB = compressedBuffer.length / 1024;
+
+    if (sizeKB <= targetMaxKB) {
+      fs.writeFileSync(outputPath, compressedBuffer);
+      return true;
+    }
+
+    quality -= step;
+  }
+
+  // Final attempt with lowest quality
+  const fallbackBuffer = await sharp(buffer).webp({ quality: 5 }).toBuffer();
+  fs.writeFileSync(outputPath, fallbackBuffer);
+  return false;
+};
+router.post("/edit", upload.array("featured_images", 10), async (req, res) => {
+  try {
+    const id = req.body._id;
+
+    const existing = await decorationModel.findById(id);
+
+    if (!existing) {
+      return res.status(404).json({
+        error: true,
+        message: "Decoration not found",
+      });
+    }
+
+    let existingImages = existing.featured_images || [];
+
+    // -----------------------------
+    // REMOVE IMAGES HANDLING
+    // -----------------------------
+    let removedImages = [];
+
+    if (req.body.removedImages) {
+      try {
+        removedImages =
+          typeof req.body.removedImages === "string"
+            ? JSON.parse(req.body.removedImages)
+            : req.body.removedImages;
+      } catch (e) {
+        removedImages = [];
+      }
+
+      removedImages.forEach((img) => {
+        const filePath = path.join(
+          __dirname,
+          "../uploads/compressed_webp",
+          img.fileName,
+        );
+
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      });
+
+      existingImages = existingImages.filter(
+        (img) => !removedImages.some((r) => r.fileName === img.fileName),
+      );
+    }
+
+    // -----------------------------
+    // NEW IMAGES UPLOAD
+    // -----------------------------
+    let newImages = [];
+
+    if (req.files && req.files.length > 0) {
+      const outputFolder = path.resolve(
+        __dirname,
+        "../uploads/compressed_webp",
+      );
+
+      if (!fs.existsSync(outputFolder)) {
+        fs.mkdirSync(outputFolder, { recursive: true });
+      }
+
+      newImages = await Promise.all(
+        req.files.map(async (file) => {
+          const fileName = `${Date.now()}-${path.parse(file.originalname).name}.webp`;
+          const outputPath = path.join(outputFolder, fileName);
+
+          await compressImageToWebP(file.buffer, outputPath);
+
+          return {
+            fileName,
+            url: `/uploads/compressed_webp/${fileName}`, // 👈 as per schema
+            createdAt: new Date(),
+          };
+        }),
+      );
+    }
+
+    // -----------------------------
+    // UPDATE DB
+    // -----------------------------
+    const updated = await decorationModel.findByIdAndUpdate(
+      id,
+      {
+        name: req.body.name,
+        price: req.body.price,
+        tag: req.body.tag
+          ? typeof req.body.tag === "string"
+            ? JSON.parse(req.body.tag)
+            : req.body.tag
+          : [],
+        designType:
+          req.body.designType === "string"
+            ? JSON.parse(req.body.designType)
+            : req.body.designType,
+
+        inclusion: req.body.inclusion === "string"
+            ? JSON.parse(req.body.inclusion)
+            : req.body.inclusion,
+
+        inclusionVariables: req.body.inclusionVariables === "string"
+            ? JSON.parse(req.body.inclusionVariables)
+            : req.body.inclusionVariables,
+        
+        featured_images: [...existingImages, ...newImages],
+      },
+      { new: true },
+    );
+
+    return res.json({
+      error: false,
+      message: "Updated successfully",
+      data: updated,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      error: true,
+      message: err.message,
+    });
+  }
+});
+
+// router.post('/edit', async (req, res) => {
+//     const id = req.body._id;
+//     const updatedData = req.body;
+//     const options = { new: true };
+
+//     try {
+//         const result = await decorationModel.findByIdAndUpdate(id, updatedData, options);
+
+//         if (result) {
+//             // ----- NEW CACHE UPDATE -----
+//             if (updatedData.tag && updatedData.tag.length > 0) {
+//                 const firstTag = updatedData.tag[0];
+//                 // fetch all decorations with this tag
+//                 const decorationsForTag = await decorationModel.find({ tag: { $in: [firstTag] } }).lean();
+//                 const cacheResponse = {
+//                     error: false,
+//                     status: 200,
+//                     message: 'Search Successful',
+//                     data: decorationsForTag
+//                 };
+//                 cache.set(`search_tag_${firstTag}`, cacheResponse);
+//             }
+//             return res.json({
+//                 error: false,
+//                 status: 200,
+//                 message: 'Updated Successfully',
+//                 data: result
+//             });
+//         } else {
+//             return res.json({
+//                 error: true,
+//                 status: 404,
+//                 message: 'Decoration not found.'
+//             });
+//         }
+//     } catch (error) {
+//         return res.status(400).json({
+//             error: true,
+//             message: error.message
+//         });
+//     }
+// });
+
+// router.post('/add', async (req, res) => {
+//     const {
+//         name,
+//         short_link,
+//         featured_image,
+//         caption,
+//         featured_images,
+//         badge,
+//         price,
+//         cost_price,
+//         type,
+//         is_wishlisted,
+//         ratings,
+//         attributes,
+//         inclusion,
+//         tag
+//     } = req.body;
+
+//     const data = new decorationModel({
+//         name: name,
+//         short_link: short_link,
+//         featured_image: featured_image,
+//         caption: caption,
+//         featured_images: featured_images,
+//         badge: badge,
+//         price: price,
+//         cost_price: cost_price,
+//         type: type,
+//         is_wishlisted: is_wishlisted,
+//         ratings: ratings,
+//         attributes: attributes,
+//         inclusion: inclusion,
+//         tag: tag
+//     });
+
+//     try {
+//         // Check if a decoration with the same name and type already exists
+//         const existingDecoration = await decorationModel.findOne({ name: data.name, type: data.type });
+
+//         if (existingDecoration) {
+//             return res.json({ error: true, status: 503, message: 'Decoration already added.' });
+//         } else {
+//             const savedData = await data.save();
+//             return res.json({ error: false, status: 200, message: 'Decoration added successfully.', data: savedData });
+//         }
+//     } catch (error) {
+//         res.status(400).json({ error: true, message: error.message });
+//     }
+// });
+
+router.post("/add", upload.single("featured_image"), async (req, res) => {
+  try {
+    const file = req.file;
+
+    if (!file) {
+      return res.status(400).json({ error: true, message: "Image required" });
+    }
+
+    // folder create
+    const outputFolder = "../uploads/compressed_webp";
+    if (!fs.existsSync(outputFolder)) {
+      fs.mkdirSync(outputFolder, { recursive: true });
+    }
+
+    const originalName = path.parse(file.originalname).name;
+    const fileName = `${originalName}-${Date.now()}.webp`;
+    const outputPath = path.join(outputFolder, fileName);
+
+    // compress + save
+    await compressImageToWebP(file.buffer, outputPath);
+
     const {
-        name,
-        short_link,
-        featured_image,
-        caption,
-        featured_images,
-        badge,
-        price,
-        cost_price,
-        type,
-        is_wishlisted,
-        ratings,
-        attributes,
-        inclusion,
-        tag
+      name,
+      short_link,
+      caption,
+      badge,
+      price,
+      cost_price,
+      type,
+      is_wishlisted,
+      ratings,
+      attributes,
+      inclusion,
+      tag,
     } = req.body;
 
-    const data = new decorationModel({
-        name: name,
-        short_link: short_link,
-        featured_image: featured_image,
-        caption: caption,
-        featured_images: featured_images,
-        badge: badge,
-        price: price,
-        cost_price: cost_price,
-        type: type,
-        is_wishlisted: is_wishlisted,
-        ratings: ratings,
-        attributes: attributes,
-        inclusion: inclusion,
-        tag: tag
+    const existingDecoration = await decorationModel.findOne({
+      name,
+      type,
     });
 
-    try {
-        // Check if a decoration with the same name and type already exists
-        const existingDecoration = await decorationModel.findOne({ name: data.name, type: data.type });
-
-        if (existingDecoration) {
-            return res.json({ error: true, status: 503, message: 'Decoration already added.' });
-        } else {
-            const savedData = await data.save();
-            return res.json({ error: false, status: 200, message: 'Decoration added successfully.', data: savedData });
-        }
-    } catch (error) {
-        res.status(400).json({ error: true, message: error.message });
+    if (existingDecoration) {
+      return res.json({
+        error: true,
+        status: 503,
+        message: "Decoration already added.",
+      });
     }
+
+    const data = new decorationModel({
+      name,
+      short_link,
+      featured_image: fileName, // 👈 now from upload
+      caption,
+      badge,
+      price,
+      cost_price,
+      type,
+      is_wishlisted,
+      ratings,
+      attributes,
+      inclusion,
+      tag,
+    });
+
+    const savedData = await data.save();
+
+    return res.json({
+      error: false,
+      status: 200,
+      message: "Decoration added successfully",
+      data: savedData,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: true, message: "Server error" });
+  }
 });
 
-router.post('/edit', async (req, res) => {
-    const id = req.body._id;
-    const updatedData = req.body;
-    const options = { new: true };
+router.post("/update_decoration_status", async (req, res) => {
+  const { _id, status } = req.body;
 
-    try {
-        const result = await decorationModel.findByIdAndUpdate(id, updatedData, options);
+  if (!_id) {
+    return res.json({
+      error: true,
+      status: 422,
+      data: [{ path: "_id", message: "Id is required." }],
+    });
+  }
 
-        if (result) {
-            // ----- NEW CACHE UPDATE -----
-            if (updatedData.tag && updatedData.tag.length > 0) {
-                const firstTag = updatedData.tag[0];
-                // fetch all decorations with this tag
-                const decorationsForTag = await decorationModel.find({ tag: { $in: [firstTag] } }).lean();
-                const cacheResponse = {
-                    error: false,
-                    status: 200,
-                    message: 'Search Successful',
-                    data: decorationsForTag
-                };
-                cache.set(`search_tag_${firstTag}`, cacheResponse);
-            }
-            return res.json({
-                error: false,
-                status: 200,
-                message: 'Updated Successfully',
-                data: result
-            });
-        } else {
-            return res.json({
-                error: true,
-                status: 404,
-                message: 'Decoration not found.'
-            });
-        }
-    } catch (error) {
-        return res.status(400).json({
-            error: true,
-            message: error.message
-        });
+  try {
+    const decoration = await decorationModel.findById(_id);
+
+    if (decoration) {
+      const update = {
+        status: status,
+      };
+
+      const result = await decorationModel.findByIdAndUpdate(_id, {
+        $set: update,
+      });
+
+      return res.json({
+        error: false,
+        status: 200,
+        message: "Status Update Successfully",
+      });
+    } else {
+      return res.json({
+        error: true,
+        status: 404,
+        message: "Decoration Not Found",
+      });
     }
+  } catch (error) {
+    res.status(400).json({ error: true, message: error.message });
+  }
 });
 
-router.post('/update_decoration_status', async (req, res) => {
-    const { _id, status } = req.body;
+router.get("/searchByName/:name", async (req, res) => {
+  const { name } = req.params;
 
-    if (!_id) {
-        return res.json({
-            error: true,
-            status: 422,
-            data: [
-                { path: '_id', message: 'Id is required.' }
-            ]
-        });
+  try {
+    const decorations = await decorationModel.find({
+      name: { $regex: new RegExp(name, "i") },
+    });
+
+    if (decorations.length > 0) {
+      return res.json({
+        error: false,
+        status: 200,
+        message: "Search Successful",
+        data: decorations,
+      });
+    } else {
+      return res.json({
+        error: true,
+        status: 404,
+        message: "No matching decorations found.",
+      });
     }
-
-    try {
-        const decoration = await decorationModel.findById(_id);
-
-        if (decoration) {
-            const update = {
-                status: status
-            };
-
-            const result = await decorationModel.findByIdAndUpdate(_id, { $set: update });
-
-            return res.json({ error: false, status: 200, message: 'Status Update Successfully' });
-        } else {
-            return res.json({ error: true, status: 404, message: 'Decoration Not Found' });
-        }
-    } catch (error) {
-        res.status(400).json({ error: true, message: error.message });
-    }
+  } catch (error) {
+    return res.status(400).json({
+      error: true,
+      message: error.message,
+    });
+  }
 });
 
-router.get('/searchByName/:name', async (req, res) => {
-    const { name } = req.params;
+router.get("/searchByTag/:tag", async (req, res) => {
+  const { tag } = req.params;
+  const cacheKey = `search_tag_${tag}`;
 
-    try {
-        const decorations = await decorationModel.find({
-            name: { $regex: new RegExp(name, 'i') }
-        });
-
-        if (decorations.length > 0) {
-            return res.json({
-                error: false,
-                status: 200,
-                message: 'Search Successful',
-                data: decorations
-            });
-        } else {
-            return res.json({
-                error: true,
-                status: 404,
-                message: 'No matching decorations found.'
-            });
-        }
-    } catch (error) {
-        return res.status(400).json({
-            error: true,
-            message: error.message
-        });
+  try {
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      return res.json({ ...cached, cached: true });
     }
+    const decorations = await decorationModel
+      .find({ tag: { $in: [tag] } })
+      .lean();
+
+    if (decorations.length > 0) {
+      const response = {
+        error: false,
+        status: 200,
+        message: "Search Successful",
+        data: decorations,
+      };
+      cache.set(cacheKey, response);
+      return res.json(response);
+    } else {
+      const response = {
+        error: true,
+        status: 404,
+        message: "No matching decorations found.",
+      };
+      cache.set(cacheKey, response);
+      return res.json(response);
+    }
+  } catch (error) {
+    return res.status(400).json({
+      error: true,
+      message: error.message,
+    });
+  }
 });
 
-
-router.get('/searchByTag/:tag', async (req, res) => {
-    const { tag } = req.params;
-    const cacheKey = `search_tag_${tag}`;
-
-    try {
-        const cached = cache.get(cacheKey);
-        if (cached) {
-            return res.json({ ...cached, cached: true });
-        }
-        const decorations = await decorationModel.find({ tag: { $in: [tag] } }).lean();
-
-        if (decorations.length > 0) {
-            const response = {
-                error: false,
-                status: 200,
-                message: 'Search Successful',
-                data: decorations
-            };
-            cache.set(cacheKey, response);
-            return res.json(response);
-        } else {
-            const response = {
-                error: true,
-                status: 404,
-                message: 'No matching decorations found.'
-            };
-            cache.set(cacheKey, response);
-            return res.json(response);
-        }
-    } catch (error) {
-        return res.status(400).json({
-            error: true,
-            message: error.message
-        });
-    }
+router.get("/details/:id", async (req, res) => {
+  try {
+    const data = await decorationModel.findById(req.params.id).populate({
+      path: "tag",
+    });
+    return res.json({
+      error: false,
+      status: 200,
+      message: "Details Fetch Successfully",
+      data: data,
+    });
+  } catch (error) {
+    res.status(400).json({ message: error.message, error: true });
+  }
 });
-
-
-router.get('/details/:id', async (req, res) => {
-    try {
-        const data = await decorationModel.findById(req.params.id).populate({
-            path: "tag"
-        });
-        return res.json({ error: false, status: 200, message: 'Details Fetch Successfully', data: data })
-    }
-    catch (error) {
-        res.status(400).json({ message: error.message, error: true })
-    }
-})
-
-
 
 router.get("/searchByTag/v2/:tag", async (req, res) => {
   try {
@@ -233,7 +483,7 @@ router.get("/searchByTag/v2/:tag", async (req, res) => {
     if (cachedData) {
       return res.json({ ...cachedData, cached: true });
     }
-    
+
     // Match stage with dynamic filters
     const matchStage = { status: 1 };
 
@@ -316,6 +566,7 @@ router.get("/searchByTag/v2/:tag", async (req, res) => {
                 name: 1,
                 short_link: 1,
                 featured_image: 1,
+                featured_images: 1,
                 price: 1,
                 cost_price: 1,
                 ratings: 1,
@@ -365,40 +616,43 @@ router.get("/searchByTag/v2/:tag", async (req, res) => {
   }
 });
 
-//get decoration by name and all orders individual product actual images 
-router.get('/decorations/:name/orders', async (req, res) => {
+//get decoration by name and all orders individual product actual images
+router.get("/decorations/:name/orders", async (req, res) => {
   try {
     const { name } = req.params;
 
-    const decoration = await decorationModel.findOne({
-      name: { $regex: new RegExp(name, 'i') }
-    }).lean();
+    const decoration = await decorationModel
+      .findOne({
+        name: { $regex: new RegExp(name, "i") },
+      })
+      .lean();
 
     if (!decoration) {
       return res.status(404).json({
         error: true,
         status: 404,
-        message: 'Decoration not found'
+        message: "Decoration not found",
       });
     }
 
     // Find orders that include this decoration
-    const orders = await orderModel.find({
-      $or: [
-        { items: decoration._id },
-        { items: decoration._id.toString() },
-        { "items.itemId": decoration._id },
-        { "items.itemId": decoration._id.toString() }
-      ],
-      userOrderDishImageArray: { $exists: true, $ne: [] }
-    })
-      .select('_id order_id order_date userOrderDishImageArray')
+    const orders = await orderModel
+      .find({
+        $or: [
+          { items: decoration._id },
+          { items: decoration._id.toString() },
+          { "items.itemId": decoration._id },
+          { "items.itemId": decoration._id.toString() },
+        ],
+        userOrderDishImageArray: { $exists: true, $ne: [] },
+      })
+      .select("_id order_id order_date userOrderDishImageArray")
       .lean();
 
     // Normalize images: convert strings to objects, keep objects as-is
-    const updatedOrders = orders.map(order => {
-      const images = order.userOrderDishImageArray.map(img => {
-        if (typeof img === 'string') {
+    const updatedOrders = orders.map((order) => {
+      const images = order.userOrderDishImageArray.map((img) => {
+        if (typeof img === "string") {
           return {
             image: img,
             is_tagged: false,
@@ -411,30 +665,29 @@ router.get('/decorations/:name/orders', async (req, res) => {
 
       return {
         ...order,
-        userOrderDishImageArray: images
+        userOrderDishImageArray: images,
       };
     });
 
     return res.json({
       error: false,
       status: 200,
-      message: 'Decoration details fetched successfully',
+      message: "Decoration details fetched successfully",
       data: {
         decoration,
-        orders: updatedOrders // will be empty array if no orders exist
-      }
+        orders: updatedOrders, // will be empty array if no orders exist
+      },
     });
-
   } catch (err) {
     return res.status(500).json({
       error: true,
       status: 500,
-      message: err.message
+      message: err.message,
     });
   }
 });
 
-// delete images by iamge name 
+// delete images by iamge name
 router.post("/delete-image", async (req, res) => {
   try {
     const { imageName } = req.body;
@@ -449,31 +702,27 @@ router.post("/delete-image", async (req, res) => {
 
     const r1 = await orderModel.collection.updateMany(
       { userOrderDishImageArray: imageName },
-      { $pull: { userOrderDishImageArray: imageName } }
+      { $pull: { userOrderDishImageArray: imageName } },
     );
 
     const r2 = await orderModel.collection.updateMany(
       { "userOrderDishImageArray.image": imageName },
-      { $pull: { userOrderDishImageArray: { image: imageName } } }
+      { $pull: { userOrderDishImageArray: { image: imageName } } },
     );
 
-    return res.json({ 
+    return res.json({
       success: true,
       message: "Image deleted from server & database",
       imageName,
-      modifiedCount: (r1.modifiedCount || 0) + (r2.modifiedCount || 0)
+      modifiedCount: (r1.modifiedCount || 0) + (r2.modifiedCount || 0),
     });
-
   } catch (err) {
     console.error("DELETE IMAGE ERROR", err);
     return res.status(500).json({
       message: "Error deleting image",
-      error: err.message
+      error: err.message,
     });
   }
 });
-
-
-
 
 module.exports = router;

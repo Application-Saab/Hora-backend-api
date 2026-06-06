@@ -6,63 +6,135 @@ const { CustomResponse } = require("../store/commonFunction");
 const { bulkFoodCuisineId } = require("../utils/constants");
 const router = express.Router();
 const { default: mongoose } = require("mongoose");
+const path = require("path");
+const fs = require("fs");
+const multer = require("multer");
+const sharp = require("sharp");
 
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
 
-router.post("/add", async (req, res) => {
-  try {
-    const cuisineId = req.body?.cuisineId?.[0];
+const compressImageToWebP = async (buffer, outputPath, targetMaxKB = 40) => {
+  let quality = 85;
+  const step = 5;
 
-    // ------------------------------------
-    // CASE 1: DECORATION
-    // ------------------------------------
-    if (cuisineId === "65a2c9d3513d9389d34e2ec9") {
-      const data = new decorationModel({
-        name: req.body.name,
-        short_link: "",
-        featured_image: req.body.image,
-        caption: req.body.description,
-        badge: null,
-        price: req.body.dish_rate,
-        cost_price: req.body.price,
-        type: null,
-        is_wishlisted: null,
-        ratings: null,
-        attributes: null,
-        inclusion: req.body.preperationtext,
-        tag: req.body.mealId,
-        vendorMaterialPrice: req.body.vendorMaterialPrice,
-        executionPrice: req.body.executionPrice,
-        horaAdvance: req.body.horaAdvance,
-        inclusionVariables: req.body.inclusionVariables,
-      });
+  while (quality > 5) {
+    const compressedBuffer = await sharp(buffer).webp({ quality }).toBuffer();
 
-      // Check existing
+    const sizeKB = compressedBuffer.length / 1024;
+
+    if (sizeKB <= targetMaxKB) {
+      fs.writeFileSync(outputPath, compressedBuffer);
+      return true;
+    }
+
+    quality -= step;
+  }
+
+  // Final attempt with lowest quality
+  const fallbackBuffer = await sharp(buffer).webp({ quality: 5 }).toBuffer();
+  fs.writeFileSync(outputPath, fallbackBuffer);
+  return false;
+};
+
+router.post(
+  "/decoration/add",
+  upload.array("featured_images", 10),
+  async (req, res) => {
+    try {
+      const files = req.files;
+
+      if (!files || files.length === 0) {
+        return res.status(400).json({
+          error: true,
+          message: "At least 1 image required",
+        });
+      }
+
+      const outputFolder = path.resolve(
+        __dirname,
+        "../uploads/compressed_webp",
+      );
+
+      if (!fs.existsSync(outputFolder)) {
+        fs.mkdirSync(outputFolder, { recursive: true });
+      }
+
+      // 🧠 PROCESS ALL IMAGES
+      const images = [];
+
+      for (let file of files) {
+        const fileName = `${Date.now()}-${path.parse(file.originalname).name}.webp`;
+        const outputPath = path.join(outputFolder, fileName);
+
+        await compressImageToWebP(file.buffer, outputPath);
+
+        images.push({
+          fileName,
+        });
+      }
+
       const existing = await decorationModel.findOne({
-        name: data.name,
-        type: data.type,
+        name: req.body.name,
       });
 
       if (existing) {
         return res.json({
           error: true,
           status: 503,
-          message: "Decoration already added.",
+          message: "Decoration already exists",
         });
       }
 
-      const savedData = await data.save();
+      const data = new decorationModel({
+        name: req.body.name,
+        short_link: "",
+        featured_images: images, // 👈 MAIN CHANGE
+        caption: req.body.description || "",
+        badge: null,
+        price: req.body.dish_rate || 0,
+        cost_price: req.body.price,
+        type: null,
+        is_wishlisted: null,
+        ratings: null,
+        attributes: null,
+        inclusion: req.body.preperationtext,
+        tag: req.body.mealId ? JSON.parse(req.body.mealId) : [],
+        vendorMaterialPrice: req.body.vendorMaterialPrice,
+        executionPrice: req.body.executionPrice,
+        horaAdvance: req.body.horaAdvance,
+        inclusionVariables:
+          typeof req.body.inclusionVariables === "string"
+            ? JSON.parse(req.body.inclusionVariables)
+            : req.body.inclusionVariables,
+      });
+
+      const saved = await data.save();
+
       return res.json({
         error: false,
         status: 200,
-        message: "Decoration added successfully.",
-        data: savedData,
+        message: "Decoration created successfully",
+        data: saved,
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({
+        error: true,
+        message: err.message,
       });
     }
+  },
+);
+
+router.post("/add", async (req, res) => {
+  try {
+    const cuisineId = req.body?.cuisineId?.[0];
 
     // ------------------------------------
     // CASE 2: PHOTOGRAPHY
     // ------------------------------------
-    else if (cuisineId === "66c96b2a22ed47b72117e089") {
+    if (cuisineId === "66c96b2a22ed47b72117e089") {
       const data = new photographyModel({
         name: req.body.name,
         short_link: "",
@@ -566,10 +638,18 @@ router.get("/getRandomDishList", async (req, res) => {
 
 router.get("/getAllDishesList", async (req, res) => {
   try {
-    const dishes = await dishModel.find({
-      cuisineId : { $in: [new mongoose.Types.ObjectId(bulkFoodCuisineId)] },
-    }).lean();
-    return CustomResponse(res, 200, false, "Dishes fetched successfully", dishes);
+    const dishes = await dishModel
+      .find({
+        cuisineId: { $in: [new mongoose.Types.ObjectId(bulkFoodCuisineId)] },
+      })
+      .lean();
+    return CustomResponse(
+      res,
+      200,
+      false,
+      "Dishes fetched successfully",
+      dishes,
+    );
   } catch (err) {
     console.error("Get All Dishes Error:", err);
     return CustomResponse(res, 500, true, "Server error");

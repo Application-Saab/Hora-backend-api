@@ -27,8 +27,6 @@ const venueSchema = new mongoose.Schema(
     },
     subFolders: [
       {
-        // ❌ REMOVED manual _id → Mongo will auto create ObjectId
-
         folderName: {
           type: String,
           required: true,

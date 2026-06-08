@@ -39,9 +39,9 @@ const venuePackagesSchema = new mongoose.Schema(
     ],
     packageStatus: {
       type: Number,
-      enum: [1, 2, 3],
+      enum: [1, 2],
       default: 1,
-    } /* 1-active 2-inactive 3-delete  */,
+    } /* 1-active 2-inactive  */,
   },
   {
     timestamps: true,

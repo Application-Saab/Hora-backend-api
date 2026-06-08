@@ -494,7 +494,7 @@ router.delete("/package-details/:id", async (req, res) => {
 // =============================================
 // GET PACKAGES BY VENUE ID
 // =============================================
-router.get("/packages-by-venue/:venueId", async (req, res) => {
+router.get("/packages-by-venue-admin/:venueId", async (req, res) => {
   try {
     const { venueId } = req.params;
 
@@ -509,6 +509,103 @@ router.get("/packages-by-venue/:venueId", async (req, res) => {
       venueId,
       packageStatus: {
         $ne: 3,
+      },
+    })
+      .populate("packageItems")
+      .sort({
+        createdAt: -1,
+      })
+      .lean();
+
+    return res.status(200).json({
+      error: false,
+      message: "Venue packages fetched successfully",
+      data: packages,
+    });
+  } catch (err) {
+    console.log(err);
+
+    return res.status(500).json({
+      error: true,
+      message: "Server Error",
+    });
+  }
+});
+
+router.patch("/venue-package-status/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { packageStatus } = req.body;
+
+    // -------------------------
+    // Validate ID
+    // -------------------------
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        message: "Invalid package ID",
+        error: true,
+      });
+    }
+
+    // -------------------------
+    // Allow ONLY 1 or 2
+    // -------------------------
+    if (![1, 2].includes(packageStatus)) {
+      return res.status(400).json({
+        message: "Invalid status. Use 1 (active) or 2 (inactive)",
+        error: true,
+      });
+    }
+
+    // -------------------------
+    // Find package
+    // -------------------------
+    const packageData = await VenuePackage.findById(id);
+
+    if (!packageData) {
+      return res.status(404).json({
+        message: "Package not found",
+        error: true,
+      }); 
+    }
+
+    // -------------------------
+    // Update status
+    // -------------------------
+    packageData.packageStatus = packageStatus;
+
+    await packageData.save();
+
+    return res.status(200).json({
+      message: "Package status updated successfully",
+      error: false,
+      data: packageData,
+    });
+  } catch (err) {
+    console.error("Package status update error:", err);
+
+    return res.status(500).json({
+      message: "Server error",
+      error: true,
+    });
+  }
+});
+
+router.get("/packages-by-venue/:venueId", async (req, res) => {
+  try {
+    const { venueId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(venueId)) {
+      return res.status(400).json({
+        error: true,
+        message: "Invalid venue id",
+      });
+    }
+
+    const packages = await VenuePackage.find({
+      venueId,
+      packageStatus: {
+        $ne: 2,
       },
     })
       .populate("packageItems")

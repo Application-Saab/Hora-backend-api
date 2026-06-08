@@ -5,8 +5,8 @@ const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
 const Venues = require("../models/party-venue");
-const User = require("../models/user"); // ✅ added
-const VenueVisitors = require("../models/venue-visitors"); // ✅ added
+const User = require("../models/user");
+const VenueVisitors = require("../models/venue-visitors");
 const { s3, S3_BUCKET } = require("../utils/awsConfigs");
 const VenueImages = require("../models/venueImages");
 const {
@@ -19,7 +19,7 @@ const sendResponse = (res, status, error, message, data = null) =>
 
 // =============================================
 // GET ALL VENUES (Party Hall List)
-// Supports pagination + search
+// Supports pagination + search For Admin
 // =============================================
 router.get("/venues-list", async (req, res) => {
   try {
@@ -43,9 +43,9 @@ router.get("/venues-list", async (req, res) => {
     const skip = (page - 1) * limit;
 
     const venues = await Venues.find(query)
-      .select(
-        "venueName venueType location googleMapLink createdAt venueImageUrl subFolders termsAndConditionsHtml",
-      )
+      // .select(
+      //   "venueName venueType location googleMapLink createdAt venueImageUrl subFolders termsAndConditionsHtml",
+      // )
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit))
@@ -69,6 +69,71 @@ router.get("/venues-list", async (req, res) => {
   }
 });
 
+// Public Venue Listing API with filters
+router.get("/venues-public-list", async (req, res) => {
+  try {
+    const { city, eventType, venueType, guestCapacity } = req.query;
+
+    const query = {
+      venueStatus: 1,
+    };
+
+    // ----------------------------
+    // CITY FILTER (partial match)
+    // ----------------------------
+    if (city) {
+      query.city = { $regex: city, $options: "i" };
+    }
+
+    // ----------------------------
+    // VENUE TYPE FILTER
+    // ----------------------------
+    if (venueType) {
+      query.venueType = venueType;
+    }
+
+    // ----------------------------
+    // EVENT TYPE FILTER (array contains)
+    // ----------------------------
+    if (eventType) {
+      const eventTypesArray = eventType.split(",");
+
+      query.eventTypes = {
+        $in: eventTypesArray,
+      };
+    }
+
+    // ----------------------------
+    // GUEST CAPACITY FILTER
+    // (get venues >= required capacity)
+    // ----------------------------
+    if (guestCapacity) {
+      query.guestCapacity = { $gte: Number(guestCapacity) };
+    }
+
+    // ----------------------------
+    // QUERY EXECUTION (FAST)
+    // ----------------------------
+    const venues = await Venues.find(query)
+      // .select(
+      //   "venueName venueType city location googleMapLink venueImageUrl guestCapacity eventTypes foodTypes hallType startingPrice"
+      // )
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.status(200).json({
+      message: "Public venues fetched successfully",
+      data: venues,
+    });
+  } catch (err) {
+    console.error("Public venues fetch error:", err);
+    return res.status(500).json({
+      message: "Server error",
+      error: true,
+    });
+  }
+});
+
 // =============================================
 // CREATE VENUE
 // Creates a new party venue for a user
@@ -81,15 +146,31 @@ router.post(
       if (err) {
         return sendResponse(res, 400, true, err.message);
       }
-
       next();
     });
   },
+
   async (req, res) => {
     try {
-      const { userId, venueType, venueName, location, googleMapLink } =
-        req.body;
+      let {
+        userId,
+        venueType,
+        venueName,
+        location,
+        city,
+        googleMapLink,
+        eventTypes,
+        guestCapacity,
+        isParkingAvailable,
+        hallType,
+        foodTypes,
+        startingPrice,
+        totalRoomsAvailable,
+      } = req.body;
 
+      // ----------------------------
+      // Validate userId
+      // ----------------------------
       if (!mongoose.Types.ObjectId.isValid(userId)) {
         return sendResponse(res, 400, true, "Invalid userId");
       }
@@ -100,16 +181,46 @@ router.post(
         return sendResponse(res, 404, true, "Owner not found");
       }
 
-      let venueImageUrl = "";
-      let venueImageKey = "";
+      // ----------------------------
+      // Parse JSON fields (IMPORTANT)
+      // because frontend is sending stringify
+      // ----------------------------
+      eventTypes = eventTypes ? JSON.parse(eventTypes) : [];
+      hallType = hallType ? JSON.parse(hallType) : [];
+      foodTypes = foodTypes ? JSON.parse(foodTypes) : [];
 
+      guestCapacity = guestCapacity ? Number(guestCapacity) : 0;
+      startingPrice = startingPrice ? Number(startingPrice) : 0;
+      totalRoomsAvailable = totalRoomsAvailable
+        ? Number(totalRoomsAvailable)
+        : 0;
+
+      isParkingAvailable =
+        isParkingAvailable === "true" || isParkingAvailable === true;
+
+      // ----------------------------
+      // Create venue
+      // ----------------------------
       const venue = await Venues.create({
         userId,
         venueType,
         venueName,
         location,
+        city,
         googleMapLink,
+        eventTypes,
+        guestCapacity,
+        isParkingAvailable,
+        hallType,
+        foodTypes,
+        startingPrice,
       });
+
+      // ----------------------------
+      // Image upload
+      // ----------------------------
+      let venueImageUrl = "";
+      let venueImageKey = "";
 
       if (req.file) {
         const webpFileName = `venue-${Date.now()}.webp`;
@@ -129,11 +240,9 @@ router.post(
         );
 
         venueImageUrl = uploadResult.Location;
-
         venueImageKey = uploadResult.Key;
 
         venue.venueImageUrl = venueImageUrl;
-
         venue.venueImageKey = venueImageKey;
 
         await venue.save();
@@ -147,11 +256,71 @@ router.post(
       return sendResponse(res, 201, false, "Venue created successfully", venue);
     } catch (err) {
       console.log(err);
-
       return sendResponse(res, 500, true, "Server error");
     }
   },
 );
+
+// Update venue Status
+router.patch("/venue-status/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { venueStatus } = req.body;
+
+    // -------------------------
+    // Validate ID
+    // -------------------------
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        message: "Invalid venue ID",
+        error: true,
+      });
+    }
+
+    // -------------------------
+    // Allow ONLY active/inactive
+    // -------------------------
+    if (![1, 2].includes(venueStatus)) {
+      return res.status(400).json({
+        message: "Invalid status. Use 1 (active) or 2 (inactive)",
+        error: true,
+      });
+    }
+
+    // -------------------------
+    // Find venue
+    // -------------------------
+    const venue = await Venues.findById(id);
+
+    if (!venue) {
+      return res.status(404).json({
+        message: "Venue not found",
+        error: true,
+      });
+    }
+
+    // -------------------------
+    // Update status
+    // -------------------------
+    venue.venueStatus = venueStatus;
+
+    await venue.save();
+
+    return res.status(200).json({
+      message: "Venue status updated successfully",
+      error: false,
+      data: venue,
+    });
+
+  } catch (err) {
+    console.error("Venue status update error:", err);
+
+    return res.status(500).json({
+      message: "Server error",
+      error: true,
+    });
+  }
+});
 
 // =============================================
 // GET VENUE DETAILS
@@ -527,10 +696,10 @@ router.put(
       if (err) {
         return sendResponse(res, 400, true, err.message);
       }
-
       next();
     });
   },
+
   async (req, res) => {
     const { id } = req.params;
 
@@ -551,17 +720,65 @@ router.put(
         });
       }
 
-      const { venueName, venueType, location, googleMapLink } = req.body;
+      let {
+        venueName,
+        venueType,
+        location,
+        city,
+        googleMapLink,
+        eventTypes,
+        guestCapacity,
+        isParkingAvailable,
+        hallType,
+        foodTypes,
+        startingPrice,
+        totalRoomsAvailable,
+      } = req.body;
 
+      // ----------------------------
+      // Basic fields
+      // ----------------------------
       if (venueName !== undefined) existing.venueName = venueName;
-
       if (venueType !== undefined) existing.venueType = venueType;
-
       if (location !== undefined) existing.location = location;
-
+      if (city !== undefined) existing.city = city;
       if (googleMapLink !== undefined) existing.googleMapLink = googleMapLink;
 
+      // ----------------------------
+      // Parse JSON fields
+      // ----------------------------
+      if (eventTypes !== undefined)
+        existing.eventTypes = eventTypes ? JSON.parse(eventTypes) : [];
+
+      if (hallType !== undefined)
+        existing.hallType = hallType ? JSON.parse(hallType) : [];
+
+      if (foodTypes !== undefined)
+        existing.foodTypes = foodTypes ? JSON.parse(foodTypes) : [];
+
+      // ----------------------------
+      // Numbers
+      // ----------------------------
+      if (guestCapacity !== undefined)
+        existing.guestCapacity = Number(guestCapacity || 0);
+
+      if (startingPrice !== undefined)
+        existing.startingPrice = Number(startingPrice || 0);
+
+      if (totalRoomsAvailable !== undefined)
+        existing.totalRoomsAvailable = Number(totalRoomsAvailable || 0);
+
+      // ----------------------------
+      // Boolean
+      // ----------------------------
+      if (isParkingAvailable !== undefined) {
+        existing.isParkingAvailable =
+          isParkingAvailable === "true" || isParkingAvailable === true;
+      }
+
+      // ----------------------------
       // IMAGE UPDATE
+      // ----------------------------
       if (req.file) {
         if (existing.venueImageKey) {
           await deleteFromS3(existing.venueImageKey);
@@ -584,11 +801,9 @@ router.put(
         );
 
         existing.venueImageUrl = uploadResult.Location;
-
         existing.venueImageKey = uploadResult.Key;
 
         await deleteFileWithRetry(req.file.path);
-
         await deleteFileWithRetry(webpPath);
       }
 
@@ -609,7 +824,6 @@ router.put(
     }
   },
 );
-
 // =============================================
 // GET ALL IMAGES OF A VENUE
 // Returns all images (no folder filtering)
@@ -668,8 +882,7 @@ router.post(
 
       // ================= DUPLICATE CHECK =================
       const alreadyExists = venue.subFolders.some(
-        (sf) =>
-          sf.folderName.toLowerCase() === folderName.toLowerCase()
+        (sf) => sf.folderName.toLowerCase() === folderName.toLowerCase(),
       );
 
       if (alreadyExists) {
@@ -697,7 +910,7 @@ router.post(
             userId,
             venueId,
             file.mimetype,
-            "venue"
+            "venue",
           );
 
           const thumbUpload = await uploadImageToS3(
@@ -706,7 +919,7 @@ router.post(
             userId,
             venueId,
             "image/webp",
-            "venue"
+            "venue",
           );
 
           folderDp = {
@@ -739,30 +952,25 @@ router.post(
 
       await venue.save();
 
-      const savedSubFolder =
-        venue.subFolders[venue.subFolders.length - 1];
+      const savedSubFolder = venue.subFolders[venue.subFolders.length - 1];
 
       return sendResponse(
         res,
         201,
         false,
         "Venue subfolder created",
-        savedSubFolder
+        savedSubFolder,
       );
     } catch (error) {
       console.error("Venue Subfolder Error:", error);
       return sendResponse(res, 500, true, "Server error");
     }
-  }
+  },
 );
 
 router.put("/venue/assign-subfolder", async (req, res) => {
   try {
-    const {
-      subFolderId,
-      addImageIds = [],
-      removeImageIds = [],
-    } = req.body;
+    const { subFolderId, addImageIds = [], removeImageIds = [] } = req.body;
 
     if (!subFolderId) {
       return res.status(400).json({
@@ -774,7 +982,7 @@ router.put("/venue/assign-subfolder", async (req, res) => {
     if (addImageIds.length > 0) {
       await VenueImages.updateMany(
         { _id: { $in: addImageIds } },
-        { $addToSet: { folderIds: subFolderId } }
+        { $addToSet: { folderIds: subFolderId } },
       );
     }
 
@@ -782,7 +990,7 @@ router.put("/venue/assign-subfolder", async (req, res) => {
     if (removeImageIds.length > 0) {
       await VenueImages.updateMany(
         { _id: { $in: removeImageIds } },
-        { $pull: { folderIds: subFolderId } }
+        { $pull: { folderIds: subFolderId } },
       );
     }
 
@@ -894,6 +1102,5 @@ router.get("/venue-folders/:venueId", async (req, res) => {
 
   res.json(folders);
 });
-
 
 module.exports = router;

@@ -131,22 +131,22 @@ router.get("/capsule-tracking", async (req, res) => {
         },
 
         // Folder Lookup
-{
-  $addFields: {
-    orderIdString: {
-      $toString: "$order_id"
-    }
-  }
-},
+        {
+          $addFields: {
+            orderIdString: {
+              $toString: "$order_id"
+            }
+          }
+        },
 
-{
-  $lookup: {
-    from: "folders",
-    localField: "orderIdString",
-    foreignField: "orderId",
-    as: "folder"
-  }
-},
+        {
+          $lookup: {
+            from: "folders",
+            localField: "orderIdString",
+            foreignField: "orderId",
+            as: "folder"
+          }
+        },
 
         {
           $unwind: {
@@ -155,35 +155,35 @@ router.get("/capsule-tracking", async (req, res) => {
           }
         },
 
-{
-  $addFields: {
-    firstDeviceType: {
-      $arrayElemAt: [
         {
-          $map: {
-            input: { $ifNull: ["$folder.deviceTracking", []] },
-            as: "d",
-            in: "$$d.deviceType"
-          }
-        },
-        0
-      ]
-    },
+          $addFields: {
+            firstDeviceType: {
+              $arrayElemAt: [
+                {
+                  $map: {
+                    input: { $ifNull: ["$folder.deviceTracking", []] },
+                    as: "d",
+                    in: "$$d.deviceType"
+                  }
+                },
+                0
+              ]
+            },
 
-    secondDeviceType: {
-      $arrayElemAt: [
-        {
-          $map: {
-            input: { $ifNull: ["$folder.deviceTracking", []] },
-            as: "d",
-            in: "$$d.deviceType"
+            secondDeviceType: {
+              $arrayElemAt: [
+                {
+                  $map: {
+                    input: { $ifNull: ["$folder.deviceTracking", []] },
+                    as: "d",
+                    in: "$$d.deviceType"
+                  }
+                },
+                1
+              ]
+            }
           }
         },
-        1
-      ]
-    }
-  }
-},
 
         // Weblinks Lookup
         {
@@ -278,6 +278,10 @@ router.get("/capsule-tracking", async (req, res) => {
               }
             },
 
+            totalPersonCount: {
+              $ifNull: ["$folder.totalPersonCount", 0]
+            },
+
             totalClicks: {
               $ifNull: ["$folder.clickCount", 0]
             }
@@ -307,7 +311,9 @@ router.get("/capsule-tracking", async (req, res) => {
               totalClicks: "$totalClicks",
 
               firstDeviceType: "$firstDeviceType",
-              secondDeviceType: "$secondDeviceType"
+              secondDeviceType: "$secondDeviceType",
+
+              totalPersonCount: "$totalPersonCount"
             }
           }
         }
@@ -378,25 +384,25 @@ router.post("/track-gallery-view", async (req, res) => {
       });
     }
     // Validate Mongo IDs
-if (
-  !mongoose.Types.ObjectId.isValid(userId) ||
-  !mongoose.Types.ObjectId.isValid(mainFolderId)
-) {
-  return res.status(400).json({
-    success: false,
-    message: "Invalid ID format",
-  });
-}
+    if (
+      !mongoose.Types.ObjectId.isValid(userId) ||
+      !mongoose.Types.ObjectId.isValid(mainFolderId)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid ID format",
+      });
+    }
 
-// Check user exists
-const userExists = await Users.findById(userId).select("_id");
+    // Check user exists
+    const userExists = await Users.findById(userId).select("_id");
 
-if (!userExists) {
-  return res.status(404).json({
-    success: false,
-    message: "User not found",
-  });
-}
+    if (!userExists) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
 
 
     const folder = await Folder.findById(mainFolderId);
@@ -516,12 +522,12 @@ router.get("/capsule-users", async (req, res) => {
       },
 
       {
-          $match: {
-            $expr: {
-              $ne: ["$viewedBy", "$customerId"]
-            }
+        $match: {
+          $expr: {
+            $ne: ["$viewedBy", "$customerId"]
           }
-        },
+        }
+      },
 
       {
         $group: {
@@ -547,28 +553,28 @@ router.get("/capsule-users", async (req, res) => {
     // MERGE UNIQUE USERS
     // =====================================
 
-const userMap = new Map();
+    const userMap = new Map();
 
-[...hostUsers, ...guestUsers].forEach((user) => {
+    [...hostUsers, ...guestUsers].forEach((user) => {
 
-  const id = user._id.toString();
+      const id = user._id.toString();
 
-  if (userMap.has(id)) {
+      if (userMap.has(id)) {
 
-    const existing = userMap.get(id);
+        const existing = userMap.get(id);
 
-    existing.totalOrders = Math.max(
-      existing.totalOrders,
-      user.totalOrders
-    );
+        existing.totalOrders = Math.max(
+          existing.totalOrders,
+          user.totalOrders
+        );
 
-  } else {
+      } else {
 
-    userMap.set(id, user);
+        userMap.set(id, user);
 
-  }
+      }
 
-});
+    });
 
     let users = Array.from(userMap.values());
 
@@ -665,12 +671,12 @@ const userMap = new Map();
         },
 
         {
-        $match: {
-          $expr: {
-            $ne: ["$viewedBy", "$customerId"]
+          $match: {
+            $expr: {
+              $ne: ["$viewedBy", "$customerId"]
+            }
           }
-        }
-      },
+        },
 
         {
           $group: {
@@ -762,7 +768,7 @@ const userMap = new Map();
         fromCapsule:
           userInfo.fromCapsule || false,
 
-          createdAt: userInfo.createdAt || null
+        createdAt: userInfo.createdAt || null
 
       };
 
@@ -783,15 +789,15 @@ const userMap = new Map();
     }
 
     // =====================================
-// SORT (Recent Users First)
-// =====================================
+    // SORT (Recent Users First)
+    // =====================================
 
-finalUsers.sort((a, b) => {
-  const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
-  const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
-  
-  return dateB - dateA; 
-});
+    finalUsers.sort((a, b) => {
+      const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+      const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
+
+      return dateB - dateA;
+    });
 
     // =====================================
     // TOTAL

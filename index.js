@@ -233,6 +233,10 @@ const analyticsRoutes = require("./routes/analytics");
 const FoodPackageRoutes = require("./routes/food-package");
 const MaterialListRoutes = require("./routes/material-list");
 const CelebrationBoosterRoutes = require("./routes/celebration-booster");
+const PartyHallVenueRoutes = require("./routes/createPartyVenue");
+const venuePackageRoutes = require("./routes/venue-package");
+const venuePackageCategoryRoutes = require("./routes/venue-package-categories");
+const venuePackageItemRoutes = require("./routes/venue-package-items");
 const EventShareRoutes = require("./routes/event-share");
 let passportAuth = require("./store/passportAuth").passportAuth;
 
@@ -263,6 +267,10 @@ app.use("/api/analytics", analyticsRoutes);
 app.use("/api/food-package", FoodPackageRoutes);
 app.use("/api/material-list", MaterialListRoutes);
 app.use("/api/celebration-booster", CelebrationBoosterRoutes);
+app.use("/api/party-venue" , PartyHallVenueRoutes);
+app.use("/api/party-venue/package" , venuePackageRoutes);
+app.use("/api/party-venue/package-category" , venuePackageCategoryRoutes);
+app.use("/api/party-venue/package-item" , venuePackageItemRoutes);
 app.use("/smartinvite/share", EventShareRoutes);
 
 const notificationFunction = require("./store/notifications");

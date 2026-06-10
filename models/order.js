@@ -58,7 +58,11 @@ const orderSchema = new mongoose.Schema({
     totalWeblink: { type: Number, default: 0 },
     driveProvidedAt: {type:Date},
     AllImagesUploadedAt:{type:Date},
-    isReviewed: { type: Boolean, default: false }
+    reviewStatus: {
+              type: String,
+              enum: ["pending", "positive", "negative"],
+              default: "pending",
+      }
     },
 }, {
     strict: false,

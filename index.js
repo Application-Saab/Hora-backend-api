@@ -7,9 +7,11 @@ let cookieParser = require("cookie-parser");
 let bodyParser = require("body-parser");
 let fs = require("fs");
 const orderModel = require('./models/order');
+const Folder = require('./models/folder')
 const commonFunction = require('./store/commonFunction');
 const sharp = require('sharp');
 const cron = require('node-cron');
+const {sendWhatsApp} = require('./utils/whatAppServices')
 // Database Connection Start
 mongoose.set("strictQuery", true);
 mongoose.connect(
@@ -197,6 +199,91 @@ cron.schedule('0 3 * * *', async () => {
   console.log('Running Supplier Performance Job:', new Date());
   await runSupplierPerformance();
 });
+
+
+cron.schedule("* * * * *", async () => {
+  try {
+    console.log("Cron running... checking orders");
+
+    const now = new Date();
+
+    const orders = await orderModel.find({
+      capsuleFirstNotificationSent: false,
+      AllImagesUploadedAt: { $ne: null },
+    });
+
+    for (let order of orders) {
+
+      const sendTime =
+        new Date(order.AllImagesUploadedAt).getTime() + 24 * 60 * 60 * 1000;
+
+      if (now.getTime() >= sendTime) {
+
+        const folder = await Folder.findOne({
+          orderId: order.order_id.toString(),
+        });
+
+        const viewedBy = folder?.viewedBy || [];
+
+        if (viewedBy.length === 0) {
+
+          console.log("Sending WhatsApp to:", order.phone_no);
+
+          await sendWhatsApp(9406754372);
+
+          order.capsuleFirstNotificationSent = true;
+          await order.save();
+
+        } else {
+          console.log("Skipped: folder already viewed by users");
+        }
+      }
+    }
+
+  } catch (err) {
+    console.log("Cron error:", err.message);
+  }
+});
+
+
+cron.schedule("0 * * * *", async () => {
+  try {
+    console.log("24h notification cron running");
+
+    const folders = await Folder.find({
+      notificationCycleCount: { $lt: 3 },
+      $expr: { $lt: ["$clickCount", "$totalPersonCount"] }
+    });
+
+    for (let folder of folders) {
+
+      // STEP 1: CHECK IF ELIGIBLE
+      if (folder.clickCount >= folder.totalPersonCount) continue;
+
+      // STEP 2: GET USERS FROM viewedBy
+      const users = await Users.find({
+        _id: { $in: folder.viewedBy }
+      });
+
+      const phones = users.map(u => u.phone);
+
+      // STEP 3: SEND WHATSAPP TO EACH USER
+      for (let phone of phones) {
+        await sendWhatsApp(phone);
+      }
+
+      // STEP 4: INCREASE CYCLE
+      folder.notificationCycleCount =
+        (folder.notificationCycleCount || 0) + 1;
+
+      await folder.save();
+    }
+
+  } catch (err) {
+    console.log("Cron error:", err.message);
+  }
+});
+
 
 database.on("error", (error) => {
   console.log(error);

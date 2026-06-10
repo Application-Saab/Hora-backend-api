@@ -59,6 +59,7 @@ const orderSchema = new mongoose.Schema({
     driveProvidedAt: {type:Date},
     AllImagesUploadedAt:{type:Date},
     },
+    capsuleFirstNotificationSent:{type:Boolean, default:false},
 }, {
     strict: false,
     timestamps: true

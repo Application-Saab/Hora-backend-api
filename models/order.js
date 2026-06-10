@@ -58,6 +58,7 @@ const orderSchema = new mongoose.Schema({
     totalWeblink: { type: Number, default: 0 },
     driveProvidedAt: {type:Date},
     AllImagesUploadedAt:{type:Date},
+    isReviewed: { type: Boolean, default: false }
     },
 }, {
     strict: false,

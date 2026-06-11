@@ -92,6 +92,10 @@ const FolderSchema = new mongoose.Schema(
         },
       },
     ],
+    isLocker: {
+    type: Boolean,
+    default: false,
+    },
   },
   { timestamps: true }
 );

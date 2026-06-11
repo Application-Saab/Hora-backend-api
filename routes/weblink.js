@@ -284,7 +284,11 @@ router.get("/capsule-tracking", async (req, res) => {
 
             totalClicks: {
               $ifNull: ["$folder.clickCount", 0]
-            }
+            },
+
+            shareCapsuleClicks: {
+              $ifNull: ["$folder.shareCapsuleCount", 0],
+            },
           }
         },
 
@@ -313,7 +317,8 @@ router.get("/capsule-tracking", async (req, res) => {
               firstDeviceType: "$firstDeviceType",
               secondDeviceType: "$secondDeviceType",
 
-              totalPersonCount: "$totalPersonCount"
+              totalPersonCount: "$totalPersonCount",
+              shareCapsuleClicks: "$shareCapsuleClicks",
             }
           }
         }
@@ -358,7 +363,10 @@ router.post("/track-activity/:mediaId", async (req, res) => {
     let updateQuery = {};
     if (action === "download") {
       updateQuery = { $inc: { downloadCount: 1 } };
-    } else if (action === "share") {
+    } else if (action === "share-event") {
+      updateQuery = { $inc: { shareEventCount: 1 } };
+    }
+     else if (action === "share") {
       updateQuery = { $inc: { shareCount: 1 } };
     } else {
       return res.status(400).json({ message: "Invalid action" });
@@ -445,6 +453,27 @@ router.post('/track-click', async (req, res) => {
     res.status(200).json({
       success: true,
       currentDailyClicks: stats.clickCount,
+    });
+  } catch (error) {
+    console.error("Tracking Error:", error);
+    res.status(500).send("Server Error");
+  }
+});
+
+router.post("/track-capsule-share-click", async (req, res) => {
+  const { mainFolderId } = req.body;
+
+  if (!mainFolderId) return res.status(400).send("mainFolderId is required");
+  try {
+    const stats = await Folder.findByIdAndUpdate(
+      mainFolderId,
+      { $inc: { shareCapsuleCount: 1 } },
+      { new: true },
+    );
+
+    res.status(200).json({
+      success: true,
+      shareCapsuleCount: stats.shareCapsuleCount,
     });
   } catch (error) {
     console.error("Tracking Error:", error);

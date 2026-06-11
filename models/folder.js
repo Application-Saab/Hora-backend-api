@@ -85,17 +85,17 @@ const FolderSchema = new mongoose.Schema(
           s3Key: { type: String },
           thumbnailKey: { type: String }
         },
-
+        isLocker: {
+    type: Boolean,
+    default: false,
+    },
         createdAt: {
           type: Date,
           default: Date.now,
         },
       },
     ],
-    isLocker: {
-    type: Boolean,
-    default: false,
-    },
+    
   },
   { timestamps: true }
 );

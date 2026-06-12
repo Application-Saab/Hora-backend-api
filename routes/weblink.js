@@ -241,8 +241,19 @@ router.get("/capsule-tracking", async (req, res) => {
             },
 
             totalShares: {
-              $sum: "$media.shareCount"
-            },
+               $sum: {
+                $map: {
+                 input: "$media",
+                 as: "m",
+                 in: {
+                 $add: [
+                     { $ifNull: ["$$m.galleryImageShareCount", 0] },
+                     { $ifNull: ["$$m.shareCount", 0] }
+                ]
+              }
+            }
+          }
+        },
 
             faceRecognitionCount: {
               $size: {
@@ -367,7 +378,7 @@ router.post("/track-activity/:mediaId", async (req, res) => {
       updateQuery = { $inc: { shareEventCount: 1 } };
     }
      else if (action === "share") {
-      updateQuery = { $inc: { shareCount: 1 } };
+      updateQuery = { $inc: { galleryImageShareCount: 1 } };
     } else {
       return res.status(400).json({ message: "Invalid action" });
     }

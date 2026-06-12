@@ -288,32 +288,60 @@ router.post("/import-drive-folder", async (req, res) => {
 
 router.post("/add-order-drive-link", async (req, res) => {
   try {
-    const { folderUrl, order_id } = req.body;
-
-    if (!folderUrl || !order_id) {
-      return res.status(400).json({
-        message: "Folder URL and order_id are required",
-      });
-    }
-
-    const folderId = getFolderIdFromUrl(folderUrl);
-    if (!folderId) throw new Error("Invalid Google Drive folder URL");
-    if (!apiKey) throw new Error("Google Drive API key not configured");
-
+    const { folderUrl, order_id, allDriveLinks = [] } = req.body;
     // Order check
     const order = await OrderModel.findOne({ order_id }); 
     if (!order) throw new Error("Order not found");
-
-    // Drive public check
-    const isPublic = await isFolderPubliclyAccessible(folderId, apiKey);
-    if (!isPublic)
-      throw new Error("Google Drive folder is not publicly accessible");
-
     // WebLink generate
     // const folderName = order_id + 10800;
     const customerId = order.fromId;
     const orderId = order_id;
     const phoneNo = order.phone_no;
+
+
+    if (folderUrl?.trim()) {
+  const folderId = getFolderIdFromUrl(folderUrl);
+
+  if (!folderId) {
+    return res.status(400).json({
+      message: "Invalid Google Drive folder URL",
+    });
+  }
+
+  const isPublic = await isFolderPubliclyAccessible(folderId, apiKey);
+
+  if (!isPublic) {
+    return res.status(400).json({
+      message:
+        "The Google Drive folder is not publicly accessible. Please change its permission to 'Anyone with the link'.",
+    });
+  }
+}
+
+
+    if (allDriveLinks.length > 0) {
+    for (const item of allDriveLinks) {
+      if (!item.link) {
+        return res.status(400).json({ 
+          message: `Link is missing for type: ${item.linkType || 'unknown'}` 
+        });
+      }
+
+      const folderId = getFolderIdFromUrl(item.link);
+      if (!folderId) {
+        return res.status(400).json({ 
+          message: `Invalid Google Drive folder URL: ${item.link}` 
+        });
+      }
+
+      const isPublic = await isFolderPubliclyAccessible(folderId, apiKey);
+      if (!isPublic) {
+        return res.status(400).json({
+          message: `The Google Drive folder for '${item.linkType}' is not publicly accessible. Please change its permission to 'Anyone with the link'.`,
+        });
+      }
+    }
+  }
 
 const folderName = `${order_id}_${customerId}_${phoneNo}`;
 
@@ -323,83 +351,81 @@ let folder = await FolderModel.findOne({ folderName, customerId });
       folder = new FolderModel({ folderName, customerId, orderId });
       await folder.save();
     }
-let mainFolderId = folder._id;
-     const webLink = `https://horaservices.com/weblink-gallery?folderName=${folderName}&customerId=${customerId}`;
+    let webLink = order.orderWebLink; 
+    let updateFields = {};
 
-    // MongoDB update (IMMEDIATE)
-    await OrderModel.updateOne(
-      { order_id },
-      {
-        $set: {
-          orderDriveLink: folderUrl,
-          orderWebLink: webLink,
-          "imageUploadCounts.driveProvidedAt": new Date(),
-        },
+    if (allDriveLinks.length > 0) {
+        updateFields.allDriveLinks = allDriveLinks;
+    }
+
+    if (folderUrl && folderUrl.trim() !== "") {
+      const folderName = `${order_id}_${customerId}_${phoneNo}`;
+
+      let folder = await FolderModel.findOne({ folderName, customerId });
+      if (!folder) {
+        folder = new FolderModel({ folderName, customerId, orderId: order_id });
+        await folder.save();
       }
-    );
+      
+      let mainFolderId = folder._id;
+      webLink = `https://horaservices.com/weblink-gallery?folderName=${folderName}&customerId=${customerId}`;
 
-    // Frontend ko turant response
+      updateFields.orderDriveLink = folderUrl;
+      updateFields.orderWebLink = webLink;
+      updateFields["imageUploadCounts.driveProvidedAt"] = new Date();
+
+      axios
+        .post(`${process.env.MEDIA_WORKER_URL}/process-drive`, {
+          folderUrl,
+          order_id,     
+          customerId,  
+          phoneNo,
+          mainFolderId,
+        })
+        .catch((err) => {
+          console.error(
+            "Media worker API call failed for rawPhotos:",
+            err.response?.data || err.message
+          );
+        });
+
+      let updatedPhoneNumber = phoneNo;
+      if (!updatedPhoneNumber.startsWith("+91")) {
+        updatedPhoneNumber = `+91${updatedPhoneNumber}`;
+      }
+
+      const googlePayload = {
+        orderIdDb: order_id,
+        orderIdCustomer: order_id + 10800,
+        fulfillmentDate: order?.order_date
+          ? new Date(order.order_date).toLocaleDateString("en-GB")
+          : "N/A",
+        services: "Photography",
+        driveLink: folderUrl,
+        horaWebLink: webLink,
+        phone: updatedPhoneNumber,
+      };
+
+      axios
+        .post(
+          "https://script.google.com/macros/s/AKfycbzopweY3eKo4h29q_7Ow8uNpKBRNjxKqSTUI8UQ2NW1RucyL56_F-HGtKeBZrvcJRTB/exec",
+          googlePayload,
+          { headers: { "Content-Type": "application/json" } }
+        )
+        .catch((err) => {
+          console.error(
+            "Google Sheet update failed for rawPhotos:",
+            err.response?.data || err.message
+          );
+        });
+    }
+
+    await OrderModel.updateOne({ order_id }, { $set: updateFields });
+
     res.status(201).json({ 
       message: "Drive link added successfully",
       webLink,
     });
-
- // Trigger EC2 worker to process media in background
-    axios
-      .post(`${process.env.MEDIA_WORKER_URL}/process-drive`, {
-        folderUrl,
-        order_id,     
-        customerId,  
-        phoneNo,
-        mainFolderId,
-      })
-      .catch((err) => {
-        console.error(
-          "Media worker API call failed:",
-          err.response?.data || err.message
-        );
-      });
-
-
-
- // =========================
- // GOOGLE SHEET BACKGROUND
- // =========================
-
- let updatedPhoneNumber = phoneNo;
-
- if (!updatedPhoneNumber.startsWith("+91")) {
-   updatedPhoneNumber = `+91${updatedPhoneNumber}`;
- }
-
-const googlePayload = {
-  orderIdDb: order_id,
-  orderIdCustomer: order_id + 10800,
-  fulfillmentDate: order?.order_date
-    ? new Date(order.order_date).toLocaleDateString("en-GB")
-    : "N/A",
-  services: "Photography",
-  driveLink: folderUrl,
-  horaWebLink: webLink,
-  phone: updatedPhoneNumber,
-};
-
- axios
-   .post(
-     "https://script.google.com/macros/s/AKfycbzopweY3eKo4h29q_7Ow8uNpKBRNjxKqSTUI8UQ2NW1RucyL56_F-HGtKeBZrvcJRTB/exec",
-     googlePayload,
-     {
-       headers: {
-         "Content-Type": "application/json",
-       },
-     }
-   )
-   .catch((err) => {
-     console.error(
-       "Google Sheet update failed:",
-       err.response?.data || err.message
-     );
-   });
       
 
   } catch (error) {

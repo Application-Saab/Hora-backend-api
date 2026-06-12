@@ -52,12 +52,26 @@ const orderSchema = new mongoose.Schema({
     call_checklist: {type: Object, default: {}},
     call_checklist_exists: {type: Boolean, default: false},
     orderDriveLink: {type: String, default:""},
+allDriveLinks: {
+  type: [
+    {
+      linkType: String,
+      link: String,
+    },
+  ],
+  default: [],
+},
     orderWebLink: {type:String, default:""},
     imageUploadCounts: {
     totalFromDrive: { type: Number, default: 0 },
     totalWeblink: { type: Number, default: 0 },
     driveProvidedAt: {type:Date},
     AllImagesUploadedAt:{type:Date},
+    reviewStatus: {
+              type: String,
+              enum: ["pending", "positive", "negative"],
+              default: "pending",
+      }
     },
 }, {
     strict: false,

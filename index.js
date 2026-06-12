@@ -313,7 +313,13 @@ var storage = multer.diskStorage({
     cb(null, "./uploads");
   },
   filename: function (req, file, cb) {
-    cb(null, "attachment" + "-" + Date.now() + path.extname(file.originalname));
+    const uniqueSuffix =
+      Date.now() + "-" + Math.floor(Math.random() * 1000000);
+
+    cb(
+      null,
+      "attachment-" + uniqueSuffix + path.extname(file.originalname)
+    );
   },
 });
 

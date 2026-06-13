@@ -98,7 +98,7 @@ const weblinkSchema = new mongoose.Schema(
       index: true,
     },
     downloadCount: { type: Number, default: 0 },
-    shareCount: { type: Number, default: 0 },
+    galleryImageShareCount: { type: Number, default: 0 },
   },
   {
     timestamps: true,

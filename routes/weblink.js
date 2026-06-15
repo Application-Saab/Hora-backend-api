@@ -156,6 +156,32 @@ router.get("/capsule-tracking", async (req, res) => {
         },
 
         {
+  $addFields: {
+    lockerSubFolderId: {
+      $arrayElemAt: [
+        {
+          $map: {
+            input: {
+              $filter: {
+                input: { $ifNull: ["$folder.subFolders", []] },
+                as: "sf",
+                cond: {
+                  $eq: ["$$sf.isLocker", true]
+                }
+              }
+            },
+            as: "locker",
+            in: "$$locker._id"
+          }
+        },
+        0
+      ]
+    }
+  }
+},
+
+
+        {
           $addFields: {
             firstDeviceType: {
               $arrayElemAt: [
@@ -195,22 +221,44 @@ router.get("/capsule-tracking", async (req, res) => {
           }
         },
 
-        {
-          $addFields: {
+{
+  $addFields: {
 
-            imageCount: {
-              $size: {
-                $filter: {
-                  input: "$media",
-                  as: "m",
-                  cond: {
-                    $eq: ["$$m.type", "image"]
-                  }
-                }
+    imageCount: {
+      $size: {
+        $filter: {
+          input: "$media",
+          as: "m",
+          cond: {
+            $eq: ["$$m.type", "image"]
+          }
+        }
+      }
+    },
+
+    lockerImageCount: {
+      $size: {
+        $filter: {
+          input: "$media",
+          as: "m",
+          cond: {
+            $and: [
+              {
+                $eq: ["$$m.type", "image"]
+              },
+              {
+                $in: [
+                  "$lockerSubFolderId",
+                  { $ifNull: ["$$m.folderIds", []] }
+                ]
               }
-            },
+            ]
+          }
+        }
+      }
+    },
 
-            videoCount: {
+    videoCount: {
               $size: {
                 $filter: {
                   input: "$media",
@@ -314,6 +362,7 @@ router.get("/capsule-tracking", async (req, res) => {
             counts: {
               imageCount: "$imageCount",
               videoCount: "$videoCount",
+              lockerImageCount: "$lockerImageCount",
               totalMedia: {
                 $add: ["$imageCount", "$videoCount"]
               },

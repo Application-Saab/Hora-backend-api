@@ -7,20 +7,22 @@ const venueSchema = new mongoose.Schema(
       ref: "Users",
       required: true,
     },
-    venueType: { type: String, default: "" },
+    // venueType: { type: String, default: "" },
+    venueType: { type: [String], default: [] },
     venueName: { type: String, default: "" },
     location: { type: String, default: "" },
-    city: { type: String, default : ""},
+    city: { type: String, default: "" },
+    locality: { type: String, default: "" },
     googleMapLink: { type: String, default: "" },
     venueImageUrl: { type: String, default: "" },
     venueImageKey: { type: String, default: "" },
     eventTypes: { type: [String], default: [] }, // e.g., wedding, birthday, corporate
     guestCapacity: { type: Number, default: 0 },
     isParkingAvailable: { type: Boolean, default: false },
-    hallType: { type: [String], default: [] },  // e.g., Outdoor, indoor
+    hallType: { type: [String], default: [] }, // e.g., Outdoor, indoor
     foodTypes: { type: [String], default: [] }, // e.g., veg, non-veg, mixed
     startingPrice: { type: Number, default: 0 },
-    totalRoomsAvailable: {type: Number, default: 0},
+    totalRoomsAvailable: { type: Number, default: 0 },
     termsAndConditionsHtml: { type: String, default: "" },
     venueStatus: {
       type: Number,

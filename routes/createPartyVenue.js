@@ -89,7 +89,11 @@ router.get("/venues-public-list", async (req, res) => {
     // VENUE TYPE FILTER
     // ----------------------------
     if (venueType) {
-      query.venueType = venueType;
+      const venueTypesArray = venueType.split(",");
+
+      query.venueType = {
+        $in: venueTypesArray,
+      };
     }
 
     // ----------------------------
@@ -161,12 +165,18 @@ router.post(
         googleMapLink,
         eventTypes,
         guestCapacity,
+        locality,
         isParkingAvailable,
         hallType,
         foodTypes,
         startingPrice,
         totalRoomsAvailable,
       } = req.body;
+      console.log(
+        "%c [ totalRoomsAvailable ]",
+        "font-size:13px; background:pink; color:#bf2c9f;",
+        totalRoomsAvailable,
+      );
 
       // ----------------------------
       // Validate userId
@@ -186,6 +196,7 @@ router.post(
       // because frontend is sending stringify
       // ----------------------------
       eventTypes = eventTypes ? JSON.parse(eventTypes) : [];
+      venueType = venueType ? JSON.parse(venueType) : [];
       hallType = hallType ? JSON.parse(hallType) : [];
       foodTypes = foodTypes ? JSON.parse(foodTypes) : [];
 
@@ -207,6 +218,7 @@ router.post(
         venueName,
         location,
         city,
+        locality,
         googleMapLink,
         eventTypes,
         guestCapacity,
@@ -311,7 +323,6 @@ router.patch("/venue-status/:id", async (req, res) => {
       error: false,
       data: venue,
     });
-
   } catch (err) {
     console.error("Venue status update error:", err);
 
@@ -728,6 +739,7 @@ router.put(
         googleMapLink,
         eventTypes,
         guestCapacity,
+        locality,
         isParkingAvailable,
         hallType,
         foodTypes,
@@ -739,16 +751,20 @@ router.put(
       // Basic fields
       // ----------------------------
       if (venueName !== undefined) existing.venueName = venueName;
-      if (venueType !== undefined) existing.venueType = venueType;
+      // if (venueType !== undefined) existing.venueType = venueType;
       if (location !== undefined) existing.location = location;
       if (city !== undefined) existing.city = city;
       if (googleMapLink !== undefined) existing.googleMapLink = googleMapLink;
+      if (locality !== undefined) existing.locality = locality;
 
       // ----------------------------
       // Parse JSON fields
       // ----------------------------
       if (eventTypes !== undefined)
         existing.eventTypes = eventTypes ? JSON.parse(eventTypes) : [];
+
+      if (venueType !== undefined)
+        existing.venueType = venueType ? JSON.parse(venueType) : [];
 
       if (hallType !== undefined)
         existing.hallType = hallType ? JSON.parse(hallType) : [];
@@ -841,6 +857,62 @@ router.get("/venue-images/:venueId", async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+// =============================================
+// DELETE VENUE IMAGE / VIDEO
+// Deletes original + webp/preview from S3
+// =============================================
+router.post("/venue-image/:imageId", async (req, res) => {
+  try {
+    const { imageId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(imageId)) {
+      return res.status(400).json({
+        message: "Invalid image id",
+      });
+    }
+
+    const image = await VenueImages.findById(imageId);
+
+    if (!image) {
+      return res.status(404).json({
+        message: "Media not found",
+      });
+    }
+
+    // Delete original file
+    if (image.postKey) {
+      try {
+        await deleteFromS3(image.postKey);
+      } catch (err) {
+        console.error("Original file delete error:", err);
+      }
+    }
+
+    // Delete webp / video preview
+    if (image.postWebpKey) {
+      try {
+        await deleteFromS3(image.postWebpKey);
+      } catch (err) {
+        console.error("Preview delete error:", err);
+      }
+    }
+
+    await VenueImages.findByIdAndDelete(imageId);
+
+    return res.status(200).json({
+      message: "Media deleted successfully",
+      error: false,
+    });
+  } catch (err) {
+    console.error("Delete venue media error:", err);
+
+    return res.status(500).json({
+      message: "Server error",
+      error: true,
+    });
   }
 });
 

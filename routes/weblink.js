@@ -241,19 +241,19 @@ router.get("/capsule-tracking", async (req, res) => {
             },
 
             totalShares: {
-               $sum: {
+              $sum: {
                 $map: {
-                 input: "$media",
-                 as: "m",
-                 in: {
-                 $add: [
-                     { $ifNull: ["$$m.galleryImageShareCount", 0] },
-                     { $ifNull: ["$$m.shareCount", 0] }
-                ]
+                  input: "$media",
+                  as: "m",
+                  in: {
+                    $add: [
+                      { $ifNull: ["$$m.galleryImageShareCount", 0] },
+                      { $ifNull: ["$$m.shareCount", 0] }
+                    ]
+                  }
+                }
               }
-            }
-          }
-        },
+            },
 
             faceRecognitionCount: {
               $size: {
@@ -377,7 +377,7 @@ router.post("/track-activity/:mediaId", async (req, res) => {
     } else if (action === "share-event") {
       updateQuery = { $inc: { shareEventCount: 1 } };
     }
-     else if (action === "share") {
+    else if (action === "share") {
       updateQuery = { $inc: { galleryImageShareCount: 1 } };
     } else {
       return res.status(400).json({ message: "Invalid action" });
@@ -429,14 +429,28 @@ router.post("/track-gallery-view", async (req, res) => {
       return res.status(404).json({ success: false, message: "Invalid link" });
     }
 
+const alreadyViewed = folder.viewedBy?.some(
+  (view) => view.userId === userId
+);
 
-    const updatedFolder = await Folder.findByIdAndUpdate(
-      mainFolderId,
-      {
-        $addToSet: { viewedBy: userId },
-      },
-      { new: true }
-    );
+    let updatedFolder;
+
+    if (!alreadyViewed) {
+      updatedFolder = await Folder.findByIdAndUpdate(
+        mainFolderId,
+        {
+          $push: {
+            viewedBy: {
+              userId,
+              viewedAt: new Date(),
+            },
+          },
+        },
+        { new: true }
+      );
+    } else {
+  updatedFolder = folder;
+}
 
     return res.json({
       success: true,

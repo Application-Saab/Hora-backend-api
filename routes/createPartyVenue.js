@@ -172,11 +172,6 @@ router.post(
         startingPrice,
         totalRoomsAvailable,
       } = req.body;
-      console.log(
-        "%c [ totalRoomsAvailable ]",
-        "font-size:13px; background:pink; color:#bf2c9f;",
-        totalRoomsAvailable,
-      );
 
       // ----------------------------
       // Validate userId

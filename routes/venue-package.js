@@ -112,6 +112,7 @@ router.post(
         packageItems,
         packageAddons,
         tag,
+        packageCategoriesTags,
       } = req.body;
 
       if (!mongoose.Types.ObjectId.isValid(venueId)) {
@@ -130,6 +131,11 @@ router.post(
         typeof req.body.packageAddons === "string"
           ? JSON.parse(req.body.packageAddons)
           : req.body.packageAddons;
+
+      packageCategoriesTags =
+        typeof req.body.packageCategoriesTags === "string"
+          ? JSON.parse(req.body.packageCategoriesTags)
+          : req.body.packageCategoriesTags;
 
       const venue = await Venues.findById(venueId);
 
@@ -150,6 +156,7 @@ router.post(
         packageItems,
         packageAddons,
         tag,
+        packageCategoriesTags
       });
 
       if (req.file) {
@@ -364,6 +371,7 @@ router.put(
         packageAddons,
         packageStatus,
         tag,
+        packageCategoriesTags,
       } = req.body;
 
       let parsedPackageItems =
@@ -375,6 +383,11 @@ router.put(
         typeof packageAddons === "string"
           ? JSON.parse(packageAddons)
           : packageAddons;
+
+      let parsedPackageCategoriesTags =
+        typeof packageCategoriesTags === "string"
+          ? JSON.parse(packageCategoriesTags)
+          : packageCategoriesTags;
 
       if (title !== undefined) packageData.title = title;
 
@@ -392,6 +405,10 @@ router.put(
 
       if (parsedPackageAddons !== undefined)
         packageData.packageAddons = parsedPackageAddons;
+
+      if (parsedPackageCategoriesTags !== undefined) {
+        packageData.packageCategoriesTags = parsedPackageCategoriesTags;
+      }
 
       if (packageStatus !== undefined)
         packageData.packageStatus = packageStatus;
@@ -566,7 +583,7 @@ router.patch("/venue-package-status/:id", async (req, res) => {
       return res.status(404).json({
         message: "Package not found",
         error: true,
-      }); 
+      });
     }
 
     // -------------------------

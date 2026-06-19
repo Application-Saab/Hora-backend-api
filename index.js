@@ -214,7 +214,7 @@ const getDaysDifference = (fromDate, toDate) => {
 const processDailyRetentionSequences = async () => {
   try {
     const today = new Date();
-    const safetyCutoffDate = new Date("2000-01-01T00:00:00.000Z");
+    const safetyCutoffDate = new Date("2026-06-19T00:00:00.000Z");
     const activeOrders = await orderModel.aggregate([
       {
         $match: {

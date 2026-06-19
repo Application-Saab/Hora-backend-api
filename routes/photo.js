@@ -335,8 +335,11 @@ router.get("/thumbnailsWithinProject", async (req, res) => {
       });
     }
 
-    const userIds = folders.flatMap(f => f.viewedBy || []);
-    const uniqueUserIds = [...new Set(userIds)];
+const userIds = folders.flatMap(f => 
+  (f.viewedBy || []).map(item => item.userId ? String(item.userId) : String(item))
+);
+
+const uniqueUserIds = [...new Set(userIds)];
 
 const users = await UserModel.find({
   _id: { $in: uniqueUserIds }
@@ -349,14 +352,17 @@ users.forEach(u => {
   userMap[String(u._id)] = u;
 });
 
-
 const enrichedFolders = folders.map(folder => ({
   ...folder,
-  guestDetails: (folder.viewedBy || []).map(id => userMap[id] || {
-    _id: id,
-    name: "Unknown User",
-    phone: "",
-    avatar: ""
+  guestDetails: (folder.viewedBy || []).map(item => {
+    const userId = item.userId ? String(item.userId) : String(item); 
+    
+    return userMap[userId] || {
+      _id: userId,
+      name: "Unknown User",
+      phone: "",
+      avatar: ""
+    };
   })
 }));
 

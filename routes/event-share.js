@@ -5,6 +5,37 @@ const generateUniqueShortCode = require("../utils/generateUniqueShortCode");
 const EventInvite = require("../models/event-invite");
 const { CustomResponse } = require("../store/commonFunction");
 
+function formateDateInDMDFormat(dateInput) {
+  if (!dateInput) return "";
+
+  const date = new Date(dateInput);
+
+  const dayName = date.toLocaleDateString("en-IN", {
+    weekday: "long",
+    timeZone: "Asia/Kolkata",
+  });
+
+  const monthName = date.toLocaleDateString("en-IN", {
+    month: "short",
+    timeZone: "Asia/Kolkata",
+  });
+
+  const day = Number(
+    date.toLocaleDateString("en-IN", {
+      day: "numeric",
+      timeZone: "Asia/Kolkata",
+    }),
+  );
+
+  const getOrdinal = (n) => {
+    const s = ["th", "st", "nd", "rd"];
+    const v = n % 100;
+    return s[(v - 20) % 10] || s[v] || s[0];
+  };
+
+  return `${dayName}, ${monthName} ${day}${getOrdinal(day)}`;
+}
+
 // fetch shorten urls after sharing
 router.get("/:shortCode", async (req, res) => {
   try {
@@ -28,11 +59,7 @@ router.get("/:shortCode", async (req, res) => {
         const d = new Date(event.eventDate);
         // If valid then format
         if (!isNaN(d.getTime())) {
-          formattedDate = d.toLocaleDateString("en-US", {
-            weekday: "long",
-            month: "short",
-            day: "numeric",
-          });
+          formattedDate = formateDateInDMDFormat(d);
         }
       } catch (dateErr) {
         console.log("Date parsing failed, using raw data if string:", dateErr);

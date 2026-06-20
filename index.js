@@ -7,6 +7,8 @@ let cookieParser = require("cookie-parser");
 let bodyParser = require("body-parser");
 let fs = require("fs");
 const orderModel = require('./models/order');
+const User = require('./models/user');     
+const { sendWhatsApp } = require('./utils/whatsappService');
 const commonFunction = require('./store/commonFunction');
 const sharp = require('sharp');
 const cron = require('node-cron');
@@ -30,7 +32,7 @@ app.use(
     extended: true,
     parameterLimit: 1000000,
   })
-);   
+);
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, "public")));
 app.use(async (req, res, next) => {
@@ -63,8 +65,8 @@ app.use(async (req, res, next) => {
     return res.status(200).json({});
   }
   console.log('####################################### ' + req.url + ' API IS CALLED WITH DATA: ', userdata);
-  var apiRequest={ date:new Date(), hostname:req.hostname, url: req.url, bodyData:userdata }
-  fs.appendFile("postdata.txt", JSON.stringify(apiRequest), function(err22) {
+  var apiRequest = { date: new Date(), hostname: req.hostname, url: req.url, bodyData: userdata }
+  fs.appendFile("postdata.txt", JSON.stringify(apiRequest), function (err22) {
   });
   next();
 });
@@ -82,7 +84,7 @@ setInterval(async()=>{
       if(commonFunction.getOrderExpire(element1)){
         const result = await orderModel.findByIdAndUpdate(element1._id, { $set: update })
       }else{
-        
+
       }
     });
   }
@@ -92,7 +94,7 @@ setInterval(async()=>{
       if(commonFunction.getOrderComplete(element2)){
         const result = await orderModel.findByIdAndUpdate(element2._id, { $set: update })
       }else{
-        
+
       }
     });
   }
@@ -126,47 +128,47 @@ async function runSupplierPerformance() {
         toId: supplier._id,
         order_status: { $in: [3, 6] }
       })
-      .sort({ createdAt: -1 }) // newest order
-      .limit(20);
+        .sort({ createdAt: -1 }) // newest order
+        .limit(20);
 
       if (!orders.length) continue;
 
-     let excellent = 0;
-     let good = 0;
-     let poor = 0;
+      let excellent = 0;
+      let good = 0;
+      let poor = 0;
 
-    for (const order of orders) {
+      for (const order of orders) {
 
         const rating = order.userReviewRatingArray;
         const rate = Array.isArray(rating) ? rating[0] : rating;
 
-       if (!rate) continue;
+        if (!rate) continue;
 
-       if (rate === "9-10") excellent++;
-       else if (rate === "7-8") good++;
-       else if (rate === "1-6") poor++;
-       else if (rate === "6-8") good++;
-       else if (rate === "0-6") poor++;
+        if (rate === "9-10") excellent++;
+        else if (rate === "7-8") good++;
+        else if (rate === "1-6") poor++;
+        else if (rate === "6-8") good++;
+        else if (rate === "0-6") poor++;
 
       }
 
-    const totalRatedOrders = excellent + good + poor;
-    if (totalRatedOrders === 0) {
+      const totalRatedOrders = excellent + good + poor;
+      if (totalRatedOrders === 0) {
 
-     await UserModel.updateOne(
-    { _id: supplier._id },
-    {
-      performanceScore: 0,
-      performanceBadge: "low",
-      lastRatingUpdate: new Date()
-    }
-  );
+        await UserModel.updateOne(
+          { _id: supplier._id },
+          {
+            performanceScore: 0,
+            performanceBadge: "low",
+            lastRatingUpdate: new Date()
+          }
+        );
 
-  continue;
-}
+        continue;
+      }
 
-const vendorScore =
-((excellent * 10) + (good * 5) + (poor * -10)) / totalRatedOrders;
+      const vendorScore =
+        ((excellent * 10) + (good * 5) + (poor * -10)) / totalRatedOrders;
 
       let badge = "low";
 
@@ -197,6 +199,192 @@ cron.schedule('0 3 * * *', async () => {
   console.log('Running Supplier Performance Job:', new Date());
   await runSupplierPerformance();
 });
+
+const getDaysDifference = (fromDate, toDate) => {
+  if (!fromDate || !toDate) return -1;
+  const d1 = new Date(fromDate);
+  const d2 = new Date(toDate);
+  d1.setHours(0, 0, 0, 0);
+  d2.setHours(0, 0, 0, 0);
+
+  const diffTime = d2.getTime() - d1.getTime();
+  return Math.round(diffTime / (1000 * 60 * 60 * 24));
+};
+
+const processDailyRetentionSequences = async () => {
+  try {
+    const today = new Date();
+    const safetyCutoffDate = new Date("2026-06-19T00:00:00.000Z");
+    const activeOrders = await orderModel.aggregate([
+      {
+        $match: {
+          type: 8,
+          "imageUploadCounts.AllImagesUploadedAt": { $gte: safetyCutoffDate }
+        }
+      },
+      {
+        $addFields: {
+          orderIdString: { $toString: "$order_id" }
+        }
+      },
+      {
+        $lookup: {
+          from: "folders",
+          let: { localOrderIdStr: "$orderIdString", localOrderIdNum: "$order_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $or: [
+                    { $eq: ["$orderId", "$$localOrderIdStr"] }, 
+                    { $eq: ["$orderId", "$$localOrderIdNum"] }  
+                  ]
+                }
+              }
+            }
+          ],
+          as: "folderDetails"
+        }
+      },
+      {
+        $unwind: "$folderDetails"
+      }
+    ]);
+
+    if (activeOrders.length === 0) {
+      console.log("[Daily Retention] Koi active order nahi mila.");
+      return;
+    }
+
+    for (let order of activeOrders) {
+      const hostPhone = order.phone_no;
+      const hostId = order.fromId ? order.fromId.toString() : null;
+
+      const viewedByArray = order.folderDetails.viewedBy;
+
+
+      const hostUploadDate = order.imageUploadCounts.AllImagesUploadedAt;
+
+      const link = order.orderWebLink;
+
+      if (hostPhone && hostUploadDate) {
+        const hostDiffDays = getDaysDifference(hostUploadDate, today) + 1;
+
+        let hostTemplate = null;
+
+        if (viewedByArray.length === 0) {
+          if (hostDiffDays === 2) hostTemplate = "testing_capsule_3";
+          else if (hostDiffDays === 3) hostTemplate = "testing_capsule_6";
+        }
+        else {
+         const safeArray = Array.isArray(viewedByArray) ? viewedByArray : [];
+          const sortedViews = safeArray
+            .filter(v => v.viewedAt)
+            .sort((a, b) => new Date(a.viewedAt) - new Date(b.viewedAt));
+
+          let joinedOnDay = 2;
+          if (sortedViews.length > 0) {
+            const registrationDate = new Date(sortedViews[0].viewedAt);
+            joinedOnDay = getDaysDifference(hostUploadDate, registrationDate) + 1;
+          }
+
+          if (hostDiffDays === joinedOnDay) { // login date of host no template one from frontend sede only
+            hostTemplate = null;
+          }
+          else if (joinedOnDay >= 3) {
+            if (hostDiffDays === 4) hostTemplate = "host_to_guest_sharing_03";
+            else if (hostDiffDays === 7) hostTemplate = "host_to_guest_sharing_5";
+            else if (hostDiffDays === 13) hostTemplate = "host_to_guest_sharing_01";
+            else if (hostDiffDays === 21) hostTemplate = "share_capsule_link_1";
+          }
+          else {
+            if (hostDiffDays === 3) hostTemplate = "host_to_guest_sharing_03";
+            else if (hostDiffDays === 4) hostTemplate = "host_to_guest_sharing_5";
+            else if (hostDiffDays === 7) hostTemplate = "host_to_guest_sharing_01";
+            else if (hostDiffDays === 13) hostTemplate = "share_capsule_link_1";
+          }
+        }
+
+        if (hostTemplate) {
+          const sent = await sendWhatsApp(
+    hostPhone,
+    hostTemplate,
+    link,
+    (hostTemplate === "testing_capsule_6" || hostTemplate === "share_capsule_link_1" || hostTemplate === "testing_capsule_3")
+        ? order.order_id +10800
+        : null
+);
+          if (sent) {
+            await User.findOneAndUpdate({ phone: hostPhone }, { $inc: { capsuleNotificationCount: 1 } });
+            console.log(`[HOST ALERT] Sent ${hostTemplate} to ${hostPhone} (Day ${hostDiffDays})`);
+          }
+        }
+      }
+
+      const guestUserIds = viewedByArray
+        .filter(item => item.userId && item.userId.toString() !== hostId)
+        .map(item => item.userId.toString());
+
+      if (guestUserIds.length > 0) {
+        const guests = await User.find({
+          _id: { $in: guestUserIds },
+          phone: { $exists: true, $ne: "" }
+        });
+
+        for (let guest of guests) {
+          const guestPhone = guest.phone;
+
+          // matching viewedAt object for specific guest
+          const safeViewedBy = Array.isArray(viewedByArray) ? viewedByArray : [];
+          const viewRecord = safeViewedBy?.find(item => item.userId && item.userId.toString() === guest._id.toString());
+          const guestViewedAtDate = viewRecord ? viewRecord.viewedAt : null;
+
+          if (guestPhone && guestPhone !== hostPhone && guestViewedAtDate) {
+            const guestDiffDays = getDaysDifference(guestViewedAtDate, today) + 1;
+            let guestTemplate = null;
+
+            if (guestDiffDays === 2) guestTemplate = "guest_to_guest_sharing_02";
+            else if (guestDiffDays === 3) guestTemplate = "host_to_guest_sharing_01";
+            else if (guestDiffDays === 4) guestTemplate = "guest_to_guest_sharing";
+            else if (guestDiffDays === 7) guestTemplate = "host_to_guest_sharing_5";
+
+            if (guestTemplate) {
+              const sent = await sendWhatsApp(
+    guestPhone,
+    guestTemplate,
+    link,
+    null
+);
+              if (sent) {
+                await User.updateOne(
+                  { _id: guest._id },
+                  { $inc: { capsuleNotificationCount: 1 } }
+                );
+                // console.log(`[GUEST ALERT] Sent ${guestTemplate} to ${guestPhone} (Day ${guestDiffDays} since ViewedAt)`);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // console.log("[Daily Retention] All sequences processed perfectly.");
+
+  } catch (error) {
+    console.error("Error in processDailyRetentionSequences:", error);
+  }
+};
+
+cron.schedule('0 20 * * *', async () => {
+  console.log("[Daily Retention Cron - 8 PM] Triggered successfully.");
+  await processDailyRetentionSequences();
+}, {
+  scheduled: true,
+  timezone: "Asia/Kolkata"
+});
+
+
+
 
 database.on("error", (error) => {
   console.log(error);
@@ -267,10 +455,10 @@ app.use("/api/analytics", analyticsRoutes);
 app.use("/api/food-package", FoodPackageRoutes);
 app.use("/api/material-list", MaterialListRoutes);
 app.use("/api/celebration-booster", CelebrationBoosterRoutes);
-app.use("/api/party-venue" , PartyHallVenueRoutes);
-app.use("/api/party-venue/package" , venuePackageRoutes);
-app.use("/api/party-venue/package-category" , venuePackageCategoryRoutes);
-app.use("/api/party-venue/package-item" , venuePackageItemRoutes);
+app.use("/api/party-venue", PartyHallVenueRoutes);
+app.use("/api/party-venue/package", venuePackageRoutes);
+app.use("/api/party-venue/package-category", venuePackageCategoryRoutes);
+app.use("/api/party-venue/package-item", venuePackageItemRoutes);
 app.use("/smartinvite/share", EventShareRoutes);
 
 const notificationFunction = require("./store/notifications");
@@ -433,8 +621,8 @@ app.use("/api/uploads", express.static(path.join(__dirname, "uploads")));
 app.post("/firebase/notification", async (req, res) => {
   try {
     const user = await UserModel.find({ _id: req.body.userId });
-    console.log("user>>>>",user);
-    console.log("user>>>>",user[0].device_token);
+    console.log("user>>>>", user);
+    console.log("user>>>>", user[0].device_token);
     if (user.length > 0) {
       if (user[0].device_token != "") {
         return res.json({

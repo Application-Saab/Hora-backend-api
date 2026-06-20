@@ -11,11 +11,19 @@ const FolderSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
-    viewedBy: {
-      type: [String], // userIds
-      default: [],
-      index: true
+    viewedBy: [
+  {
+    userId: {
+      type: String,
+      required: true,
+      index: true,
     },
+    viewedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+],
     clickCount: {
       type: Number,
       default: 0

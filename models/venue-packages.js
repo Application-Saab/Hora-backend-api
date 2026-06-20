@@ -17,6 +17,11 @@ const venuePackagesSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    packageCategoriesTags: {
+      type: Map,
+      of: String,
+      default: {},
+    },
 
     packageImageKey: {
       type: String,

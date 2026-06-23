@@ -141,10 +141,10 @@ cron.schedule(
   },
 );
 
-setTimeout(async()=>{
-  console.log("Running Package Sync Cron")
-  await runPackageSync()
-}, 1.5 * 60 * 1000);
+// setTimeout(async()=>{
+//   console.log("Running Package Sync Cron")
+//   await runPackageSync()
+// }, 1.5 * 60 * 1000);
 
 async function runSupplierPerformance() {
   try {

@@ -93,6 +93,17 @@ const FolderSchema = new mongoose.Schema(
           s3Key: { type: String },
           thumbnailKey: { type: String }
         },
+
+        personCount: {
+          type: Number,
+          default: 0,
+        },
+
+        isPersonFolder: {
+          type: Boolean,
+          default: false,
+        },
+        
         isLocker: {
     type: Boolean,
     default: false,

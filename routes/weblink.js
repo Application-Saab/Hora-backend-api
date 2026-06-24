@@ -6,6 +6,7 @@ const Folder = require("../models/folder");
 const User = require("../models/user");
 const Users = require("../models/user");
 const mongoose = require("mongoose");
+const capsuleGenerateShortCode = require("../utils/capsuleGenerateShortCode");
 
 router.put("/assign-to-subfolder", async (req, res) => {
   try {
@@ -1012,6 +1013,46 @@ router.post("/track-device", async (req, res) => {
     });
   }
 });
+
+
+router.post("/generate-gallery-code/:folderId", async (req, res) => {
+  try {
+    const { folderId } = req.params;
+
+    const folder = await Folder.findById(folderId);
+    if (!folder) {
+      return res.status(404).json({ success: false, error: true, message: "Folder not found" });
+    }
+
+    if (folder.shortCode) {
+      return res.status(200).json({
+        success: true,
+        error: false,
+        message: "Short code already exists",
+        shortCode: folder.shortCode,
+        shortUrl: `https://horaservices.com/eventcapsule/share/${folder.shortCode}`,
+      });
+    }
+
+    const shortCode = await capsuleGenerateShortCode();
+
+    folder.shortCode = shortCode;
+    await folder.save();
+
+    return res.status(200).json({
+      success: true,
+      error: false,
+      message: "Short code generated successfully",
+      shortCode,
+      shortUrl: `https://horaservices.com/api/internal/${shortCode}`,
+    });
+
+  } catch (err) {
+    console.error("Error in generating short code:", err);
+    return res.status(500).json({ success: false, error: true, message: "Server error" });
+  }
+});
+
 
 
 module.exports = router;

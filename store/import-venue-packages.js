@@ -196,7 +196,6 @@ async function syncPackages() {
 
       const venue = await Venues.findOne({ venueName });
       if (!venue) {
-        console.log(`Venue Not Found: ${venueName}`);
         continue;
       }
 
@@ -207,7 +206,6 @@ async function syncPackages() {
 
       if (existing) {
         skipped++;
-        console.log(`Skipped (Already Exists): ${packageName}`);
         continue;
       }
 
@@ -283,7 +281,6 @@ async function syncCategoriesSheet() {
     valueInputOption: "RAW",
     requestBody: { values },
   });
-  console.log("Categories Sheet Synced");
 }
 
 async function syncItemsSheet() {
@@ -314,14 +311,11 @@ async function syncItemsSheet() {
     valueInputOption: "RAW",
     requestBody: { values },
   });
-  console.log("Items Sheet Synced");
 }
 
 // ================== MAIN RUNNER ==================
 
 async function runPackageSync() {
-  console.log("Package Sync Process Started...\n");
-
   try {
     await syncPackages();
     await syncCategoriesSheet();

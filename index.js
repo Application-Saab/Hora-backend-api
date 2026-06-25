@@ -132,7 +132,6 @@ cron.schedule(
   "10 0 * * *",
   async () => {
     console.log("Running Package Sync Cron");
-
     await runPackageSync();
   },
   {

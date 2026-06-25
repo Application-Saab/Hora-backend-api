@@ -325,7 +325,10 @@ router.get("/capsule-tracking", async (req, res) => {
                   },
                   as: "s",
                   cond: {
-                    $ne: ["$$s.type", "my_photos"]
+                    $and: [
+                      { $ne: ["$$s.type", "my_photos"] },
+                      { $ne: ["$$s.isPersonFolder", true] }
+                    ]
                   }
                 }
               }

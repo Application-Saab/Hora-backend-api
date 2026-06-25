@@ -66,6 +66,12 @@ const FolderSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    shortCode: {
+      type: String,
+      unique: true,
+      sparse: true,
+      index: true,
+    },
     subFolders: [
       {
         _id: {

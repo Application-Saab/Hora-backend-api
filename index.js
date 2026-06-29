@@ -225,6 +225,104 @@ cron.schedule("0 3 * * *", async () => {
   await runSupplierPerformance();
 });
 
+
+async function sendNotificationsInPriority() {
+  try {
+    const orders = await orderModel.find({
+      status: 1,
+      notificationStep: { $lt: 4 }
+    });
+
+    for (const order of orders) {
+      // 1. Ek baar loop ke start mein fresh status check karein
+      const freshOrder = await orderModel.findById(order._id).select('order_status notificationStep lastNotifiedAt');
+
+      if (!freshOrder || freshOrder.order_status == 1) {
+        console.log(`Order ${order._id} already accepted or not found`);
+        continue;
+      }
+
+      // 2. Check 15 min gap
+      const now = new Date();
+      if (!freshOrder.lastNotifiedAt) {
+        freshOrder.lastNotifiedAt = new Date();
+        await freshOrder.save();
+        continue;
+      }
+
+      const diff = (now - new Date(freshOrder.lastNotifiedAt)) / (1000 * 60);
+      if (diff < 15) continue;
+
+      let badgeToSend = "";
+      if (freshOrder.notificationStep === 1) badgeToSend = "Good";
+      else if (freshOrder.notificationStep === 2) badgeToSend = "Average";
+      else if (freshOrder.notificationStep === 3) badgeToSend = "Low";
+
+      if (!badgeToSend) continue;
+
+      console.log(`Sending ${badgeToSend} notifications for Order ${order._id}`);
+
+      // 3. Suppliers fetch karein
+      const suppliers = await UserModel.find({
+        role: "supplier",
+        device_token: { $nin: [null, ""] },
+        city: order.order_locality,
+        order_type: order.type,
+        performanceBadge: badgeToSend
+      });
+
+      // 4. BATCHING + PROMISE.ALL (No DB query inside per-supplier loop)
+      const batchSize = 10; // Ek baar mein 10 suppliers ko parallel bhejenge
+      let orderWasAcceptedMidWay = false;
+
+      for (let i = 0; i < suppliers.length; i += batchSize) {
+        // Har batch se pehle check karein ki acceptOrder API ke throgh kisi ne accept toh nahi kar liya
+        const currentCheck = await orderModel.findById(order._id).select('order_status');
+        if (currentCheck.order_status == 1) {
+          console.log("Order accepted mid-way via API, stopping notification batches...");
+          orderWasAcceptedMidWay = true;
+          break;
+        }
+
+        const batch = suppliers.slice(i, i + batchSize);
+
+        // Parallel execution for this batch
+        const batchPromises = batch.map(supplier =>
+          notificationFunction.sendNotifications(
+            supplier.device_token,
+            order.fromId,
+            'New Order',
+            `New Order!!! Order ID: #${order.order_id + 10800} 🥳🤩`,
+            '',
+            0
+          ).catch(err => console.error("Notification failed for token:", supplier.device_token, err))
+        );
+
+        await Promise.all(batchPromises);
+      }
+
+      // 5. Update step if still not accepted
+      if (!orderWasAcceptedMidWay) {
+        const finalCheck = await orderModel.findById(order._id);
+        if (finalCheck && finalCheck.order_status !== 1) {
+          finalCheck.notificationStep += 1;
+          finalCheck.lastNotifiedAt = new Date();
+          await finalCheck.save();
+        }
+      }
+    }
+
+  } catch (error) {
+    console.error("Notification Scheduler Error:", error);
+  }
+}
+
+
+cron.schedule("* * * * *", async () => {
+  console.log("Running Notification Scheduler:", new Date());
+  await sendNotificationsInPriority();
+});
+
 database.on("error", (error) => {
   console.log(error);
 });

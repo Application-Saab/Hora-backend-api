@@ -1190,7 +1190,7 @@ router.get('/supplier-order-count-by-date', async (req, res) => {
         $gte: startOfDay,
         $lte: endOfDay
       },
-      order_status: { $in: [0, 1, 2] }
+      order_status: 1,
     });
 
     res.status(200).json({

@@ -477,7 +477,7 @@ router.post("/track-gallery-view", async (req, res) => {
     }
 
 
-    const folder = await Folder.findById(mainFolderId);
+    const folder = await Folder.findOne({ _id: mainFolderId });
     if (!folder) {
       return res.status(404).json({ success: false, message: "Invalid link" });
     }
@@ -489,8 +489,8 @@ const alreadyViewed = folder.viewedBy?.some(
     let updatedFolder;
 
     if (!alreadyViewed) {
-      updatedFolder = await Folder.findByIdAndUpdate(
-        mainFolderId,
+      updatedFolder = await Folder.findOneAndUpdate(
+        { _id: mainFolderId },
         {
           $push: {
             viewedBy: {

@@ -37,6 +37,39 @@ const compressImageToWebP = async (buffer, outputPath, targetMaxKB = 40) => {
   return false;
 };
 
+const normalizeInclusion = (inclusion) => {
+  if (!inclusion) return [];
+
+  try {
+    // Case 1:
+    // '["<div>...</div>"]'
+    if (typeof inclusion === "string" && inclusion.startsWith("[")) {
+      inclusion = JSON.parse(inclusion);
+    }
+
+    // Case 2:
+    // "<div>...</div>"
+    if (typeof inclusion === "string") {
+      return [inclusion];
+    }
+
+    // Case 3:
+    // ["<div>...</div>"]
+    if (Array.isArray(inclusion)) {
+      return [
+        inclusion
+          .filter(Boolean)
+          .join("")
+      ];
+    }
+
+    return [];
+  } catch (err) {
+    console.error("normalizeInclusion error", err);
+    return [];
+  }
+};
+
 router.post(
   "/decoration/add",
   upload.array("featured_images", 10),
@@ -98,7 +131,9 @@ router.post(
         is_wishlisted: null,
         ratings: null,
         attributes: null,
-        inclusion: req.body.preperationtext,
+        inclusion: normalizeInclusion(
+           req.body.preperationtext,
+        ),
         tag: req.body.mealId ? JSON.parse(req.body.mealId) : [],
         vendorMaterialPrice: req.body.vendorMaterialPrice,
         executionPrice: req.body.executionPrice,

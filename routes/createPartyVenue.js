@@ -191,7 +191,7 @@ router.post(
       // because frontend is sending stringify
       // ----------------------------
       eventTypes = eventTypes ? JSON.parse(eventTypes) : [];
-      venueType = venueType ? JSON.parse(venueType) : [];
+      venueType = typeof venueType === 'string' ? JSON.parse(venueType) : venueType;
       hallType = hallType ? JSON.parse(hallType) : [];
       foodTypes = foodTypes ? JSON.parse(foodTypes) : [];
 
@@ -759,7 +759,7 @@ router.put(
         existing.eventTypes = eventTypes ? JSON.parse(eventTypes) : [];
 
       if (venueType !== undefined)
-        existing.venueType = venueType ? JSON.parse(venueType) : [];
+        existing.venueType = typeof venueType === 'string' ? JSON.parse(venueType) : venueType;
 
       if (hallType !== undefined)
         existing.hallType = hallType ? JSON.parse(hallType) : [];

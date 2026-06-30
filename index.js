@@ -228,87 +228,82 @@ cron.schedule("0 3 * * *", async () => {
 
 async function sendNotificationsInPriority() {
   try {
+    console.log("--- Checking for Booked Orders in DB ---");
     const orders = await orderModel.find({
-      status: 1,
+      order_status: 0,
       notificationStep: { $lt: 4 }
     });
-
+    console.log(`Total active booked orders found for processing: ${orders.length}`);
     for (const order of orders) {
-      // 1. Ek baar loop ke start mein fresh status check karein
-      const freshOrder = await orderModel.findById(order._id).select('order_status notificationStep lastNotifiedAt');
+      const freshOrder = await orderModel.findById(order._id).select(
+        'order_status notificationStep lastNotifiedAt order_locality type order_id fromId'
+      );
 
-      if (!freshOrder || freshOrder.order_status == 1) {
-        console.log(`Order ${order._id} already accepted or not found`);
+      if (!freshOrder || freshOrder.order_status !== 0) {
+        console.log(`Order ${order._id} is not in Booked state anymore or not found`);
         continue;
       }
 
-      // 2. Check 15 min gap
       const now = new Date();
-      if (!freshOrder.lastNotifiedAt) {
-        freshOrder.lastNotifiedAt = new Date();
-        await freshOrder.save();
-        continue;
-      }
 
       const diff = (now - new Date(freshOrder.lastNotifiedAt)) / (1000 * 60);
-      if (diff < 15) continue;
+
+      console.log(`[CHECK] Order #${freshOrder.order_id +10800} | Current Step: ${freshOrder.notificationStep} | Minutes passed since last notification: ${diff.toFixed(2)} mins`);
+      if (diff < 2) continue;
 
       let badgeToSend = "";
       if (freshOrder.notificationStep === 1) badgeToSend = "Good";
       else if (freshOrder.notificationStep === 2) badgeToSend = "Average";
       else if (freshOrder.notificationStep === 3) badgeToSend = "Low";
 
-      if (!badgeToSend) continue;
+      if (!badgeToSend) {
+        console.log(`[SKIP] Order #${freshOrder.order_id} has an invalid step: ${freshOrder.notificationStep}`);
+        continue;
+      }
 
-      console.log(`Sending ${badgeToSend} notifications for Order ${order._id}`);
+      console.log(`[PROCESS] 2 minutes completed. Preparing to send notifications to "${badgeToSend}" pool for Order #${freshOrder.order_id}`);
 
-      // 3. Suppliers fetch karein
       const suppliers = await UserModel.find({
         role: "supplier",
         device_token: { $nin: [null, ""] },
-        city: order.order_locality,
-        order_type: order.type,
+        city: freshOrder.order_locality,
+        order_type: freshOrder.type,
         performanceBadge: badgeToSend
       });
 
-      // 4. BATCHING + PROMISE.ALL (No DB query inside per-supplier loop)
-      const batchSize = 10; // Ek baar mein 10 suppliers ko parallel bhejenge
-      let orderWasAcceptedMidWay = false;
+      console.log(`[SUPPLIERS FETCH] Found ${suppliers.length} suppliers matching Badge: "${badgeToSend}", City: "${freshOrder.order_locality}", Type: "${freshOrder.type}"`);
 
-      for (let i = 0; i < suppliers.length; i += batchSize) {
-        // Har batch se pehle check karein ki acceptOrder API ke throgh kisi ne accept toh nahi kar liya
-        const currentCheck = await orderModel.findById(order._id).select('order_status');
-        if (currentCheck.order_status == 1) {
-          console.log("Order accepted mid-way via API, stopping notification batches...");
-          orderWasAcceptedMidWay = true;
-          break;
-        }
-
-        const batch = suppliers.slice(i, i + batchSize);
-
-        // Parallel execution for this batch
-        const batchPromises = batch.map(supplier =>
-          notificationFunction.sendNotifications(
-            supplier.device_token,
-            order.fromId,
-            'New Order',
-            `New Order!!! Order ID: #${order.order_id + 10800} 🥳🤩`,
-            '',
-            0
-          ).catch(err => console.error("Notification failed for token:", supplier.device_token, err))
-        );
-
-        await Promise.all(batchPromises);
+      if (suppliers.length === 0) {
+        console.log(`No suppliers found for badge: ${badgeToSend}. Moving to next step.`);
+        freshOrder.notificationStep += 1;
+        freshOrder.lastNotifiedAt = now;
+        await freshOrder.save();
+        continue;
       }
 
-      // 5. Update step if still not accepted
-      if (!orderWasAcceptedMidWay) {
-        const finalCheck = await orderModel.findById(order._id);
-        if (finalCheck && finalCheck.order_status !== 1) {
-          finalCheck.notificationStep += 1;
-          finalCheck.lastNotifiedAt = new Date();
-          await finalCheck.save();
-        }
+      console.log(`[SENDING] Triggering push notifications for ${suppliers.length} suppliers...`);
+
+      const notificationPromises = suppliers.map(supplier =>
+        notificationFunction.sendNotifications(
+          supplier.device_token,
+          freshOrder.fromId,
+          'New Order',
+          `New Order!!! Order ID: #${freshOrder.order_id + 10800} 🥳🤩`,
+          '',
+          0
+        ).catch(err => console.error("Notification failed for token:", supplier.device_token, err))
+      );
+
+      await Promise.all(notificationPromises);
+
+      console.log(`[SUCCESS] All notification requests processed for this batch.`);
+
+      const finalCheck = await orderModel.findById(order._id).select('order_status order_id notificationStep lastNotifiedAt');
+      if (finalCheck && finalCheck.order_status === 0) {
+        finalCheck.notificationStep += 1;
+        finalCheck.lastNotifiedAt = new Date();
+        await finalCheck.save();
+        console.log(`Order #${finalCheck.order_id} advanced to step ${finalCheck.notificationStep}`);
       }
     }
 
@@ -319,7 +314,9 @@ async function sendNotificationsInPriority() {
 
 
 cron.schedule("* * * * *", async () => {
-  console.log("Running Notification Scheduler:", new Date());
+  console.log("\n========================================");
+  console.log("CRON TRIGGERED AT:", new Date().toLocaleTimeString());
+  console.log("========================================");
   await sendNotificationsInPriority();
 });
 

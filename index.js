@@ -228,19 +228,16 @@ cron.schedule("0 3 * * *", async () => {
 
 async function sendNotificationsInPriority() {
   try {
-    console.log("--- Checking for Booked Orders in DB ---");
     const orders = await orderModel.find({
       order_status: 0,
       notificationStep: { $lt: 4 }
     });
-    console.log(`Total active booked orders found for processing: ${orders.length}`);
     for (const order of orders) {
       const freshOrder = await orderModel.findById(order._id).select(
         'order_status notificationStep lastNotifiedAt order_locality type order_id fromId'
       );
 
       if (!freshOrder || freshOrder.order_status !== 0) {
-        console.log(`Order ${order._id} is not in Booked state anymore or not found`);
         continue;
       }
 
@@ -248,8 +245,7 @@ async function sendNotificationsInPriority() {
 
       const diff = (now - new Date(freshOrder.lastNotifiedAt)) / (1000 * 60);
 
-      console.log(`[CHECK] Order #${freshOrder.order_id +10800} | Current Step: ${freshOrder.notificationStep} | Minutes passed since last notification: ${diff.toFixed(2)} mins`);
-      if (diff < 2) continue;
+      if (diff < 20) continue;
 
       let badgeToSend = "";
       if (freshOrder.notificationStep === 1) badgeToSend = "Good";
@@ -257,31 +253,26 @@ async function sendNotificationsInPriority() {
       else if (freshOrder.notificationStep === 3) badgeToSend = "Low";
 
       if (!badgeToSend) {
-        console.log(`[SKIP] Order #${freshOrder.order_id} has an invalid step: ${freshOrder.notificationStep}`);
         continue;
       }
 
-      console.log(`[PROCESS] 2 minutes completed. Preparing to send notifications to "${badgeToSend}" pool for Order #${freshOrder.order_id}`);
 
       const suppliers = await UserModel.find({
-        role: "supplier",
+        role: "supplier", 
         device_token: { $nin: [null, ""] },
         city: freshOrder.order_locality,
         order_type: freshOrder.type,
         performanceBadge: badgeToSend
       });
 
-      console.log(`[SUPPLIERS FETCH] Found ${suppliers.length} suppliers matching Badge: "${badgeToSend}", City: "${freshOrder.order_locality}", Type: "${freshOrder.type}"`);
 
       if (suppliers.length === 0) {
-        console.log(`No suppliers found for badge: ${badgeToSend}. Moving to next step.`);
         freshOrder.notificationStep += 1;
         freshOrder.lastNotifiedAt = now;
         await freshOrder.save();
         continue;
       }
 
-      console.log(`[SENDING] Triggering push notifications for ${suppliers.length} suppliers...`);
 
       const notificationPromises = suppliers.map(supplier =>
         notificationFunction.sendNotifications(
@@ -296,14 +287,12 @@ async function sendNotificationsInPriority() {
 
       await Promise.all(notificationPromises);
 
-      console.log(`[SUCCESS] All notification requests processed for this batch.`);
 
       const finalCheck = await orderModel.findById(order._id).select('order_status order_id notificationStep lastNotifiedAt');
       if (finalCheck && finalCheck.order_status === 0) {
         finalCheck.notificationStep += 1;
         finalCheck.lastNotifiedAt = new Date();
         await finalCheck.save();
-        console.log(`Order #${finalCheck.order_id} advanced to step ${finalCheck.notificationStep}`);
       }
     }
 
@@ -313,10 +302,7 @@ async function sendNotificationsInPriority() {
 }
 
 
-cron.schedule("* * * * *", async () => {
-  console.log("\n========================================");
-  console.log("CRON TRIGGERED AT:", new Date().toLocaleTimeString());
-  console.log("========================================");
+cron.schedule("*/1 * * * *", async () => {
   await sendNotificationsInPriority();
 });
 

@@ -1022,7 +1022,7 @@ router.post("/generate-gallery-code/:folderId", async (req, res) => {
   try {
     const { folderId } = req.params;
 
-    const folder = await Folder.findById(folderId);
+    const folder = await Folder.findById(folderId).lean();;
     if (!folder) {
       return res.status(404).json({ success: false, error: true, message: "Folder not found" });
     }
@@ -1039,8 +1039,7 @@ router.post("/generate-gallery-code/:folderId", async (req, res) => {
 
     const shortCode = await capsuleGenerateShortCode();
 
-    folder.shortCode = shortCode;
-    await folder.save();
+    await Folder.findByIdAndUpdate(folderId, { $set: { shortCode: shortCode } });
 
     return res.status(200).json({
       success: true,

@@ -57,7 +57,11 @@ const fs = require('fs').promises;
 const generateThumbnail = async (inputPath, outputPath) => {
     try {
         // Resize and compress in a single step
-        const outputBuffer = await sharp(inputPath).rotate().webp({ quality: 50 }).withMetadata({ orientation: 1 })
+        const outputBuffer = await sharp(inputPath)
+            .rotate()
+            .resize({ width: 400, withoutEnlargement: true })
+            .webp({ quality: 50 })
+            .withMetadata({ orientation: 1 })
             .toBuffer();
 
         // If the image is still too large, reduce quality a bit

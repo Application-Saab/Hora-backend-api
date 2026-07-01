@@ -47,6 +47,42 @@ const compressImageToWebP = async (buffer, outputPath, targetMaxKB = 40) => {
   fs.writeFileSync(outputPath, fallbackBuffer);
   return false;
 };
+
+
+
+const normalizeInclusion = (inclusion) => {
+  if (!inclusion) return [];
+
+  try {
+    // Case 1:
+    // '["<div>...</div>"]'
+    if (typeof inclusion === "string" && inclusion.startsWith("[")) {
+      inclusion = JSON.parse(inclusion);
+    }
+
+    // Case 2:
+    // "<div>...</div>"
+    if (typeof inclusion === "string") {
+      return [inclusion];
+    }
+
+    // Case 3:
+    // ["<div>...</div>"]
+    if (Array.isArray(inclusion)) {
+      return [
+        inclusion
+          .filter(Boolean)
+          .join("")
+      ];
+    }
+
+    return [];
+  } catch (err) {
+    console.error("normalizeInclusion error", err);
+    return [];
+  }
+};
+
 router.post("/edit", upload.array("featured_images", 10), async (req, res) => {
   try {
     const id = req.body._id;
@@ -125,6 +161,8 @@ router.post("/edit", upload.array("featured_images", 10), async (req, res) => {
       );
     }
 
+    const inclusion = normalizeInclusion(req.body.inclusion);
+
     // -----------------------------
     // UPDATE DB
     // -----------------------------
@@ -143,14 +181,12 @@ router.post("/edit", upload.array("featured_images", 10), async (req, res) => {
             ? JSON.parse(req.body.designType)
             : req.body.designType,
 
-        inclusion: req.body.inclusion === "string"
-            ? JSON.parse(req.body.inclusion)
-            : req.body.inclusion,
-
-        inclusionVariables: req.body.inclusionVariables === "string"
+        inclusion,
+        inclusionVariables:
+          req.body.inclusionVariables === "string"
             ? JSON.parse(req.body.inclusionVariables)
             : req.body.inclusionVariables,
-        
+
         featured_images: [...existingImages, ...newImages],
       },
       { new: true },
@@ -467,91 +503,240 @@ router.get("/details/:id", async (req, res) => {
   }
 });
 
+// router.get("/searchByTag/v2/:tag", async (req, res) => {
+//   try {
+//     const { tag } = req.params;
+//     const limit = Math.min(parseInt(req.query.limit) || 10, 1000);
+//     const page = Math.max(parseInt(req.query.page) || 1, 1);
+//     const priceFilter = req.query.priceFilter;
+//     const sortBy = req.query.sortBy?.toLowerCase(); // "asc" or "desc"
+//     const theme = req.query.theme;
+
+//     const cacheKey = `search_${tag}_${limit}_${page}_${priceFilter || "absent"}_${sortBy || "default"}_${theme || "all"}`;
+
+//     // Cache hit
+//     const cachedData = cache.get(cacheKey);
+//     if (cachedData) {
+//       return res.json({ ...cachedData, cached: true });
+//     }
+
+//     // Match stage with dynamic filters
+//     const matchStage = { status: 1 };
+
+//     if (mongoose.Types.ObjectId.isValid(tag)) {
+//       matchStage.tag = new mongoose.Types.ObjectId(tag);
+//     } else {
+//       matchStage.tag = tag;
+//     }
+
+//     // Price Filter
+//     if (priceFilter === "under2000") {
+//       matchStage.$expr = { $lt: [{ $toDouble: "$price" }, 2000] };
+//     } else if (priceFilter === "2000to5000") {
+//       matchStage.$expr = {
+//         $and: [
+//           { $gte: [{ $toDouble: "$price" }, 2000] },
+//           { $lte: [{ $toDouble: "$price" }, 5000] },
+//         ],
+//       };
+//     } else if (priceFilter === "above5000") {
+//       matchStage.$expr = { $gt: [{ $toDouble: "$price" }, 5000] };
+//     }
+
+//     // Theme filter
+//     if (theme && theme !== "all") {
+//       const formattedTheme = theme.toLowerCase().split("-")[0];
+//       matchStage.name = { $regex: formattedTheme, $options: "i" };
+//     }
+
+//     // Sorting logic
+//     const isAsc = sortBy === "asc";
+//     const isDesc = sortBy === "desc";
+//     const priceSortDir = isAsc ? 1 : isDesc ? -1 : null;
+
+//     let sortStage;
+
+//     const priceFilterIsAll = priceFilter === "all" || priceFilter === "All";
+//     const hasSpecificPriceFilter =
+//       priceFilter &&
+//       !priceFilterIsAll &&
+//       ["under2000", "2000to5000", "above5000"].includes(priceFilter);
+
+//     if (priceSortDir !== null) {
+//       if (priceFilterIsAll || hasSpecificPriceFilter) {
+//         sortStage = { popularity_score: -1, numericPrice: priceSortDir };
+//       } else {
+//         sortStage = { numericPrice: priceSortDir, popularity_score: -1 };
+//       }
+//     } else {
+//       sortStage = { popularity_score: -1 };
+//     }
+
+//     // Aggregation pipeline
+//     const pipeline = [
+//       { $match: matchStage },
+
+//       // Safe numericPrice for sorting
+//       {
+//         $addFields: {
+//           numericPrice: {
+//             $cond: {
+//               if: { $or: [{ $eq: ["$price", null] }, { $eq: ["$price", ""] }] },
+//               then: 0,
+//               else: { $toDouble: "$price" },
+//             },
+//           },
+//         },
+//       },
+
+//       { $sort: sortStage },
+
+//       {
+//         $facet: {
+//           data: [
+//             { $skip: (page - 1) * limit },
+//             { $limit: limit },
+//             {
+//               $project: {
+//                 _id: 1,
+//                 name: 1,
+//                 short_link: 1,
+//                 featured_image: 1,
+//                 featured_images: 1,
+//                 price: 1,
+//                 cost_price: 1,
+//                 ratings: 1,
+//                 popularity_score: 1,
+//               },
+//             },
+//           ],
+//           pagination: [{ $count: "totalItems" }],
+//         },
+//       },
+//     ];
+
+//     const result = await decorationModel
+//       .aggregate(pipeline)
+//       .collation({ locale: "en", numericOrdering: true });
+
+//     const decorations = result[0]?.data || [];
+//     const totalItems = result[0]?.pagination?.[0]?.totalItems || 0;
+
+//     const response = {
+//       error: false,
+//       status: 200,
+//       ok: "ok",
+//       message:
+//         decorations.length > 0
+//           ? "Search Successful"
+//           : "No matching decorations found.",
+//       data: decorations,
+//       pagination: {
+//         totalItems,
+//         totalPages: Math.ceil(totalItems / limit),
+//         currentPage: page,
+//         limit,
+//       },
+//     };
+
+//     // Cache save
+//     cache.set(cacheKey, response);
+
+//     return res.json(response);
+//   } catch (error) {
+//     console.error("=== SearchByTag v2 Error ===", error);
+//     return res.status(500).json({
+//       error: true,
+//       message: "Server Error: " + error.message,
+//     });
+//   }
+// });
+
+//get decoration by name and all orders individual product actual images
+
+// ====================== Optimized Search API ======================
+
 router.get("/searchByTag/v2/:tag", async (req, res) => {
   try {
     const { tag } = req.params;
     const limit = Math.min(parseInt(req.query.limit) || 10, 1000);
     const page = Math.max(parseInt(req.query.page) || 1, 1);
-    const priceFilter = req.query.priceFilter;
-    const sortBy = req.query.sortBy?.toLowerCase(); // "asc" or "desc"
-    const theme = req.query.theme;
 
-    const cacheKey = `search_${tag}_${limit}_${page}_${priceFilter || "absent"}_${sortBy || "default"}_${theme || "all"}`;
+    const priceFilter = req.query.priceFilter?.toLowerCase();
+    const sortBy = req.query.sortBy?.toLowerCase();
+    const theme = req.query.theme?.toLowerCase();
 
-    // Cache hit
-    const cachedData = cache.get(cacheKey);
-    if (cachedData) {
-      return res.json({ ...cachedData, cached: true });
+    const cacheKey = `search_v3_${tag}_${limit}_${page}_${priceFilter || "all"}_${sortBy || "def"}_${theme || "all"}`;
+
+    if (cache.has(cacheKey)) {
+      return res.json({ ...cache.get(cacheKey), cached: true });
     }
 
-    // Match stage with dynamic filters
     const matchStage = { status: 1 };
 
+    // Tag
     if (mongoose.Types.ObjectId.isValid(tag)) {
       matchStage.tag = new mongoose.Types.ObjectId(tag);
     } else {
       matchStage.tag = tag;
     }
 
-    // Price Filter
-    if (priceFilter === "under2000") {
-      matchStage.$expr = { $lt: [{ $toDouble: "$price" }, 2000] };
-    } else if (priceFilter === "2000to5000") {
-      matchStage.$expr = {
-        $and: [
-          { $gte: [{ $toDouble: "$price" }, 2000] },
-          { $lte: [{ $toDouble: "$price" }, 5000] },
-        ],
-      };
-    } else if (priceFilter === "above5000") {
-      matchStage.$expr = { $gt: [{ $toDouble: "$price" }, 5000] };
-    }
-
-    // Theme filter
+    // Theme Filter
     if (theme && theme !== "all") {
-      const formattedTheme = theme.toLowerCase().split("-")[0];
-      matchStage.name = { $regex: formattedTheme, $options: "i" };
+      matchStage.name = { $regex: theme.split("-")[0], $options: "i" };
     }
 
-    // Sorting logic
-    const isAsc = sortBy === "asc";
-    const isDesc = sortBy === "desc";
-    const priceSortDir = isAsc ? 1 : isDesc ? -1 : null;
-
-    let sortStage;
-
-    const priceFilterIsAll = priceFilter === "all" || priceFilter === "All";
-    const hasSpecificPriceFilter =
-      priceFilter &&
-      !priceFilterIsAll &&
-      ["under2000", "2000to5000", "above5000"].includes(priceFilter);
-
-    if (priceSortDir !== null) {
-      if (priceFilterIsAll || hasSpecificPriceFilter) {
-        sortStage = { popularity_score: -1, numericPrice: priceSortDir };
-      } else {
-        sortStage = { numericPrice: priceSortDir, popularity_score: -1 };
+    // Price Filter - Try to avoid $expr as much as possible
+    let pricePipeline = [];
+    if (priceFilter) {
+      if (priceFilter === "under2000") {
+        pricePipeline = [
+          { $match: { $expr: { $lt: [{ $toDouble: "$price" }, 2000] } } },
+        ];
+      } else if (priceFilter === "2000to5000") {
+        pricePipeline = [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $gte: [{ $toDouble: "$price" }, 2000] },
+                  { $lte: [{ $toDouble: "$price" }, 5000] },
+                ],
+              },
+            },
+          },
+        ];
+      } else if (priceFilter === "above5000") {
+        pricePipeline = [
+          { $match: { $expr: { $gt: [{ $toDouble: "$price" }, 5000] } } },
+        ];
       }
-    } else {
-      sortStage = { popularity_score: -1 };
     }
 
-    // Aggregation pipeline
+    // Sorting
+    let sortStage = { popularity_score: -1 };
+    if (sortBy === "asc" || sortBy === "desc") {
+      const dir = sortBy === "asc" ? 1 : -1;
+      sortStage = { numericPrice: dir, popularity_score: -1 };
+    }
+
     const pipeline = [
       { $match: matchStage },
 
-      // Safe numericPrice for sorting
+      // Add numeric price once
       {
         $addFields: {
           numericPrice: {
-            $cond: {
-              if: { $or: [{ $eq: ["$price", null] }, { $eq: ["$price", ""] }] },
-              then: 0,
-              else: { $toDouble: "$price" },
-            },
+            $cond: [
+              { $or: [{ $eq: ["$price", null] }, { $eq: ["$price", ""] }] },
+              0,
+              { $toDouble: "$price" },
+            ],
           },
         },
       },
+
+      ...pricePipeline, // Price filter after numericPrice
 
       { $sort: sortStage },
 
@@ -579,9 +764,10 @@ router.get("/searchByTag/v2/:tag", async (req, res) => {
       },
     ];
 
-    const result = await decorationModel
-      .aggregate(pipeline)
-      .collation({ locale: "en", numericOrdering: true });
+    const result = await decorationModel.aggregate(pipeline, {
+      allowDiskUse: true, // Important for large datasets
+      collation: { locale: "en", numericOrdering: true },
+    });
 
     const decorations = result[0]?.data || [];
     const totalItems = result[0]?.pagination?.[0]?.totalItems || 0;
@@ -590,10 +776,9 @@ router.get("/searchByTag/v2/:tag", async (req, res) => {
       error: false,
       status: 200,
       ok: "ok",
-      message:
-        decorations.length > 0
-          ? "Search Successful"
-          : "No matching decorations found.",
+      message: decorations.length
+        ? "Search Successful"
+        : "No matching decorations found.",
       data: decorations,
       pagination: {
         totalItems,
@@ -603,20 +788,14 @@ router.get("/searchByTag/v2/:tag", async (req, res) => {
       },
     };
 
-    // Cache save
     cache.set(cacheKey, response);
-
     return res.json(response);
   } catch (error) {
-    console.error("=== SearchByTag v2 Error ===", error);
-    return res.status(500).json({
-      error: true,
-      message: "Server Error: " + error.message,
-    });
+    console.error("SearchByTag v2 Error:", error);
+    return res.status(500).json({ error: true, message: error.message });
   }
 });
 
-//get decoration by name and all orders individual product actual images
 router.get("/decorations/:name/orders", async (req, res) => {
   try {
     const { name } = req.params;

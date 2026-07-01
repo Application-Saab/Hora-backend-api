@@ -1057,5 +1057,140 @@ router.post("/generate-gallery-code/:folderId", async (req, res) => {
 });
 
 
+router.get("/getSubFolders", async (req, res) => {
+  try {
+    const { folderName } = req.query;
+
+    if (!folderName) {
+      return res.status(400).json({ message: "folderName is required" });
+    }
+
+    const folder = await Folder.findOne({ folderName }).lean();
+
+    if (!folder) {
+      return res.status(404).json({ message: "Folder not found" });
+    }
+    const userIds = folder.viewedBy || [];
+    const uniqueUserIds = [...new Set(userIds)];
+
+
+    const users = await User.find({
+      _id: { $in: uniqueUserIds }
+    })
+      .select("_id name firstName lastName phone avatar")
+      .lean();
+
+    const userMap = {};
+    users.forEach(u => {
+      userMap[String(u._id)] = u;
+    });
+
+
+    res.status(200).json({
+      folder,
+      guestDetails: (folder.viewedBy || []).map(id => userMap[id] || {
+        _id: id,
+        name: "",
+        phone: "",
+        avatar: ""
+      })
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
+  }
+});
+
+
+router.get("/weblink-gallery-images", async (req, res) => {
+  try {
+    const { folderName, customerId, subFolderId, page = 1, limit = 10 } = req.query;
+    const pageNumber = parseInt(page);
+    const limitNumber = parseInt(limit);
+    const skip = (pageNumber - 1) * limitNumber;
+
+    if (!folderName) {
+      return res.status(400).json({
+        message: "folderName is required.",
+      });
+    }
+
+    const folderNames = folderName.split(",");
+
+    const folders = await Folder.find({
+      folderName: { $in: folderNames },
+    }).lean();
+
+    if (!folders.length) {
+      return res.status(404).json({
+        message: "No folders found.",
+      });
+    }
+
+    const userIds = folders.flatMap(f =>
+      (f.viewedBy || []).map(item => item.userId ? String(item.userId) : String(item))
+    );
+    const uniqueUserIds = [...new Set(userIds)];
+
+    const users = await Users.find({
+      _id: { $in: uniqueUserIds }
+    })
+    .select("_id name firstName lastName phone avatar")
+    .lean();
+
+    const userMap = {};
+    users.forEach(u => {
+      userMap[String(u._id)] = u;
+    });
+
+
+    const folderIds = folders.map((f) => f._id);
+
+    let query = {
+      mainFolderId: { $in: folderIds },
+    };
+
+    if (subFolderId) {
+      query.folderIds = { $in: [subFolderId] };
+    }
+
+    const totalCount = await WebLink.countDocuments(query);
+
+    const images = await WebLink.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNumber)
+      .lean();
+
+    const thumbnails = images.map((img) => ({
+      ...img,
+    }));
+
+    /* =========================
+           4Final Response
+        ========================= */
+    res.status(200).json({
+      // folders:enrichedFolders,
+      thumbnails,
+      pagination: {
+        currentPage: pageNumber,
+        totalPages: Math.ceil(totalCount / limitNumber),
+        totalItems: totalCount,
+        limit: limitNumber,
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching thumbnails:", error);
+    res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
+  }
+});
+
+
 
 module.exports = router;

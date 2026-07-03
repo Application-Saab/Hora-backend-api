@@ -1056,5 +1056,53 @@ router.post("/generate-gallery-code/:folderId", async (req, res) => {
 });
 
 
+router.get("/getSubFolders", async (req, res) => {
+  try {
+    const { folderName } = req.query;
+
+    if (!folderName) {
+      return res.status(400).json({ message: "folderName is required" });
+    }
+
+    const folder = await Folder.findOne({ folderName }).lean();
+
+    if (!folder) {
+      return res.status(404).json({ message: "Folder not found" });
+    }
+    const userIds = folder.viewedBy || [];
+    const uniqueUserIds = [...new Set(userIds)];
+
+
+    const users = await User.find({
+      _id: { $in: uniqueUserIds }
+    })
+      .select("_id name firstName lastName phone avatar")
+      .lean();
+
+    const userMap = {};
+    users.forEach(u => {
+      userMap[String(u._id)] = u;
+    });
+
+
+    res.status(200).json({
+      folder,
+      guestDetails: (folder.viewedBy || []).map(id => userMap[id] || {
+        _id: id,
+        name: "",
+        phone: "",
+        avatar: ""
+      })
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
+  }
+});
+
+
 
 module.exports = router;

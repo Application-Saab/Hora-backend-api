@@ -327,13 +327,44 @@ router.get("/thumbnailsWithinProject", async (req, res) => {
 
     const folders = await FolderModel.find({
       folderName: { $in: folderNames },
-    }).select("_id").lean(); 
+    }).lean();
 
     if (!folders.length) {
       return res.status(404).json({
         message: "No folders found.",
       });
     }
+
+    const userIds = folders.flatMap(f =>
+      (f.viewedBy || []).map(item => item.userId ? String(item.userId) : String(item))
+    );
+
+    const uniqueUserIds = [...new Set(userIds)];
+
+    const users = await UserModel.find({
+      _id: { $in: uniqueUserIds }
+    })
+      .select("_id name firstName lastName phone avatar")
+      .lean();
+
+    const userMap = {};
+    users.forEach(u => {
+      userMap[String(u._id)] = u;
+    });
+
+    const enrichedFolders = folders.map(folder => ({
+      ...folder,
+      guestDetails: (folder.viewedBy || []).map(item => {
+        const userId = item.userId ? String(item.userId) : String(item);
+
+        return userMap[userId] || {
+          _id: userId,
+          name: "Unknown User",
+          phone: "",
+          avatar: ""
+        };
+      })
+    }));
 
     const folderIds = folders.map((f) => f._id);
 
@@ -369,7 +400,10 @@ router.get("/thumbnailsWithinProject", async (req, res) => {
     /* =========================
            Final Response
         ========================= */
-    const responsePayload = { thumbnails };
+    const responsePayload = {
+      folders: enrichedFolders,
+      thumbnails
+    };
 
     if (hasPagination) {
       responsePayload.pagination = {

@@ -18,6 +18,8 @@ mongoose.connect(
   `mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASS}@${process.env.MONGO_CLUSTER}/${process.env.MONGO_DATABASE}?retryWrites=true&w=majority`,
 );
 const database = mongoose.connection;
+
+const deploymentId = process.env.GOOGLE_SCRIPT_DEPLOYMENT_ID;
 // Database Connection End
 
 const app = express();
@@ -351,7 +353,7 @@ cron.schedule('0 20 * * *', async () => {
 
       await axios
         .post(
-          "https://script.google.com/macros/s/AKfycbzopweY3eKo4h29q_7Ow8uNpKBRNjxKqSTUI8UQ2NW1RucyL56_F-HGtKeBZrvcJRTB/exec",
+          `https://script.google.com/macros/s/${deploymentId}/exec`,
           googlePayload,
           { headers: { "Content-Type": "application/json" } }
         )

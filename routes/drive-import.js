@@ -13,6 +13,7 @@ const {
 const fsp = require("fs").promises;
 
 const apiKey = process.env.GOOGLE_DRIVE_API_KEY;
+const deploymentId = process.env.GOOGLE_SCRIPT_DEPLOYMENT_ID;
 
 // =================== Helpers ===================
 
@@ -409,7 +410,7 @@ router.post("/add-order-drive-link", async (req, res) => {
 
       axios
         .post(
-          "https://script.google.com/macros/s/AKfycbzopweY3eKo4h29q_7Ow8uNpKBRNjxKqSTUI8UQ2NW1RucyL56_F-HGtKeBZrvcJRTB/exec",
+          `https://script.google.com/macros/s/${deploymentId}/exec`,
           googlePayload,
           { headers: { "Content-Type": "application/json" } }
         )

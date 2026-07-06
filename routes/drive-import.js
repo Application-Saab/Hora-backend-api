@@ -289,73 +289,68 @@ router.post("/import-drive-folder", async (req, res) => {
 router.post("/add-order-drive-link", async (req, res) => {
   try {
     const { folderUrl, order_id, allDriveLinks = [] } = req.body;
-    // Order check
-    const order = await OrderModel.findOne({ order_id }); 
+    const order = await OrderModel.findOne({ order_id });
     if (!order) throw new Error("Order not found");
-    // WebLink generate
-    // const folderName = order_id + 10800;
     const customerId = order.fromId;
     const orderId = order_id;
     const phoneNo = order.phone_no;
 
-
     if (folderUrl?.trim()) {
-  const folderId = getFolderIdFromUrl(folderUrl);
+      const folderId = getFolderIdFromUrl(folderUrl);
 
-  if (!folderId) {
-    return res.status(400).json({
-      message: "Invalid Google Drive folder URL",
-    });
-  }
-
-  const isPublic = await isFolderPubliclyAccessible(folderId, apiKey);
-
-  if (!isPublic) {
-    return res.status(400).json({
-      message:
-        "The Google Drive folder is not publicly accessible. Please change its permission to 'Anyone with the link'.",
-    });
-  }
-}
-
-
-    if (allDriveLinks.length > 0) {
-    for (const item of allDriveLinks) {
-      if (!item.link) {
-        return res.status(400).json({ 
-          message: `Link is missing for type: ${item.linkType || 'unknown'}` 
-        });
-      }
-
-      const folderId = getFolderIdFromUrl(item.link);
       if (!folderId) {
-        return res.status(400).json({ 
-          message: `Invalid Google Drive folder URL: ${item.link}` 
+        return res.status(400).json({
+          message: "Invalid Google Drive folder URL",
         });
       }
 
       const isPublic = await isFolderPubliclyAccessible(folderId, apiKey);
+
       if (!isPublic) {
         return res.status(400).json({
-          message: `The Google Drive folder for '${item.linkType}' is not publicly accessible. Please change its permission to 'Anyone with the link'.`,
+          message:
+            "The Google Drive folder is not publicly accessible. Please change its permission to 'Anyone with the link'.",
         });
       }
     }
-  }
 
-const folderName = `${order_id}_${customerId}_${phoneNo}`;
+    if (allDriveLinks.length > 0) {
+      for (const item of allDriveLinks) {
+        if (!item.link) {
+          return res.status(400).json({
+            message: `Link is missing for type: ${item.linkType || 'unknown'}`
+          });
+        }
 
-let folder = await FolderModel.findOne({ folderName, customerId });
+        const folderId = getFolderIdFromUrl(item.link);
+        if (!folderId) {
+          return res.status(400).json({
+            message: `Invalid Google Drive folder URL: ${item.link}`
+          });
+        }
+
+        const isPublic = await isFolderPubliclyAccessible(folderId, apiKey);
+        if (!isPublic) {
+          return res.status(400).json({
+            message: `The Google Drive folder for '${item.linkType}' is not publicly accessible. Please change its permission to 'Anyone with the link'.`,
+          });
+        }
+      }
+    }
+
+    const folderName = `${order_id}_${customerId}_${phoneNo}`;
+
+    let folder = await FolderModel.findOne({ folderName, customerId });
 
     if (!folder) {
       folder = new FolderModel({ folderName, customerId, orderId });
       await folder.save();
     }
-    let webLink = order.orderWebLink; 
+    let webLink = order.orderWebLink;
     let updateFields = {};
 
     if (allDriveLinks.length > 0) {
-        updateFields.allDriveLinks = allDriveLinks;
+      updateFields.allDriveLinks = allDriveLinks;
     }
 
     if (folderUrl && folderUrl.trim() !== "") {
@@ -366,7 +361,7 @@ let folder = await FolderModel.findOne({ folderName, customerId });
         folder = new FolderModel({ folderName, customerId, orderId: order_id });
         await folder.save();
       }
-      
+
       let mainFolderId = folder._id;
       webLink = `https://horaservices.com/weblink-gallery?folderName=${folderName}&customerId=${customerId}`;
 
@@ -377,8 +372,8 @@ let folder = await FolderModel.findOne({ folderName, customerId });
       axios
         .post(`${process.env.MEDIA_WORKER_URL}/process-drive`, {
           folderUrl,
-          order_id,     
-          customerId,  
+          order_id,
+          customerId,
           phoneNo,
           mainFolderId,
         })
@@ -389,21 +384,27 @@ let folder = await FolderModel.findOne({ folderName, customerId });
           );
         });
 
-      let updatedPhoneNumber = phoneNo;
-      if (!updatedPhoneNumber.startsWith("+91")) {
-        updatedPhoneNumber = `+91${updatedPhoneNumber}`;
+      let contentTypesPayload = [];
+
+      if (allDriveLinks && allDriveLinks.length > 0) {
+        contentTypesPayload = allDriveLinks.map(item => ({
+          linkType: item.linkType || "Raw Photos",
+          link: item.link || ""
+        }));
+      } else {
+        contentTypesPayload.push({
+          linkType: "Raw Photos",
+          link: folderUrl
+        });
       }
 
       const googlePayload = {
-        orderIdDb: order_id,
-        orderIdCustomer: order_id + 10800,
-        fulfillmentDate: order?.order_date
+        targetSheet: "photography_drivelink",
+        orderId: String(Number(order_id) + 10800), 
+        orderFulfilmentDate: order?.order_date
           ? new Date(order.order_date).toLocaleDateString("en-GB")
           : "N/A",
-        services: "Photography",
-        driveLink: folderUrl,
-        horaWebLink: webLink,
-        phone: updatedPhoneNumber,
+        contentTypes: contentTypesPayload 
       };
 
       axios
@@ -414,7 +415,7 @@ let folder = await FolderModel.findOne({ folderName, customerId });
         )
         .catch((err) => {
           console.error(
-            "Google Sheet update failed for rawPhotos:",
+            "Google Sheet update failed:",
             err.response?.data || err.message
           );
         });
@@ -422,11 +423,10 @@ let folder = await FolderModel.findOne({ folderName, customerId });
 
     await OrderModel.updateOne({ order_id }, { $set: updateFields });
 
-    res.status(201).json({ 
+    res.status(201).json({
       message: "Drive link added successfully",
       webLink,
     });
-      
 
   } catch (error) {
     console.error("add-order-drive-link error:", error.message);
@@ -487,3 +487,137 @@ router.post("/update-google-sheet", async (req, res) => {
 // }
 
 module.exports = router;
+
+
+
+function doPost(e) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000);
+
+    const data = JSON.parse(e.postData.contents);
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    // =============== SHEET 1: DRIVE LINKS ===============
+    if (data.targetSheet === "photography_drivelink") {
+      const sheet = ss.getSheetByName("Photography Drive link");
+      if (!sheet) throw new Error("Photography Fulfilment sheet not found");
+
+      let contentList = data.contentTypes || [];
+      if (contentList && !Array.isArray(contentList)) contentList = [contentList];
+
+      if (contentList.length > 0) {
+        const orderIdStr = String(data.orderId).trim();
+        const lastRow = sheet.getLastRow();
+        let existingIndex = -1;
+
+        if (lastRow > 1) {
+          const values = sheet.getRange(1, 1, lastRow, 4).getValues();
+          for (let i = 1; i < values.length; i++) {
+            if (String(values[i][1]).trim() === orderIdStr) {
+              existingIndex = i + 1;
+              break;
+            }
+          }
+        }
+
+        if (existingIndex !== -1) {
+          const values = sheet.getRange(1, 1, sheet.getLastRow() + 5, 4).getValues();
+          let rowsToProcess = [existingIndex];
+          for (let r = existingIndex; r < values.length; r++) {
+            if (String(values[r][0]).trim() === "" && String(values[r][1]).trim() === "") {
+              rowsToProcess.push(r + 1);
+            } else { break; }
+          }
+          contentList.forEach(function (newItem, index) {
+            if (index < rowsToProcess.length) {
+              const rowNum = rowsToProcess[index];
+              sheet.getRange(rowNum, 3).setValue(newItem.linkType || "");
+              sheet.getRange(rowNum, 4).setValue(newItem.link || "");
+            } else {
+              const insertAt = rowsToProcess[rowsToProcess.length - 1] + 1;
+              sheet.insertRowAfter(insertAt - 1);
+              sheet.getRange(insertAt, 1, 1, 4).setValues([["", "", newItem.linkType || "", newItem.link || ""]]);
+              rowsToProcess.push(insertAt);
+            }
+          });
+        } else {
+          contentList.forEach(function (item, index) {
+            sheet.appendRow([
+              index === 0 ? (data.orderFulfilmentDate || "") : "",
+              index === 0 ? (data.orderId || "") : "",
+              item.linkType || "",
+              item.link || ""
+            ]);
+          });
+        }
+      }
+    }
+
+    // =============== SHEET 2: CRON INCLUSIONS (NEW) ===============
+    else if (data.targetSheet === "photography_inclusions") {
+      const sheet = ss.getSheetByName("Photography Order Fulfilment");
+      if (!sheet) throw new Error("Photography Inclusions sheet not found");
+
+      let inclusionsList = data.inclusions || [];
+      if (inclusionsList && !Array.isArray(inclusionsList)) inclusionsList = [inclusionsList];
+
+      if (inclusionsList.length > 0) {
+        const orderIdStr = String(data.orderId).trim();
+        const lastRow = sheet.getLastRow();
+        let existingIndex = -1;
+
+        if (lastRow > 1) {
+          const values = sheet.getRange(1, 1, lastRow, 3).getValues(); 
+          for (let i = 1; i < values.length; i++) {
+            if (String(values[i][1]).trim() === orderIdStr) {
+              existingIndex = i + 1;
+              break;
+            }
+          }
+        }
+
+        if (existingIndex !== -1) {
+          const values = sheet.getRange(1, 1, sheet.getLastRow() + 5, 3).getValues();
+          let rowsToProcess = [existingIndex];
+          for (let r = existingIndex; r < values.length; r++) {
+            if (String(values[r][0]).trim() === "" && String(values[r][1]).trim() === "") {
+              rowsToProcess.push(r + 1);
+            } else { break; }
+          }
+
+          inclusionsList.forEach(function (newInclusion, index) {
+            if (index < rowsToProcess.length) {
+              const rowNum = rowsToProcess[index];
+              sheet.getRange(rowNum, 3).setValue(newInclusion || ""); 
+            } else {
+              const insertAt = rowsToProcess[rowsToProcess.length - 1] + 1;
+              sheet.insertRowAfter(insertAt - 1);
+              sheet.getRange(insertAt, 1, 1, 3).setValues([["", "", newInclusion || ""]]);
+              rowsToProcess.push(insertAt);
+            }
+          });
+        }
+        else {
+          inclusionsList.forEach(function (inclusion, index) {
+            sheet.appendRow([
+              index === 0 ? (data.orderDate || "") : "", 
+              index === 0 ? (data.orderId || "") : "",     
+              inclusion || ""                             
+            ]);
+          });
+        }
+      }
+    }
+    else {
+      throw new Error("Invalid targetSheet name");
+    }
+
+    lock.releaseLock();
+    return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Rows processed successfully" })).setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    lock.releaseLock();
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.message })).setMimeType(ContentService.MimeType.JSON);
+  }
+}

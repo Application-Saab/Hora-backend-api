@@ -11,6 +11,7 @@ const commonFunction = require("./store/commonFunction");
 const sharp = require("sharp");
 const cron = require("node-cron");
 const { runPackageSync } = require("./store/import-venue-packages");
+const axios = require("axios")
 // Database Connection Start
 mongoose.set("strictQuery", true);
 mongoose.connect(
@@ -306,6 +307,69 @@ cron.schedule("*/1 * * * *", async () => {
   await sendNotificationsInPriority();
 });
 
+cron.schedule('0 20 * * *', async () => {
+  console.log('--- Cron Job Started: Processing Today\'s Active Orders for Inclusions ---');
+
+  try {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    const orders = await orderModel.find({
+      order_date: {
+        $gte: startOfToday,
+        $lte: endOfToday
+      },
+      status: 1,
+      type: 8
+    }).select('order_id order_date call_checklist');
+
+    if (orders.length === 0) {
+      console.log('No matching orders found for today.');
+      return;
+    }
+
+    for (const order of orders) {
+      const inclusions = order?.call_checklist?.inclusions || {};
+
+      const trueInclusions = Object.keys(inclusions).filter(key => inclusions[key] === true);
+
+      if (trueInclusions.length === 0) {
+        trueInclusions.push("None");
+      }
+
+      const googlePayload = {
+        targetSheet: "photography_inclusions",
+        orderId: String(Number(order.order_id) + 10800), 
+        orderDate: order.order_date
+          ? new Date(order.order_date).toLocaleDateString("en-GB")
+          : "N/A",
+        inclusions: trueInclusions 
+      };
+
+      await axios
+        .post(
+          "https://script.google.com/macros/s/AKfycbzopweY3eKo4h29q_7Ow8uNpKBRNjxKqSTUI8UQ2NW1RucyL56_F-HGtKeBZrvcJRTB/exec",
+          googlePayload,
+          { headers: { "Content-Type": "application/json" } }
+        )
+        .then(() => {
+          console.log(`Successfully synced Inclusions for Order ID: ${googlePayload.orderId}`);
+        })
+        .catch((err) => {
+          console.error(
+            `Google Sheet integration failed for Order [${order.order_id}]:`,
+            err.message
+          );
+        });
+    }
+
+  } catch (error) {
+    console.error('Error running cron job:', error);
+  }
+});
 database.on("error", (error) => {
   console.log(error);
 });

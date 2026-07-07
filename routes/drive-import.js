@@ -264,7 +264,7 @@ router.post("/import-drive-folder", async (req, res) => {
     });
 
     axios
-      .post(`${process.env.MEDIA_WORKER_URL}/process-drive`, {
+      .post(`http://localhost:4000/process-drive`, {
         folderUrl,
         order_id,
         customerId,
@@ -375,7 +375,7 @@ let folder = await FolderModel.findOne({ folderName, customerId });
       updateFields["imageUploadCounts.driveProvidedAt"] = new Date();
 
       axios
-        .post(`${process.env.MEDIA_WORKER_URL}/process-drive`, {
+        .post(`http://localhost:4000/process-drive`, {
           folderUrl,
           order_id,     
           customerId,  

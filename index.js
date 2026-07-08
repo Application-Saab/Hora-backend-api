@@ -347,6 +347,8 @@ const venuePackageCategoryRoutes = require("./routes/venue-package-categories");
 const venuePackageItemRoutes = require("./routes/venue-package-items");
 const EventShareRoutes = require("./routes/event-share");
 const ShareCapsule = require("./routes/share-capsule")
+const SearchTrackingRoutes = require("./routes/search-tracking")
+const EventDateRoutes = require("./routes/event-dates");
 let passportAuth = require("./store/passportAuth").passportAuth;
 
 app.use("/api/admin", AdminRoutes);
@@ -380,6 +382,8 @@ app.use("/api/party-venue", PartyHallVenueRoutes);
 app.use("/api/party-venue/package", venuePackageRoutes);
 app.use("/api/party-venue/package-category", venuePackageCategoryRoutes);
 app.use("/api/party-venue/package-item", venuePackageItemRoutes);
+app.use("/api/search-tracking", SearchTrackingRoutes);
+app.use("/api/event-dates", EventDateRoutes);
 app.use("/smartinvite/share", EventShareRoutes);
 app.use("/eventcapsule/share", ShareCapsule);
 

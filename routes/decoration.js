@@ -503,155 +503,155 @@ router.get("/details/:id", async (req, res) => {
   }
 });
 
-// router.get("/searchByTag/v2/:tag", async (req, res) => {
-//   try {
-//     const { tag } = req.params;
-//     const limit = Math.min(parseInt(req.query.limit) || 10, 1000);
-//     const page = Math.max(parseInt(req.query.page) || 1, 1);
-//     const priceFilter = req.query.priceFilter;
-//     const sortBy = req.query.sortBy?.toLowerCase(); // "asc" or "desc"
-//     const theme = req.query.theme;
+router.get("/searchByTag/v2/:tag", async (req, res) => {
+  try {
+    const { tag } = req.params;
+    const limit = Math.min(parseInt(req.query.limit) || 10, 1000);
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const priceFilter = req.query.priceFilter;
+    const sortBy = req.query.sortBy?.toLowerCase(); // "asc" or "desc"
+    const theme = req.query.theme;
 
-//     const cacheKey = `search_${tag}_${limit}_${page}_${priceFilter || "absent"}_${sortBy || "default"}_${theme || "all"}`;
+    const cacheKey = `search_${tag}_${limit}_${page}_${priceFilter || "absent"}_${sortBy || "default"}_${theme || "all"}`;
 
-//     // Cache hit
-//     const cachedData = cache.get(cacheKey);
-//     if (cachedData) {
-//       return res.json({ ...cachedData, cached: true });
-//     }
+    // Cache hit
+    const cachedData = cache.get(cacheKey);
+    if (cachedData) {
+      return res.json({ ...cachedData, cached: true });
+    }
 
-//     // Match stage with dynamic filters
-//     const matchStage = { status: 1 };
+    // Match stage with dynamic filters
+    const matchStage = { status: 1 };
 
-//     if (mongoose.Types.ObjectId.isValid(tag)) {
-//       matchStage.tag = new mongoose.Types.ObjectId(tag);
-//     } else {
-//       matchStage.tag = tag;
-//     }
+    if (mongoose.Types.ObjectId.isValid(tag)) {
+      matchStage.tag = new mongoose.Types.ObjectId(tag);
+    } else {
+      matchStage.tag = tag;
+    }
 
-//     // Price Filter
-//     if (priceFilter === "under2000") {
-//       matchStage.$expr = { $lt: [{ $toDouble: "$price" }, 2000] };
-//     } else if (priceFilter === "2000to5000") {
-//       matchStage.$expr = {
-//         $and: [
-//           { $gte: [{ $toDouble: "$price" }, 2000] },
-//           { $lte: [{ $toDouble: "$price" }, 5000] },
-//         ],
-//       };
-//     } else if (priceFilter === "above5000") {
-//       matchStage.$expr = { $gt: [{ $toDouble: "$price" }, 5000] };
-//     }
+    // Price Filter
+    if (priceFilter === "under2000") {
+      matchStage.$expr = { $lt: [{ $toDouble: "$price" }, 2000] };
+    } else if (priceFilter === "2000to5000") {
+      matchStage.$expr = {
+        $and: [
+          { $gte: [{ $toDouble: "$price" }, 2000] },
+          { $lte: [{ $toDouble: "$price" }, 5000] },
+        ],
+      };
+    } else if (priceFilter === "above5000") {
+      matchStage.$expr = { $gt: [{ $toDouble: "$price" }, 5000] };
+    }
 
-//     // Theme filter
-//     if (theme && theme !== "all") {
-//       const formattedTheme = theme.toLowerCase().split("-")[0];
-//       matchStage.name = { $regex: formattedTheme, $options: "i" };
-//     }
+    // Theme filter
+    if (theme && theme !== "all") {
+      const formattedTheme = theme.toLowerCase().split("-")[0];
+      matchStage.name = { $regex: formattedTheme, $options: "i" };
+    }
 
-//     // Sorting logic
-//     const isAsc = sortBy === "asc";
-//     const isDesc = sortBy === "desc";
-//     const priceSortDir = isAsc ? 1 : isDesc ? -1 : null;
+    // Sorting logic
+    const isAsc = sortBy === "asc";
+    const isDesc = sortBy === "desc";
+    const priceSortDir = isAsc ? 1 : isDesc ? -1 : null;
 
-//     let sortStage;
+    let sortStage;
 
-//     const priceFilterIsAll = priceFilter === "all" || priceFilter === "All";
-//     const hasSpecificPriceFilter =
-//       priceFilter &&
-//       !priceFilterIsAll &&
-//       ["under2000", "2000to5000", "above5000"].includes(priceFilter);
+    const priceFilterIsAll = priceFilter === "all" || priceFilter === "All";
+    const hasSpecificPriceFilter =
+      priceFilter &&
+      !priceFilterIsAll &&
+      ["under2000", "2000to5000", "above5000"].includes(priceFilter);
 
-//     if (priceSortDir !== null) {
-//       if (priceFilterIsAll || hasSpecificPriceFilter) {
-//         sortStage = { popularity_score: -1, numericPrice: priceSortDir };
-//       } else {
-//         sortStage = { numericPrice: priceSortDir, popularity_score: -1 };
-//       }
-//     } else {
-//       sortStage = { popularity_score: -1 };
-//     }
+    if (priceSortDir !== null) {
+      if (priceFilterIsAll || hasSpecificPriceFilter) {
+        sortStage = { popularity_score: -1, numericPrice: priceSortDir };
+      } else {
+        sortStage = { numericPrice: priceSortDir, popularity_score: -1 };
+      }
+    } else {
+      sortStage = { popularity_score: -1 };
+    }
 
-//     // Aggregation pipeline
-//     const pipeline = [
-//       { $match: matchStage },
+    // Aggregation pipeline
+    const pipeline = [
+      { $match: matchStage },
 
-//       // Safe numericPrice for sorting
-//       {
-//         $addFields: {
-//           numericPrice: {
-//             $cond: {
-//               if: { $or: [{ $eq: ["$price", null] }, { $eq: ["$price", ""] }] },
-//               then: 0,
-//               else: { $toDouble: "$price" },
-//             },
-//           },
-//         },
-//       },
+      // Safe numericPrice for sorting
+      {
+        $addFields: {
+          numericPrice: {
+            $cond: {
+              if: { $or: [{ $eq: ["$price", null] }, { $eq: ["$price", ""] }] },
+              then: 0,
+              else: { $toDouble: "$price" },
+            },
+          },
+        },
+      },
 
-//       { $sort: sortStage },
+      { $sort: sortStage },
 
-//       {
-//         $facet: {
-//           data: [
-//             { $skip: (page - 1) * limit },
-//             { $limit: limit },
-//             {
-//               $project: {
-//                 _id: 1,
-//                 name: 1,
-//                 short_link: 1,
-//                 featured_image: 1,
-//                 featured_images: 1,
-//                 price: 1,
-//                 cost_price: 1,
-//                 ratings: 1,
-//                 popularity_score: 1,
-//                 designType: 1,
-//               },
-//             },
-//           ],
-//           pagination: [{ $count: "totalItems" }],
-//         },
-//       },
-//     ];
+      {
+        $facet: {
+          data: [
+            { $skip: (page - 1) * limit },
+            { $limit: limit },
+            {
+              $project: {
+                _id: 1,
+                name: 1,
+                short_link: 1,
+                featured_image: 1,
+                featured_images: 1,
+                price: 1,
+                cost_price: 1,
+                ratings: 1,
+                popularity_score: 1,
+                designType: 1,
+              },
+            },
+          ],
+          pagination: [{ $count: "totalItems" }],
+        },
+      },
+    ];
 
-//     const result = await decorationModel
-//       .aggregate(pipeline)
-//       .collation({ locale: "en", numericOrdering: true });
+    const result = await decorationModel
+      .aggregate(pipeline)
+      .collation({ locale: "en", numericOrdering: true });
 
-//     const decorations = result[0]?.data || [];
-//     const totalItems = result[0]?.pagination?.[0]?.totalItems || 0;
+    const decorations = result[0]?.data || [];
+    const totalItems = result[0]?.pagination?.[0]?.totalItems || 0;
 
-//     const response = {
-//       error: false,
-//       status: 200,
-//       ok: "ok",
-//       message:
-//         decorations.length > 0
-//           ? "Search Successful"
-//           : "No matching decorations found.",
-//       data: decorations,
-//       pagination: {
-//         totalItems,
-//         totalPages: Math.ceil(totalItems / limit),
-//         currentPage: page,
-//         limit,
-//       },
-//     };
+    const response = {
+      error: false,
+      status: 200,
+      ok: "ok",
+      message:
+        decorations.length > 0
+          ? "Search Successful"
+          : "No matching decorations found.",
+      data: decorations,
+      pagination: {
+        totalItems,
+        totalPages: Math.ceil(totalItems / limit),
+        currentPage: page,
+        limit,
+      },
+    };
 
-//     // Cache save
-//     cache.set(cacheKey, response);
+    // Cache save
+    cache.set(cacheKey, response);
 
-//     return res.json(response);
-//   } catch (error) {
-//     console.error("=== SearchByTag v2 Error ===", error);
-//     return res.status(500).json({
-//       error: true,
-//       message: "Server Error: " + error.message,
-//     });
-//   }
-// });
+    return res.json(response);
+  } catch (error) {
+    console.error("=== SearchByTag v2 Error ===", error);
+    return res.status(500).json({
+      error: true,
+      message: "Server Error: " + error.message,
+    });
+  }
+});
 
 // get decoration by name and all orders individual product actual images
 
@@ -798,7 +798,7 @@ router.get("/details/:id", async (req, res) => {
 //   }
 // });
 
-router.get("/searchByTag/v2/:tag", async (req, res) => {
+router.get("/searchByTag/v3/:tag", async (req, res) => {
   try {
     const { tag } = req.params;
     const limit = Math.min(parseInt(req.query.limit) || 10, 1000);

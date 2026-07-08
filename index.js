@@ -157,22 +157,31 @@ async function runSupplierPerformance() {
         .find({
           toId: supplier._id,
           order_status: { $in: [3, 6] },
+          $or: [
+            { userReviewRatingArray: { $exists: true, $ne: [] } },
+            { reviewStatus: { $exists: true, $ne: null } }
+          ]
         })
         .sort({ createdAt: -1 }) // newest order
-        .limit(20);
+        .limit(5);
 
       if (!orders.length) continue;
 
       let excellent = 0;
       let good = 0;
       let poor = 0;
+      let positiveReviews = 0;
+      let negativeReviews = 0;
+
+      let totalFeedbackCount = 0;
 
       for (const order of orders) {
         const rating = order.userReviewRatingArray;
         const rate = Array.isArray(rating) ? rating[0] : rating;
+        let hasFeedback = false;
 
-        if (!rate) continue;
-
+      if(rate){
+        hasFeedback = true;
         if (rate === "9-10") excellent++;
         else if (rate === "7-8") good++;
         else if (rate === "1-6") poor++;
@@ -180,13 +189,26 @@ async function runSupplierPerformance() {
         else if (rate === "0-6") poor++;
       }
 
-      const totalRatedOrders = excellent + good + poor;
-      if (totalRatedOrders === 0) {
+        if (order.reviewStatus === "positive") {
+          positiveReviews++;
+          hasFeedback = true;
+        } else if (order.reviewStatus === "negative") {
+          negativeReviews++;
+          hasFeedback = true;
+        }
+
+        if (hasFeedback) {
+          totalFeedbackCount++;
+        }
+
+      }
+
+      if (totalFeedbackCount === 0) {
         await UserModel.updateOne(
           { _id: supplier._id },
           {
             performanceScore: 0,
-            performanceBadge: "low",
+            performanceBadge: "Low",
             lastRatingUpdate: new Date(),
           },
         );
@@ -195,9 +217,9 @@ async function runSupplierPerformance() {
       }
 
       const vendorScore =
-        (excellent * 10 + good * 5 + poor * -10) / totalRatedOrders;
+        ((excellent * 10) + (positiveReviews * 10) + (good * 5) + (negativeReviews * -20) + (poor * -10)) / totalFeedbackCount;
 
-      let badge = "low";
+      let badge = "Low";
 
       if (vendorScore >= 7) badge = "Elite";
       else if (vendorScore >= 5) badge = "Good";

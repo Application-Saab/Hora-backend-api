@@ -247,7 +247,7 @@ router.get("/event-invites/:id", async (req, res) => {
 
     const invite = await EventInvite.findById(id)
       .select(
-        "userId eventType hostName eventDate eventTime location googleMapLink externalTemplateImageUrl subFolders names addresses dates times shortCode",
+        "userId eventType hostName eventDate eventTime location googleMapLink externalTemplateImageUrl subFolders names addresses dates times shortCode fromInternational",
       )
       .lean();
 
@@ -1688,6 +1688,7 @@ router.post("/admin_all_details", async (req, res) => {
             photoCount: 1,
             hostCount: 1,
             createdAt: 1,
+            fromInternational: 1,
           },
         },
 

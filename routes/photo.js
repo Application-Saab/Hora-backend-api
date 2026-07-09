@@ -315,7 +315,7 @@ router.post("/upload", upload.array("files", 300), async (req, res) => {
 
 router.get("/thumbnailsWithinProject", async (req, res) => {
   try {
-    const { folderName, customerId } = req.query;
+    const { folderName, customerId, subFolderId, page, limit } = req.query;
 
     if (!folderName) {
       return res.status(400).json({
@@ -335,56 +335,86 @@ router.get("/thumbnailsWithinProject", async (req, res) => {
       });
     }
 
-const userIds = folders.flatMap(f => 
-  (f.viewedBy || []).map(item => item.userId ? String(item.userId) : String(item))
-);
+    const userIds = folders.flatMap(f =>
+      (f.viewedBy || []).map(item => item.userId ? String(item.userId) : String(item))
+    );
 
-const uniqueUserIds = [...new Set(userIds)];
+    const uniqueUserIds = [...new Set(userIds)];
 
-const users = await UserModel.find({
-  _id: { $in: uniqueUserIds }
-})
-.select("_id name firstName lastName phone avatar")
-.lean();
+    const users = await UserModel.find({
+      _id: { $in: uniqueUserIds }
+    })
+      .select("_id name firstName lastName phone avatar")
+      .lean();
 
-const userMap = {};
-users.forEach(u => {
-  userMap[String(u._id)] = u;
-});
+    const userMap = {};
+    users.forEach(u => {
+      userMap[String(u._id)] = u;
+    });
 
-const enrichedFolders = folders.map(folder => ({
-  ...folder,
-  guestDetails: (folder.viewedBy || []).map(item => {
-    const userId = item.userId ? String(item.userId) : String(item); 
-    
-    return userMap[userId] || {
-      _id: userId,
-      name: "Unknown User",
-      phone: "",
-      avatar: ""
-    };
-  })
-}));
+    const enrichedFolders = folders.map(folder => ({
+      ...folder,
+      guestDetails: (folder.viewedBy || []).map(item => {
+        const userId = item.userId ? String(item.userId) : String(item);
+
+        return userMap[userId] || {
+          _id: userId,
+          name: "Unknown User",
+          phone: "",
+          avatar: ""
+        };
+      })
+    }));
 
     const folderIds = folders.map((f) => f._id);
 
-    const images = await WebLink.find({
+    let query = {
       mainFolderId: { $in: folderIds },
-    })
-      .sort({ createdAt: -1 })
-      .lean();
+    };
+
+    if (subFolderId) {
+      query.folderIds = { $in: [subFolderId] };
+    }
+
+    const hasPagination = page && limit;
+    let imagesQuery = WebLink.find(query).sort({ createdAt: -1 });
+    let totalCount = 0;
+    let pageNumber, limitNumber;
+
+    if (hasPagination) {
+      pageNumber = parseInt(page);
+      limitNumber = parseInt(limit);
+      const skip = (pageNumber - 1) * limitNumber;
+
+      totalCount = await WebLink.countDocuments(query);
+
+      imagesQuery = imagesQuery.skip(skip).limit(limitNumber);
+    }
+
+    const images = await imagesQuery.lean();
 
     const thumbnails = images.map((img) => ({
       ...img,
     }));
 
     /* =========================
-           4Final Response
+           Final Response
         ========================= */
-    res.status(200).json({
-      folders:enrichedFolders,
-      thumbnails,
-    });
+    const responsePayload = {
+      folders: enrichedFolders,
+      thumbnails
+    };
+
+    if (hasPagination) {
+      responsePayload.pagination = {
+        currentPage: pageNumber,
+        totalPages: Math.ceil(totalCount / limitNumber),
+        totalItems: totalCount,
+        limit: limitNumber,
+      };
+    }
+
+    res.status(200).json(responsePayload);
   } catch (error) {
     console.error("Error fetching thumbnails:", error);
     res.status(500).json({

@@ -13,6 +13,7 @@ const {
 const fsp = require("fs").promises;
 
 const apiKey = process.env.GOOGLE_DRIVE_API_KEY;
+const deploymentId = process.env.GOOGLE_SCRIPT_DEPLOYMENT_ID;
 
 // =================== Helpers ===================
 
@@ -289,73 +290,68 @@ router.post("/import-drive-folder", async (req, res) => {
 router.post("/add-order-drive-link", async (req, res) => {
   try {
     const { folderUrl, order_id, allDriveLinks = [] } = req.body;
-    // Order check
-    const order = await OrderModel.findOne({ order_id }); 
+    const order = await OrderModel.findOne({ order_id });
     if (!order) throw new Error("Order not found");
-    // WebLink generate
-    // const folderName = order_id + 10800;
     const customerId = order.fromId;
     const orderId = order_id;
     const phoneNo = order.phone_no;
 
-
     if (folderUrl?.trim()) {
-  const folderId = getFolderIdFromUrl(folderUrl);
+      const folderId = getFolderIdFromUrl(folderUrl);
 
-  if (!folderId) {
-    return res.status(400).json({
-      message: "Invalid Google Drive folder URL",
-    });
-  }
-
-  const isPublic = await isFolderPubliclyAccessible(folderId, apiKey);
-
-  if (!isPublic) {
-    return res.status(400).json({
-      message:
-        "The Google Drive folder is not publicly accessible. Please change its permission to 'Anyone with the link'.",
-    });
-  }
-}
-
-
-    if (allDriveLinks.length > 0) {
-    for (const item of allDriveLinks) {
-      if (!item.link) {
-        return res.status(400).json({ 
-          message: `Link is missing for type: ${item.linkType || 'unknown'}` 
-        });
-      }
-
-      const folderId = getFolderIdFromUrl(item.link);
       if (!folderId) {
-        return res.status(400).json({ 
-          message: `Invalid Google Drive folder URL: ${item.link}` 
+        return res.status(400).json({
+          message: "Invalid Google Drive folder URL",
         });
       }
 
       const isPublic = await isFolderPubliclyAccessible(folderId, apiKey);
+
       if (!isPublic) {
         return res.status(400).json({
-          message: `The Google Drive folder for '${item.linkType}' is not publicly accessible. Please change its permission to 'Anyone with the link'.`,
+          message:
+            "The Google Drive folder is not publicly accessible. Please change its permission to 'Anyone with the link'.",
         });
       }
     }
-  }
 
-const folderName = `${order_id}_${customerId}_${phoneNo}`;
+    if (allDriveLinks.length > 0) {
+      for (const item of allDriveLinks) {
+        if (!item.link) {
+          return res.status(400).json({
+            message: `Link is missing for type: ${item.linkType || 'unknown'}`
+          });
+        }
 
-let folder = await FolderModel.findOne({ folderName, customerId });
+        const folderId = getFolderIdFromUrl(item.link);
+        if (!folderId) {
+          return res.status(400).json({
+            message: `Invalid Google Drive folder URL: ${item.link}`
+          });
+        }
+
+        const isPublic = await isFolderPubliclyAccessible(folderId, apiKey);
+        if (!isPublic) {
+          return res.status(400).json({
+            message: `The Google Drive folder for '${item.linkType}' is not publicly accessible. Please change its permission to 'Anyone with the link'.`,
+          });
+        }
+      }
+    }
+
+    const folderName = `${order_id}_${customerId}_${phoneNo}`;
+
+    let folder = await FolderModel.findOne({ folderName, customerId });
 
     if (!folder) {
       folder = new FolderModel({ folderName, customerId, orderId });
       await folder.save();
     }
-    let webLink = order.orderWebLink; 
+    let webLink = order.orderWebLink;
     let updateFields = {};
 
     if (allDriveLinks.length > 0) {
-        updateFields.allDriveLinks = allDriveLinks;
+      updateFields.allDriveLinks = allDriveLinks;
     }
 
     if (folderUrl && folderUrl.trim() !== "") {
@@ -366,7 +362,7 @@ let folder = await FolderModel.findOne({ folderName, customerId });
         folder = new FolderModel({ folderName, customerId, orderId: order_id });
         await folder.save();
       }
-      
+
       let mainFolderId = folder._id;
       webLink = `https://horaservices.com/weblink-gallery?folderName=${folderName}&customerId=${customerId}`;
 
@@ -377,8 +373,8 @@ let folder = await FolderModel.findOne({ folderName, customerId });
       axios
         .post(`${process.env.MEDIA_WORKER_URL}/process-drive`, {
           folderUrl,
-          order_id,     
-          customerId,  
+          order_id,
+          customerId,
           phoneNo,
           mainFolderId,
         })
@@ -389,32 +385,38 @@ let folder = await FolderModel.findOne({ folderName, customerId });
           );
         });
 
-      let updatedPhoneNumber = phoneNo;
-      if (!updatedPhoneNumber.startsWith("+91")) {
-        updatedPhoneNumber = `+91${updatedPhoneNumber}`;
+      let contentTypesPayload = [];
+
+      if (allDriveLinks && allDriveLinks.length > 0) {
+        contentTypesPayload = allDriveLinks.map(item => ({
+          linkType: item.linkType || "Raw Photos",
+          link: item.link || ""
+        }));
+      } else {
+        contentTypesPayload.push({
+          linkType: "Raw Photos",
+          link: folderUrl
+        });
       }
 
       const googlePayload = {
-        orderIdDb: order_id,
-        orderIdCustomer: order_id + 10800,
-        fulfillmentDate: order?.order_date
+        targetSheet: "photography_drivelink",
+        orderId: String(Number(order_id) + 10800), 
+        orderFulfilmentDate: order?.order_date
           ? new Date(order.order_date).toLocaleDateString("en-GB")
           : "N/A",
-        services: "Photography",
-        driveLink: folderUrl,
-        horaWebLink: webLink,
-        phone: updatedPhoneNumber,
+        contentTypes: contentTypesPayload 
       };
 
       axios
         .post(
-          "https://script.google.com/macros/s/AKfycbzopweY3eKo4h29q_7Ow8uNpKBRNjxKqSTUI8UQ2NW1RucyL56_F-HGtKeBZrvcJRTB/exec",
+          `https://script.google.com/macros/s/${deploymentId}/exec`,
           googlePayload,
           { headers: { "Content-Type": "application/json" } }
         )
         .catch((err) => {
           console.error(
-            "Google Sheet update failed for rawPhotos:",
+            "Google Sheet update failed:",
             err.response?.data || err.message
           );
         });
@@ -422,11 +424,10 @@ let folder = await FolderModel.findOne({ folderName, customerId });
 
     await OrderModel.updateOne({ order_id }, { $set: updateFields });
 
-    res.status(201).json({ 
+    res.status(201).json({
       message: "Drive link added successfully",
       webLink,
     });
-      
 
   } catch (error) {
     console.error("add-order-drive-link error:", error.message);

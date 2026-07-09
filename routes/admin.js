@@ -550,6 +550,358 @@ router.post("/adminOrderList", async (req, res) => {
   }
 });
 
+router.post("/downloadOrderReport", async (req, res) => {
+  try {
+    const {
+      order_id,
+      type,
+      order_status,
+      status,
+      phone_no,
+      start_createdAt,
+      end_createdAt,
+      createdAt,
+      review_date,
+      order_taken_by,
+      online_phone_no,
+      order_locality,
+      toId,
+      userReviewRatingArray,
+      start_date,
+      end_date,
+      order_date,
+    } = req.body;
+
+    const finder = {
+      status: { $ne: 2 },
+    };
+
+    // Filters
+    if (order_id) finder.order_id = Number(order_id);
+    if (type) finder.type = Number(type);
+    if (order_status) finder.order_status = Number(order_status);
+
+    if (typeof status !== "undefined" && status !== "") {
+      finder.status = Number(status);
+    }
+
+    if (phone_no) finder.phone_no = phone_no;
+    if (order_taken_by) finder.order_taken_by = order_taken_by;
+    if (online_phone_no) finder.online_phone_no = online_phone_no;
+    if (order_locality) finder.order_locality = order_locality;
+    if (toId) finder.toId = toId;
+
+    if (
+      userReviewRatingArray &&
+      Array.isArray(userReviewRatingArray) &&
+      userReviewRatingArray.length > 0
+    ) {
+      finder.userReviewRatingArray = {
+        $in: userReviewRatingArray,
+      };
+    }
+
+    // Created At Filter
+    if (start_createdAt && end_createdAt) {
+      finder.createdAt = {
+        $gte: new Date(start_createdAt),
+        $lte: new Date(end_createdAt),
+      };
+    } else if (createdAt) {
+      const start = new Date(createdAt);
+      const end = new Date(createdAt);
+      end.setDate(end.getDate() + 1);
+
+      finder.createdAt = {
+        $gte: start,
+        $lt: end,
+      };
+    }
+
+    // Review Date
+    if (review_date) {
+      finder.review_date = new Date(review_date);
+    }
+
+    // Order Date
+    if (start_date && end_date) {
+      finder.order_date = {
+        $gte: new Date(start_date),
+        $lte: new Date(end_date),
+      };
+    } else if (order_date) {
+      const start = new Date(order_date);
+      const end = new Date(order_date);
+      end.setDate(end.getDate() + 1);
+
+      finder.order_date = {
+        $gte: start,
+        $lt: end,
+      };
+    }
+
+    const orders = await orderModel.aggregate([
+      {
+        $match: finder,
+      },
+
+      // CUSTOMER
+      {
+        $lookup: {
+          from: "users",
+          localField: "fromId",
+          foreignField: "_id",
+          as: "customer",
+        },
+      },
+      {
+        $unwind: {
+          path: "$customer",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      // SUPPLIER
+      {
+        $lookup: {
+          from: "users",
+          let: {
+            supplierId: {
+              $convert: {
+                input: "$toId",
+                to: "objectId",
+                onError: null,
+                onNull: null,
+              },
+            },
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $eq: ["$_id", "$$supplierId"],
+                },
+              },
+            },
+          ],
+          as: "supplier",
+        },
+      },
+      {
+        $unwind: {
+          path: "$supplier",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      // DECORATION PRODUCTS
+      {
+        $lookup: {
+          from: "decorations",
+          let: {
+            selectedItems: "$selecteditems",
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $in: ["$_id", "$$selectedItems"],
+                },
+              },
+            },
+            {
+              $project: {
+                _id: 1,
+                name: 1,
+                price: 1,
+                collectionType: {
+                  $literal: "Decoration",
+                },
+              },
+            },
+          ],
+          as: "decorationProducts",
+        },
+      },
+
+      // PHOTOGRAPHY PRODUCTS
+      {
+        $lookup: {
+          from: "photographies",
+          let: {
+            selectedItems: "$selecteditems",
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $in: ["$_id", "$$selectedItems"],
+                },
+              },
+            },
+            {
+              $project: {
+                _id: 1,
+                name: 1,
+                price: 1,
+                collectionType: {
+                  $literal: "Photography",
+                },
+              },
+            },
+          ],
+          as: "photographyProducts",
+        },
+      },
+
+      // MERGE PRODUCTS
+      {
+        $addFields: {
+          allProducts: {
+            $concatArrays: [
+              "$decorationProducts",
+              "$photographyProducts",
+            ],
+          },
+        },
+      },
+
+      // ONE ROW PER PRODUCT
+      {
+        $unwind: {
+          path: "$allProducts",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      {
+        $project: {
+          _id: 0,
+
+          orderMongoId: "$_id",
+          order_id: 1,
+          order_date: 1,
+          createdAt: 1,
+          order_time: 1,
+          order_taken_by: 1,
+
+          total_amount: 1,
+          payable_amount: 1,
+          advance_amount: 1,
+          balance_amount: 1,
+
+          eventName: 1,
+          order_locality: 1,
+          order_pincode: 1,
+
+          status: {
+            $cond: [
+              { $eq: ["$status", 1] },
+              "Active",
+              "Inactive",
+            ],
+          },
+
+          order_status: 1,
+
+          customer_id: "$customer._id",
+          customer_name: "$customer.name",
+          customer_phone: "$customer.phone",
+
+          supplier_id: "$supplier._id",
+          supplier_name: "$supplier.name",
+          supplier_phone: "$supplier.phone",
+
+          product_id: "$allProducts._id",
+          product_name: "$allProducts.name",
+          product_price: "$allProducts.price",
+          product_collection:
+            "$allProducts.collectionType",
+
+          rating_range: {
+            $arrayElemAt: [
+              "$userReviewRatingArray",
+              0,
+            ],
+          },
+
+          rating: {
+            $switch: {
+              branches: [
+                {
+                  case: {
+                    $eq: [
+                      {
+                        $arrayElemAt: [
+                          "$userReviewRatingArray",
+                          0,
+                        ],
+                      },
+                      "1-6",
+                    ],
+                  },
+                  then: "Low",
+                },
+                {
+                  case: {
+                    $eq: [
+                      {
+                        $arrayElemAt: [
+                          "$userReviewRatingArray",
+                          0,
+                        ],
+                      },
+                      "7-8",
+                    ],
+                  },
+                  then: "Mid",
+                },
+                {
+                  case: {
+                    $eq: [
+                      {
+                        $arrayElemAt: [
+                          "$userReviewRatingArray",
+                          0,
+                        ],
+                      },
+                      "9-10",
+                    ],
+                  },
+                  then: "High",
+                },
+              ],
+              default: "",
+            },
+          },
+        },
+      },
+
+      {
+        $sort: {
+          createdAt: -1,
+        },
+      },
+    ]);
+
+    return res.status(200).json({
+      error: false,
+      status: 200,
+      message: "Report Generated Successfully",
+      totalRecords: orders.length,
+      data: orders,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      error: true,
+      status: 500,
+      message: error.message,
+    });
+  }
+});
+
 router.get("/getUserDetails/:id", async (req, res) => {
   try {
     const id = new ObjectId(req.params.id);

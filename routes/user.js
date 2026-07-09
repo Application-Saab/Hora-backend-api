@@ -22,6 +22,7 @@ const axios = require("axios");
 const EventGuest = require("../models/event-guest");
 const EventMessage = require("../models/eventMessage");
 const ChatRoom = require("../models/eventChatRoom");
+const OrderModel = require("../models/order")
 
 router.post("/otp_generate_backup", async (req, res) => {
   const { phone } = req.body;
@@ -1163,6 +1164,44 @@ router.get("/getCityServedLocalityList", async (req, res) => {
     });
   } catch (error) {
     res.status(400).json({ message: error.message, error: true });
+  }
+});
+
+router.get('/supplier-order-count-by-date', async (req, res) => {
+  try {
+    const { supplierId, fulfillmentDate } = req.query; 
+
+    if (!supplierId || !fulfillmentDate) {
+      return res.status(400).json({ success: false, message: "Supplier ID and Fulfillment Date are required" });
+    }
+
+    const supplier = await UserModel.findById(supplierId).select('supplierOrderLimit');
+    const dynamicLimit = supplier && supplier.supplierOrderLimit ? supplier.supplierOrderLimit : 4;
+
+    const targetDate = new Date(fulfillmentDate);
+
+    const startOfDay = new Date(targetDate.setUTCHours(0, 0, 0, 0));
+
+    const endOfDay = new Date(targetDate.setUTCHours(23, 59, 59, 999));
+
+    const count = await OrderModel.countDocuments({
+      toId: supplierId,
+      order_date: {
+        $gte: startOfDay,
+        $lte: endOfDay
+      },
+      order_status: 1,
+    });
+
+    res.status(200).json({
+      success: true,
+      count: count,
+      limit: dynamicLimit,
+      isFull: count >= dynamicLimit
+    });
+
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 

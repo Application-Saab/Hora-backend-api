@@ -6,6 +6,7 @@ const Folder = require("../models/folder");
 const User = require("../models/user");
 const Users = require("../models/user");
 const mongoose = require("mongoose");
+const capsuleGenerateShortCode = require("../utils/capsuleGenerateShortCode");
 
 router.put("/assign-to-subfolder", async (req, res) => {
   try {
@@ -476,7 +477,7 @@ router.post("/track-gallery-view", async (req, res) => {
     }
 
 
-    const folder = await Folder.findById(mainFolderId);
+    const folder = await Folder.findOne({ _id: mainFolderId });
     if (!folder) {
       return res.status(404).json({ success: false, message: "Invalid link" });
     }
@@ -488,8 +489,8 @@ const alreadyViewed = folder.viewedBy?.some(
     let updatedFolder;
 
     if (!alreadyViewed) {
-      updatedFolder = await Folder.findByIdAndUpdate(
-        mainFolderId,
+      updatedFolder = await Folder.findOneAndUpdate(
+        { _id: mainFolderId },
         {
           $push: {
             viewedBy: {
@@ -1015,6 +1016,93 @@ router.post("/track-device", async (req, res) => {
     });
   }
 });
+
+
+router.post("/generate-gallery-code/:folderId", async (req, res) => {
+  try {
+    const { folderId } = req.params;
+
+    const folder = await Folder.findById(folderId).lean();;
+    if (!folder) {
+      return res.status(404).json({ success: false, error: true, message: "Folder not found" });
+    }
+
+    if (folder.shortCode) {
+      return res.status(200).json({
+        success: true,
+        error: false,
+        message: "Short code already exists",
+        shortCode: folder.shortCode,
+        shortUrl: `https://horaservices.com/eventcapsule/share/${folder.shortCode}`,
+      });
+    }
+
+    const shortCode = await capsuleGenerateShortCode();
+
+    await Folder.findByIdAndUpdate(folderId, { $set: { shortCode: shortCode } });
+
+    return res.status(200).json({
+      success: true,
+      error: false,
+      message: "Short code generated successfully",
+      shortCode,
+      shortUrl: `https://horaservices.com/api/internal/${shortCode}`,
+    });
+
+  } catch (err) {
+    console.error("Error in generating short code:", err);
+    return res.status(500).json({ success: false, error: true, message: "Server error" });
+  }
+});
+
+
+router.get("/getSubFolders", async (req, res) => {
+  try {
+    const { folderName } = req.query;
+
+    if (!folderName) {
+      return res.status(400).json({ message: "folderName is required" });
+    }
+
+    const folder = await Folder.findOne({ folderName }).lean();
+
+    if (!folder) {
+      return res.status(404).json({ message: "Folder not found" });
+    }
+    const userIds = folder.viewedBy || [];
+    const uniqueUserIds = [...new Set(userIds)];
+
+
+    const users = await User.find({
+      _id: { $in: uniqueUserIds }
+    })
+      .select("_id name firstName lastName phone avatar")
+      .lean();
+
+    const userMap = {};
+    users.forEach(u => {
+      userMap[String(u._id)] = u;
+    });
+
+
+    res.status(200).json({
+      folder,
+      guestDetails: (folder.viewedBy || []).map(id => userMap[id] || {
+        _id: id,
+        name: "",
+        phone: "",
+        avatar: ""
+      })
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
+  }
+});
+
 
 
 module.exports = router;

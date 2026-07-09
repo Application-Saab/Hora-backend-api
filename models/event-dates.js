@@ -22,7 +22,7 @@ const eventDatesSchema = new mongoose.Schema(
     eventDates: [
       {
         date: {
-          type: String,
+          type: Date,
           required: true,
         },
         eventTitle: {

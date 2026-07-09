@@ -119,7 +119,7 @@ router.get("/tracking-list", async (req, res) => {
       },
       {
         $lookup: {
-          from: "users", // <-- apni users collection ka exact naam
+          from: "users",
           localField: "userId",
           foreignField: "_id",
           as: "user",
@@ -249,7 +249,7 @@ router.patch("/assign-user", async (req, res) => {
   }
 });
 
-// GET /api/search-analytics/stats  (or wherever your router is mounted)
+// Get all stats for search tracking
 router.get("/stats", async (req, res) => {
   try {
     const { startDate, endDate } = req.query;

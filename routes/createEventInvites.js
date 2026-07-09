@@ -76,7 +76,8 @@ router.post("/create-event-invite", async (req, res) => {
       eventTime,
       location,
       googleMapLink,
-      fromInternational
+      fromInternational,
+      orderId,
     } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -106,13 +107,7 @@ router.post("/create-event-invite", async (req, res) => {
       return sendResponse(res, 404, true, "User not found");
     }
 
-    // Save user name if missing
-    // if (!user.name && hostName) {
-    //   user.name = hostName;
-    //   await user.save();
-    // }
-
-    const finalUserName = user.name || "";
+    const finalUserName = user.name || "WONDERLAND_USER";
 
     // Create event invite
     const event = await EventInvite.create({
@@ -130,6 +125,8 @@ router.post("/create-event-invite", async (req, res) => {
       googleMapLink,
 
       fromInternational,
+
+      orderId,
 
       wonderland_id: counter.sequenceValue,
 
@@ -247,7 +244,7 @@ router.get("/event-invites/:id", async (req, res) => {
 
     const invite = await EventInvite.findById(id)
       .select(
-        "userId eventType hostName eventDate eventTime location googleMapLink externalTemplateImageUrl subFolders names addresses dates times shortCode fromInternational",
+        "userId eventType hostName eventDate eventTime location googleMapLink externalTemplateImageUrl subFolders names addresses dates times shortCode fromInternational orderId",
       )
       .lean();
 

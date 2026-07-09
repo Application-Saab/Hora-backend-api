@@ -434,6 +434,7 @@ const EventShareRoutes = require("./routes/event-share");
 const ShareCapsule = require("./routes/share-capsule")
 const SearchTrackingRoutes = require("./routes/search-tracking")
 const EventDateRoutes = require("./routes/event-dates");
+const AddonRoutes = require("./routes/addon")
 let passportAuth = require("./store/passportAuth").passportAuth;
 
 app.use("/api/admin", AdminRoutes);
@@ -471,6 +472,7 @@ app.use("/api/search-tracking", SearchTrackingRoutes);
 app.use("/api/event-dates", EventDateRoutes);
 app.use("/smartinvite/share", EventShareRoutes);
 app.use("/eventcapsule/share", ShareCapsule);
+app.use("/api/addon", AddonRoutes);
 
 const notificationFunction = require("./store/notifications");
 const UserModel = require("./models/user");

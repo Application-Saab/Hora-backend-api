@@ -178,28 +178,25 @@ async function runSupplierPerformance() {
       for (const order of orders) {
         const rating = order.userReviewRatingArray;
         const rate = Array.isArray(rating) ? rating[0] : rating;
-        let hasFeedback = false;
+
+        if (order.reviewStatus === "positive" || order.reviewStatus === "negative"){
+          totalFeedbackCount++;
+        if (order.reviewStatus === "positive") {
+          positiveReviews++;
+        } else if (order.reviewStatus === "negative") {
+          negativeReviews++;
+        }
+          continue;
+      }
 
       if(rate){
-        hasFeedback = true;
+        totalFeedbackCount++;
         if (rate === "9-10") excellent++;
         else if (rate === "7-8") good++;
         else if (rate === "1-6") poor++;
         else if (rate === "6-8") good++;
         else if (rate === "0-6") poor++;
       }
-
-        if (order.reviewStatus === "positive") {
-          positiveReviews++;
-          hasFeedback = true;
-        } else if (order.reviewStatus === "negative") {
-          negativeReviews++;
-          hasFeedback = true;
-        }
-
-        if (hasFeedback) {
-          totalFeedbackCount++;
-        }
 
       }
 

@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-const eventDatesSchema = new mongoose.Schema(
+const userCitiesSchema = new mongoose.Schema(
   {
     userId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -13,35 +13,22 @@ const eventDatesSchema = new mongoose.Schema(
       default: null,
     },
 
-    pincode: {
+    cityName: {
       type: String,
       trim: true,
       default: "",
+      required: true,
     },
-
-    eventDates: [
-      {
-        date: {
-          type: Date,
-          required: true,
-        },
-        eventTitle: {
-          type: String,
-          trim: true,
-          default: "",
-        },
-      },
-    ],
   },
   {
     timestamps: true,
   },
 );
 
-eventDatesSchema.pre("validate", function () {
+userCitiesSchema.pre("validate", function () {
   if (!this.userId && !this.visitorId) {
     throw new Error("Either userId or visitorId is required");
   }
 });
 
-module.exports = mongoose.model("event-dates", eventDatesSchema);
+module.exports = mongoose.model("user-cities", userCitiesSchema);

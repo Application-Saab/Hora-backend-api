@@ -487,4 +487,131 @@ router.patch("/assign-user-city", async (req, res) => {
   }
 });
 
+// Get User Cities List
+router.get("/city-tracking-list", async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      search = "",
+      cityName = "",
+    } = req.query;
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const match = {};
+
+    // Filter by city
+    if (cityName) {
+      match.cityName = {
+        $regex: cityName,
+        $options: "i",
+      };
+    }
+
+    const pipeline = [
+      {
+        $match: match,
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "userId",
+          foreignField: "_id",
+          as: "user",
+        },
+      },
+      {
+        $unwind: {
+          path: "$user",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+    ];
+
+    // Search
+    if (search) {
+      pipeline.push({
+        $match: {
+          $or: [
+            {
+              "user.name": {
+                $regex: search,
+                $options: "i",
+              },
+            },
+            {
+              "user.phone": {
+                $regex: search,
+                $options: "i",
+              },
+            },
+          ],
+        },
+      });
+    }
+
+    pipeline.push(
+      {
+        $project: {
+          _id: 1,
+          cityName: 1,
+          visitorId: 1,
+          createdAt: 1,
+          updatedAt: 1,
+
+          user: {
+            _id: "$user._id",
+            name: "$user.name",
+            phone: "$user.phone",
+          },
+        },
+      },
+      {
+        $sort: {
+          createdAt: -1,
+        },
+      },
+      {
+        $skip: skip,
+      },
+      {
+        $limit: Number(limit),
+      },
+    );
+
+    const cityList = await UserCities.aggregate(pipeline);
+
+    // Total Count
+    const totalPipeline = pipeline.slice(0, pipeline.length - 3);
+
+    totalPipeline.push({
+      $count: "total",
+    });
+
+    const totalResult = await UserCities.aggregate(totalPipeline);
+
+    const total = totalResult.length ? totalResult[0].total : 0;
+
+    return CustomResponse(
+      res,
+      200,
+      false,
+      "City tracking fetched successfully",
+      {
+        cityList,
+        pagination: {
+          total,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: Math.ceil(total / Number(limit)),
+        },
+      }
+    );
+  } catch (err) {
+    console.error("Fetch City Tracking Error:", err);
+    return CustomResponse(res, 500, true, "Server error");
+  }
+});
+
 module.exports = router;

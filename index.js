@@ -358,7 +358,7 @@ cron.schedule('0 20 * * *', async () => {
       const trueInclusions = Object.keys(inclusions).filter(key => inclusions[key] === true);
 
       if (trueInclusions.length === 0) {
-        trueInclusions.push("None");
+        continue; 
       }
 
       const googlePayload = {

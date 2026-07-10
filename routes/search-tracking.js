@@ -42,65 +42,6 @@ router.post("/", async (req, res) => {
 });
 
 // Get Search Tracking List for admin panel
-// router.get("/tracking-list", async (req, res) => {
-//   try {
-//     const {
-//       page = 1,
-//       limit = 10,
-//       search = "",
-//       clickedType = "",
-//       userId = "",
-//     } = req.query;
-
-//     const query = {};
-
-//     // Search
-//     if (search) {
-//       query.$or = [
-//         { searchTerm: { $regex: search, $options: "i" } },
-//         { clickedTitle: { $regex: search, $options: "i" } },
-//       ];
-//     }
-
-//     // Filter by clicked type
-//     if (clickedType) {
-//       query.clickedType = clickedType;
-//     }
-
-//     // Filter by user
-//     if (userId && mongoose.Types.ObjectId.isValid(userId)) {
-//       query.userId = userId;
-//     }
-
-//     const skip = (Number(page) - 1) * Number(limit);
-
-//     const trackingList = await SearchTrackings.find(query)
-//       .populate("userId", "name phone")
-//       .sort({ createdAt: -1 })
-//       .skip(skip)
-//       .limit(Number(limit))
-//       .lean();
-
-//     const total = await SearchTrackings.countDocuments(query);
-
-//     return res.status(200).json({
-//       error: false,
-//       status: 200,
-//       message: "Search tracking fetched successfully",
-//       data: trackingList,
-//       pagination: {
-//         total,
-//         page: Number(page),
-//         limit: Number(limit),
-//         totalPages: Math.ceil(total / Number(limit)),
-//       },
-//     });
-//   } catch (err) {
-//     console.error("Fetch Search Tracking Error:", err);
-//     return CustomResponse(res, 500, true, "Server error");
-//   }
-// });
-
 router.get("/tracking-list", async (req, res) => {
   try {
     const { page = 1, limit = 10, search = "", clickedType = "" } = req.query;

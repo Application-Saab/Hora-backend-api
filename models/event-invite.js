@@ -7,6 +7,7 @@ const eventInviteSchema = new mongoose.Schema(
       ref: "user",
       required: true,
     },
+    orderId : { type: Number, default : null},
     eventType: { type: String, default: "" },
     hostName: { type: String, default: "" },
     eventDate: { type: String, default: "" },

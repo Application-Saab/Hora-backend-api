@@ -1685,6 +1685,7 @@ router.post("/admin_all_details", async (req, res) => {
             photoCount: 1,
             hostCount: 1,
             createdAt: 1,
+            orderId: 1,
             fromInternational: 1,
           },
         },

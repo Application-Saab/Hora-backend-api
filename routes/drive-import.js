@@ -289,12 +289,14 @@ router.post("/import-drive-folder", async (req, res) => {
 
 router.post("/add-order-drive-link", async (req, res) => {
   try {
-    const { folderUrl, order_id, allDriveLinks = [] } = req.body;
+    const { folderUrl, order_id, allDriveLinks = [], isRetry = false } = req.body;
     const order = await OrderModel.findOne({ order_id });
     if (!order) throw new Error("Order not found");
     const customerId = order.fromId;
     const orderId = order_id;
     const phoneNo = order.phone_no;
+
+    const isRawLinkNewOrChanged = !order.orderDriveLink || order.orderDriveLink !== folderUrl;
 
     if (folderUrl?.trim()) {
       const folderId = getFolderIdFromUrl(folderUrl);
@@ -350,8 +352,21 @@ router.post("/add-order-drive-link", async (req, res) => {
     let webLink = order.orderWebLink;
     let updateFields = {};
 
+    let isAnySubLinkChangedOrNew = false; 
+
     if (allDriveLinks.length > 0) {
-      updateFields.allDriveLinks = allDriveLinks;
+      const existingLinks = order.allDriveLinks || [];
+
+      updateFields.allDriveLinks = allDriveLinks.map(item => {
+        const existingItem = existingLinks.find(el => el.linkType === item.linkType);
+
+        if (!existingItem || existingItem.link !== item.link) {
+          isAnySubLinkChangedOrNew = true;
+          return { ...item, submittedAt: new Date() };
+        }
+
+        return { ...item, submittedAt: existingItem.submittedAt || new Date() };
+      });
     }
 
     if (folderUrl && folderUrl.trim() !== "") {
@@ -369,7 +384,7 @@ router.post("/add-order-drive-link", async (req, res) => {
       updateFields.orderDriveLink = folderUrl;
       updateFields.orderWebLink = webLink;
       updateFields["imageUploadCounts.driveProvidedAt"] = new Date();
-
+      if (isRawLinkNewOrChanged || isRetry === true) {
       axios
         .post(`${process.env.MEDIA_WORKER_URL}/process-drive`, {
           folderUrl,
@@ -384,20 +399,49 @@ router.post("/add-order-drive-link", async (req, res) => {
             err.response?.data || err.message
           );
         });
-
-      let contentTypesPayload = [];
-
-      if (allDriveLinks && allDriveLinks.length > 0) {
-        contentTypesPayload = allDriveLinks.map(item => ({
-          linkType: item.linkType || "Raw Photos",
-          link: item.link || ""
-        }));
-      } else {
-        contentTypesPayload.push({
-          linkType: "Raw Photos",
-          link: folderUrl
-        });
       }
+      else {
+        console.log("-> Skipping media worker. Link is identical and it's not a retry request.");
+      }
+
+      if (isRawLinkNewOrChanged || isAnySubLinkChangedOrNew || isRetry === true) {
+        console.log("-> Changes or Retry detected. Updating Google Sheet...");
+
+        let contentTypesPayload = [];
+        if (updateFields.allDriveLinks && updateFields.allDriveLinks.length > 0) {
+          contentTypesPayload = updateFields.allDriveLinks.map(item => {
+            const dateObj = new Date(item.submittedAt);
+
+            const formattedDate = dateObj.toLocaleDateString("en-GB", { timeZone: "Asia/Kolkata" });
+            const formattedTime = dateObj.toLocaleTimeString("en-GB", {
+              timeZone: "Asia/Kolkata",
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: false
+            });
+
+            return {
+              linkType: item.linkType || "Raw Photos",
+              link: item.link || "",
+              submittedAt: `${formattedDate}, ${formattedTime}`, 
+            };
+          });
+        } else {
+          const dateObj = new Date();
+          const formattedDate = dateObj.toLocaleDateString("en-GB", { timeZone: "Asia/Kolkata" });
+          const formattedTime = dateObj.toLocaleTimeString("en-GB", {
+            timeZone: "Asia/Kolkata",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false
+          });
+
+          contentTypesPayload.push({
+            linkType: "Raw Photos",
+            link: folderUrl,
+            submittedAt: `${formattedDate}, ${formattedTime}`,
+          });
+        }
 
       const googlePayload = {
         targetSheet: "photography_drivelink",
@@ -420,7 +464,8 @@ router.post("/add-order-drive-link", async (req, res) => {
             err.response?.data || err.message
           );
         });
-    }
+      }
+      }
 
     await OrderModel.updateOne({ order_id }, { $set: updateFields });
 

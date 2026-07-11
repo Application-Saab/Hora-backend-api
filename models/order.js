@@ -59,6 +59,10 @@ allDriveLinks: {
     {
       linkType: String,
       link: String,
+      submittedAt: {
+        type: Date,
+        default: Date.now,
+      },
     },
   ],
   default: [],

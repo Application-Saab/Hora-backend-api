@@ -15,7 +15,7 @@ try {
 
 const notificationModel = require('../models/notifications');
 
-exports.sendNotifications = function(deviceToken, user_id, title, MsgBody, ID, Type, url) {
+exports.sendNotifications = function (deviceToken, user_id, title, MsgBody, ID, Type, url) {
   var message = {
     token: deviceToken,
     notification: {
@@ -23,34 +23,36 @@ exports.sendNotifications = function(deviceToken, user_id, title, MsgBody, ID, T
       body: MsgBody
     },
     "android": {
-      priority: "high",
+      priority: "high", 
       "notification": {
-        "channel_id": "fcm_custom_sound_channel", // Must match the ID from createChannel
-        sound: "notification", 
-        default_sound: false   
+        "channel_id": "fcm_custom_sound_channel",
+        "sound": "notification",
+        "default_sound": false,
+        "visibility": "public"
       }
     },
     data: {
       id: ID ? String(ID) : '',
       type: Type ? String(Type) : '',
-      url: url ? String(url) : ''  
+      url: url ? String(url) : '',
+      title: title ? String(title) : '',
+      body: MsgBody ? String(MsgBody) : ''
     }
   };
 
   return admin.app("app1").messaging().send(message)
-    .then(function(response) {
+    .then(function (response) {
       var data = new notificationModel({
         title: title,
         message: MsgBody,
         userId: user_id,
         type: Type
       });
-      return data.save().then(function() {
+      return data.save().then(function () {
         return response;
       });
     })
-    .catch(function(error) {
+    .catch(function (error) {
       console.error('Error sending notification:', error);
-      // throw error;
     });
 };

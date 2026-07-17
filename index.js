@@ -435,7 +435,7 @@ const ShareCapsule = require("./routes/share-capsule")
 const SearchTrackingRoutes = require("./routes/search-tracking")
 const EventDateRoutes = require("./routes/event-dates");
 const AddonRoutes = require("./routes/addon")
-const pinCodes = require("./routes/pincodes")
+const pinCodes = require("./routes/serviceabilityPincodes")
 let passportAuth = require("./store/passportAuth").passportAuth;
 
 app.use("/api/admin", AdminRoutes);

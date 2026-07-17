@@ -248,85 +248,85 @@ cron.schedule("0 3 * * *", async () => {
 });
 
 
-async function sendNotificationsInPriority() {
-  try {
-    const orders = await orderModel.find({
-      order_status: 0,
-      notificationStep: { $lt: 4 }
-    });
-    for (const order of orders) {
-      const freshOrder = await orderModel.findById(order._id).select(
-        'order_status notificationStep lastNotifiedAt order_locality type order_id fromId'
-      );
+// async function sendNotificationsInPriority() {
+//   try {
+//     const orders = await orderModel.find({
+//       order_status: 0,
+//       notificationStep: { $lt: 4 }
+//     });
+//     for (const order of orders) {
+//       const freshOrder = await orderModel.findById(order._id).select(
+//         'order_status notificationStep lastNotifiedAt order_locality type order_id fromId'
+//       );
 
-      if (!freshOrder || freshOrder.order_status !== 0) {
-        continue;
-      }
+//       if (!freshOrder || freshOrder.order_status !== 0) {
+//         continue;
+//       }
 
-      const now = new Date();
+//       const now = new Date();
 
-      const diff = (now - new Date(freshOrder.lastNotifiedAt)) / (1000 * 60);
+//       const diff = (now - new Date(freshOrder.lastNotifiedAt)) / (1000 * 60);
 
-      if (diff < 20) continue;
+//       if (diff < 20) continue;
 
-      let badgeToSend = "";
-      if (freshOrder.notificationStep === 1) badgeToSend = "Good";
-      else if (freshOrder.notificationStep === 2) badgeToSend = "Average";
-      else if (freshOrder.notificationStep === 3) badgeToSend = "Low";
+//       let badgeToSend = "";
+//       if (freshOrder.notificationStep === 1) badgeToSend = "Good";
+//       else if (freshOrder.notificationStep === 2) badgeToSend = "Average";
+//       else if (freshOrder.notificationStep === 3) badgeToSend = "Low";
 
-      if (!badgeToSend) {
-        continue;
-      }
-
-
-      const suppliers = await UserModel.find({
-        role: "supplier", 
-        device_token: { $nin: [null, ""] },
-        city: freshOrder.order_locality,
-        order_type: freshOrder.type,
-        performanceBadge: badgeToSend
-      });
+//       if (!badgeToSend) {
+//         continue;
+//       }
 
 
-      if (suppliers.length === 0) {
-        freshOrder.notificationStep += 1;
-        freshOrder.lastNotifiedAt = now;
-        await freshOrder.save();
-        continue;
-      }
+//       const suppliers = await UserModel.find({
+//         role: "supplier", 
+//         device_token: { $nin: [null, ""] },
+//         city: freshOrder.order_locality,
+//         order_type: freshOrder.type,
+//         performanceBadge: badgeToSend
+//       });
 
 
-      const notificationPromises = suppliers.map(supplier =>
-        notificationFunction.sendNotifications(
-          supplier.device_token,
-          freshOrder.fromId,
-          'New Order',
-          `New Order!!! Order ID: #${freshOrder.order_id + 10800} 🥳🤩`,
-          '',
-          0
-        ).catch(err => console.error("Notification failed for token:", supplier.device_token, err))
-      );
-
-      await Promise.all(notificationPromises);
+//       if (suppliers.length === 0) {
+//         freshOrder.notificationStep += 1;
+//         freshOrder.lastNotifiedAt = now;
+//         await freshOrder.save();
+//         continue;
+//       }
 
 
-      const finalCheck = await orderModel.findById(order._id).select('order_status order_id notificationStep lastNotifiedAt');
-      if (finalCheck && finalCheck.order_status === 0) {
-        finalCheck.notificationStep += 1;
-        finalCheck.lastNotifiedAt = new Date();
-        await finalCheck.save();
-      }
-    }
+//       const notificationPromises = suppliers.map(supplier =>
+//         notificationFunction.sendNotifications(
+//           supplier.device_token,
+//           freshOrder.fromId,
+//           'New Order',
+//           `New Order!!! Order ID: #${freshOrder.order_id + 10800} 🥳🤩`,
+//           '',
+//           0
+//         ).catch(err => console.error("Notification failed for token:", supplier.device_token, err))
+//       );
 
-  } catch (error) {
-    console.error("Notification Scheduler Error:", error);
-  }
-}
+//       await Promise.all(notificationPromises);
 
 
-cron.schedule("*/1 * * * *", async () => {
-  await sendNotificationsInPriority();
-});
+//       const finalCheck = await orderModel.findById(order._id).select('order_status order_id notificationStep lastNotifiedAt');
+//       if (finalCheck && finalCheck.order_status === 0) {
+//         finalCheck.notificationStep += 1;
+//         finalCheck.lastNotifiedAt = new Date();
+//         await finalCheck.save();
+//       }
+//     }
+
+//   } catch (error) {
+//     console.error("Notification Scheduler Error:", error);
+//   }
+// }
+
+
+// cron.schedule("*/1 * * * *", async () => {
+//   await sendNotificationsInPriority();
+// });
 
 cron.schedule('0 20 * * *', async () => {
   console.log('--- Cron Job Started: Processing Today\'s Active Orders for Inclusions ---');

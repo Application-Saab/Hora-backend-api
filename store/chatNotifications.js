@@ -1,7 +1,7 @@
 const webpush = require("web-push");
 const PushSub = require("../models/pushSubscription");
-const admin = require("firebase-admin");
-const serviceAccount = require("../wonderlandServices.json");
+// const admin = require("firebase-admin");
+// const serviceAccount = require("../wonderlandServices.json");
 const ChatRoom = require("../models/eventChatRoom");
 require("dotenv").config();
 
@@ -11,27 +11,26 @@ if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
 webpush.setVapidDetails(
   process.env.VAPID_SUBJECT,
   process.env.VAPID_PUBLIC_KEY,
-  process.env.VAPID_PRIVATE_KEY
+  process.env.VAPID_PRIVATE_KEY,
 );
 
-try {
-  admin.initializeApp(
-    {
-      credential: admin.credential.cert(serviceAccount),
-    },
-    "app2"
-  );
+// try {
+//   admin.initializeApp(
+//     {
+//       credential: admin.credential.cert(serviceAccount),
+//     },
+//     "app2"
+//   );
 
-} catch (e) {
-  console.warn("Firebase admin init error", e);
-}
-
+// } catch (e) {
+//   console.warn("Firebase admin init error", e);
+// }
 
 async function sendToWebPushSubscription(subscriptionDoc, payloadObj) {
   try {
     await webpush.sendNotification(
       subscriptionDoc.subscription,
-      JSON.stringify(payloadObj)
+      JSON.stringify(payloadObj),
     );
     return { ok: true };
   } catch (err) {
@@ -44,44 +43,44 @@ async function sendToWebPushSubscription(subscriptionDoc, payloadObj) {
 }
 
 // Send FCM push to device token (android/chrome when using FCM token)
-async function sendToFcmToken(fcmToken, payloadObj) {
-  if (!admin.apps.length) {
-    console.warn("Firebase admin not initialized; skipping FCM.");
-    return { ok: false, error: "firebase-admin not initialized" };
-  }
-  try {
-    const message = {
-      token: fcmToken,
-      notification: {
-        title: payloadObj.title,
-        body: payloadObj.body,
-      },
-      data: payloadObj.data
-        ? Object.fromEntries(
-            Object.entries(payloadObj.data).map(([k, v]) => [k, String(v)])
-          )
-        : {},
-      android: {
-        priority: "high",
-      },
-      apns: {
-        payload: { aps: { sound: "default" } },
-      },
-    };
-    const res = await admin.app("app2").messaging().send(message);
-    return { ok: true, result: res };
-  } catch (err) {
-    console.error("FCM send error", err);
-    return { ok: false, error: err };
-  }
-}
+// async function sendToFcmToken(fcmToken, payloadObj) {
+//   if (!admin.apps.length) {
+//     console.warn("Firebase admin not initialized; skipping FCM.");
+//     return { ok: false, error: "firebase-admin not initialized" };
+//   }
+//   try {
+//     const message = {
+//       token: fcmToken,
+//       notification: {
+//         title: payloadObj.title,
+//         body: payloadObj.body,
+//       },
+//       data: payloadObj.data
+//         ? Object.fromEntries(
+//             Object.entries(payloadObj.data).map(([k, v]) => [k, String(v)])
+//           )
+//         : {},
+//       android: {
+//         priority: "high",
+//       },
+//       apns: {
+//         payload: { aps: { sound: "default" } },
+//       },
+//     };
+//     const res = await admin.app("app2").messaging().send(message);
+//     return { ok: true, result: res };
+//   } catch (err) {
+//     console.error("FCM send error", err);
+//     return { ok: false, error: err };
+//   }
+// }
 
 async function sendPushToRoom(groupId, messageText, options = {}) {
   // get room + members
   const room = await ChatRoom.findById(groupId).lean();
   if (!room) return;
 
-  const memberUserIds = room.members.map(m => String(m.userId));
+  const memberUserIds = room.members.map((m) => String(m.userId));
 
   // get only those subscriptions whose userId is in room members
   const subs = await PushSub.find({
@@ -95,14 +94,17 @@ async function sendPushToRoom(groupId, messageText, options = {}) {
     data: {
       groupId: String(groupId),
       ...(options.data || {}),
-      url: options.url || `/chat/room?groupId=${String(groupId) || ""}&id=${String(options.data.senderId || "")}`,
-    }
+      url:
+        options.url ||
+        `/chat/room?groupId=${String(groupId) || ""}&id=${String(options.data.senderId || "")}`,
+    },
   };
 
   // send
   const promises = subs.map(async (s) => {
     if (s.fcmToken) {
-      return sendToFcmToken(s.fcmToken, payloadBase);
+      return;
+      // sendToFcmToken(s.fcmToken, payloadBase);
     }
     return sendToWebPushSubscription(s, payloadBase);
   });
@@ -110,5 +112,8 @@ async function sendPushToRoom(groupId, messageText, options = {}) {
   return Promise.all(promises);
 }
 
-
-module.exports = { sendPushToRoom, sendToWebPushSubscription, sendToFcmToken };
+module.exports = {
+  sendPushToRoom,
+  sendToWebPushSubscription,
+  // sendToFcmToken
+};

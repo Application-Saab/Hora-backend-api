@@ -1,3 +1,5 @@
+const XLSX = require("xlsx");
+const path = require("path");
 const express = require("express");
 const router = express.Router();
 const MaterialList = require("../models/material-list");
@@ -197,6 +199,74 @@ router.get("/getMaterialFilterData", async (req, res) => {
   } catch (error) {
     console.error(error);
     return CustomResponse(res, 500, true, "Server error");
+  }
+});
+router.get("/importMaterialExcel", async (req, res) => {
+  try {
+    const filePath = path.join(
+      __dirname,
+      "./decoration_material_list.xlsx", // apni location change kar lena
+    );
+
+    const workbook = XLSX.readFile(filePath);
+
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+
+    const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+      header: 1,
+      defval: "",
+    });
+
+    const materials = [];
+
+    for (let i = 155; i <= 582; i++) {
+      const row = jsonData[i];
+
+      if (!row) continue;
+
+      if (
+        !row[0] &&
+        !row[1] &&
+        !row[2] &&
+        !row[3] &&
+        !row[4] &&
+        !row[5]
+      ) {
+        continue;
+      }
+
+      materials.push({
+        specs: String(row[0] || "").trim(),
+        materialName: String(row[1] || "").trim(),
+        type: String(row[2] || "").trim(),
+        packet: String(row[3] || "").trim(),
+        minimumOrderQuantity: String(row[4] || "").trim(),
+        materialCategory: String(row[5] || "").trim(),
+        vendorMaterialPrice: Number(row[6]) || 0,
+        vendorMaterialRateRetail: Number(row[7]) || 0,
+        vendorMaterialRateWholesale: Number(row[8]) || 0,
+      });
+    }
+
+    if (!materials.length) {
+      return CustomResponse(res, 400, true, "No data found.");
+    }
+
+    const inserted = await MaterialList.insertMany(materials, {
+      ordered: false,
+    });
+
+    return CustomResponse(
+      res,
+      200,
+      false,
+      `${inserted.length} materials imported successfully.`,
+      inserted,
+    );
+  } catch (err) {
+    console.log(err);
+    return CustomResponse(res, 500, true, err.message);
   }
 });
 

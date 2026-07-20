@@ -94,10 +94,8 @@ router.get("/serviceability", async (req, res) => {
 
         const startIndex = (page - 1) * limit;
 
-        // Base filter object
         const filter = {};
 
-        // 1. Pincode / City search filter
         if (search) {
             filter.$or = [
                 { pincode: { $regex: search, $options: "i" } },
@@ -105,12 +103,10 @@ router.get("/serviceability", async (req, res) => {
             ];
         }
 
-        // 2. Status dropdown filter
         if (status) {
             filter.status = status;
         }
 
-        // 3. Category dropdown filter (Handles special "N/A" check)
         if (category) {
             if (category === "N/A") {
                 filter.$or = [

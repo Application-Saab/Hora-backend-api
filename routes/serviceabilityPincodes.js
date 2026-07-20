@@ -42,7 +42,6 @@ router.post("/sync", async (req, res) => {
         }
 
         await Serviceability.deleteMany({});
-        console.log("Purana saara data clear kar diya gaya hai.");
 
         const dataRows = rows.slice(1); 
 

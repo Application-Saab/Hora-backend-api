@@ -132,8 +132,6 @@ router.get("/capsule-tracking", async (req, res) => {
         },
 
         // Folder Lookup
-        // ✅ NAYA SAFE CODE (Iski jagah par laga do)
-        // Folder Lookup
         {
           $addFields: {
             orderIdString: {
@@ -150,7 +148,6 @@ router.get("/capsule-tracking", async (req, res) => {
               {
                 $match: {
                   $expr: {
-                    // Yeh check karega ki folder clean id se ho ya +10800 wali string se, dono ko safe handle karega
                     $or: [
                       { $eq: ["$orderId", "$$searchId"] },
                       { $eq: ["$orderId", { $toString: { $add: [{ $toInt: "$$searchId" }, 10800] } }] }
@@ -158,7 +155,7 @@ router.get("/capsule-tracking", async (req, res) => {
                   }
                 }
               },
-              { $limit: 1 } // 🔥 Sabse zaroori line: Kisi bhi haal me 1 se zyada folder nahi aane dega, duplicate khatam!
+              { $limit: 1 } 
             ],
             as: "folder"
           }
@@ -616,7 +613,7 @@ router.get("/capsule-users", async (req, res) => {
     ]);
 
     // =====================================
-    // GUEST USERS (Dono format handle kiya hai)
+    // GUEST USERS
     // =====================================
     const guestUsers = await Folder.aggregate([
       {
@@ -635,11 +632,10 @@ router.get("/capsule-users", async (req, res) => {
       {
         $group: {
           _id: {
-            // 🔥 Master Stroke Condition for Hybrid Data
             $cond: {
               if: { $eq: [{ $type: "$viewedBy" }, "object"] },
-              then: { $toString: "$viewedBy.userId" }, // ✨ Naya Data: Object me se userId nikalega
-              else: { $toString: "$viewedBy" }          // ✨ Purana Data: Direct string ko hi convert karega
+              then: { $toString: "$viewedBy.userId" }, 
+              else: { $toString: "$viewedBy" }          
             }
           },
           totalOrders: { $first: 0 },
@@ -648,7 +644,7 @@ router.get("/capsule-users", async (req, res) => {
       },
       {
         $match: {
-          _id: { $ne: "null", $exists: true } // Kuch filter gaps hatane ke liye
+          _id: { $ne: "null", $exists: true } 
         }
       }
     ]);
@@ -659,7 +655,7 @@ router.get("/capsule-users", async (req, res) => {
     const userMap = new Map();
 
     [...hostUsers, ...guestUsers].forEach((user) => {
-      if (!user._id || user._id === "null") return; // Null values skip karein
+      if (!user._id || user._id === "null") return; 
 
       const id = user._id.toString();
 
@@ -734,7 +730,7 @@ router.get("/capsule-users", async (req, res) => {
       ]),
 
       // =====================================
-      // GUEST CAPSULES (Hybrid check yahan bhi)
+      // GUEST CAPSULES
       // =====================================
       Folder.aggregate([
         {
@@ -750,7 +746,7 @@ router.get("/capsule-users", async (req, res) => {
             _id: {
               $cond: {
                 if: { $eq: [{ $type: "$viewedBy" }, "object"] },
-                then: { $toString: "$viewedBy.userId" }, // ✨ Same logic yahan bhi backup me
+                then: { $toString: "$viewedBy.userId" }, 
                 else: { $toString: "$viewedBy" }
               }
             },
@@ -839,7 +835,7 @@ router.get("/capsule-users", async (req, res) => {
     });
 
     // =====================================
-    // TOTAL & PAGINATION
+    // TOTAL
     // =====================================
     const total = finalUsers.length;
     finalUsers = finalUsers.slice(skip, skip + limit);

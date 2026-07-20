@@ -141,9 +141,7 @@ router.get("/my-events", async (req, res) => {
 
     // Fetch both in parallel
     const [events, cityData] = await Promise.all([
-      EventDates.findOne(query)
-        .populate("userId", "name phone")
-        .lean(),
+      EventDates.findOne(query).populate("userId", "name phone").lean(),
 
       UserCities.findOne(query).lean(),
     ]);
@@ -386,7 +384,7 @@ router.post("/user-city", async (req, res) => {
         upsert: true,
         runValidators: true,
         setDefaultsOnInsert: true,
-      }
+      },
     );
 
     return res.status(200).json({
@@ -487,7 +485,6 @@ router.patch("/assign-user-city", async (req, res) => {
   }
 });
 
-// Get User Cities List
 router.get("/city-tracking-list", async (req, res) => {
   try {
     const {
@@ -495,24 +492,36 @@ router.get("/city-tracking-list", async (req, res) => {
       limit = 10,
       search = "",
       cityName = "",
+      startDate = "",
+      endDate = "",
     } = req.query;
 
     const skip = (Number(page) - 1) * Number(limit);
 
     const match = {};
 
-    // Filter by city
     if (cityName) {
-      match.cityName = {
-        $regex: cityName,
-        $options: "i",
-      };
+      match.cityName = { $regex: cityName, $options: "i" };
+    }
+
+    if (startDate || endDate) {
+      match.createdAt = {};
+
+      if (startDate) {
+        match.createdAt.$gte = new Date(startDate);
+      }
+
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999); // poora din include hoga
+        match.createdAt.$lte = end;
+      }
     }
 
     const pipeline = [
-      {
-        $match: match,
-      },
+      { $match: match },
+
+      // User lookup
       {
         $lookup: {
           from: "users",
@@ -527,30 +536,82 @@ router.get("/city-tracking-list", async (req, res) => {
           preserveNullAndEmptyArrays: true,
         },
       },
+
+      // Visitor search lookup (ONLY when visitorId exists)
+      {
+        $lookup: {
+          from: "search-trackings",
+          let: { visitorId: "$visitorId" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $ne: ["$$visitorId", null] },
+                    { $ne: ["$$visitorId", ""] },
+                    { $eq: ["$visitorId", "$$visitorId"] },
+                  ],
+                },
+              },
+            },
+            { $limit: 1 },
+          ],
+          as: "searchByVisitor",
+        },
+      },
+
+      // User search lookup (ONLY when userId exists)
+      {
+        $lookup: {
+          from: "search-trackings",
+          let: { userId: "$userId" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $ne: ["$$userId", null] },
+                    { $eq: ["$userId", "$$userId"] },
+                  ],
+                },
+              },
+            },
+            { $limit: 1 },
+          ],
+          as: "searchByUser",
+        },
+      },
+
+      // Final boolean
+      {
+        $addFields: {
+          isSearchedAnything: {
+            $or: [
+              {
+                $gt: [{ $size: { $ifNull: ["$searchByVisitor", []] } }, 0],
+              },
+              {
+                $gt: [{ $size: { $ifNull: ["$searchByUser", []] } }, 0],
+              },
+            ],
+          },
+        },
+      },
     ];
 
-    // Search
+    // Search filter
     if (search) {
       pipeline.push({
         $match: {
           $or: [
-            {
-              "user.name": {
-                $regex: search,
-                $options: "i",
-              },
-            },
-            {
-              "user.phone": {
-                $regex: search,
-                $options: "i",
-              },
-            },
+            { "user.name": { $regex: search, $options: "i" } },
+            { "user.phone": { $regex: search, $options: "i" } },
           ],
         },
       });
     }
 
+    // Final projection + pagination
     pipeline.push(
       {
         $project: {
@@ -559,38 +620,34 @@ router.get("/city-tracking-list", async (req, res) => {
           visitorId: 1,
           createdAt: 1,
           updatedAt: 1,
+          isSearchedAnything: 1,
 
           user: {
             _id: "$user._id",
             name: "$user.name",
             phone: "$user.phone",
           },
+
+          // Debug
+          debug_visitorCount: {
+            $size: { $ifNull: ["$searchByVisitor", []] },
+          },
+          debug_userCount: {
+            $size: { $ifNull: ["$searchByUser", []] },
+          },
         },
       },
-      {
-        $sort: {
-          createdAt: -1,
-        },
-      },
-      {
-        $skip: skip,
-      },
-      {
-        $limit: Number(limit),
-      },
+      { $sort: { createdAt: -1 } },
+      { $skip: skip },
+      { $limit: Number(limit) },
     );
 
     const cityList = await UserCities.aggregate(pipeline);
 
-    // Total Count
-    const totalPipeline = pipeline.slice(0, pipeline.length - 3);
-
-    totalPipeline.push({
-      $count: "total",
-    });
+    // Total count
+    const totalPipeline = [...pipeline.slice(0, -4), { $count: "total" }];
 
     const totalResult = await UserCities.aggregate(totalPipeline);
-
     const total = totalResult.length ? totalResult[0].total : 0;
 
     return CustomResponse(
@@ -606,12 +663,11 @@ router.get("/city-tracking-list", async (req, res) => {
           limit: Number(limit),
           totalPages: Math.ceil(total / Number(limit)),
         },
-      }
+      },
     );
   } catch (err) {
     console.error("Fetch City Tracking Error:", err);
     return CustomResponse(res, 500, true, "Server error");
   }
 });
-
 module.exports = router;

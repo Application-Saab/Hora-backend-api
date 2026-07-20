@@ -132,6 +132,8 @@ router.get("/capsule-tracking", async (req, res) => {
         },
 
         // Folder Lookup
+        // ✅ NAYA SAFE CODE (Iski jagah par laga do)
+        // Folder Lookup
         {
           $addFields: {
             orderIdString: {
@@ -143,8 +145,21 @@ router.get("/capsule-tracking", async (req, res) => {
         {
           $lookup: {
             from: "folders",
-            localField: "orderIdString",
-            foreignField: "orderId",
+            let: { searchId: "$orderIdString" },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    // Yeh check karega ki folder clean id se ho ya +10800 wali string se, dono ko safe handle karega
+                    $or: [
+                      { $eq: ["$orderId", "$$searchId"] },
+                      { $eq: ["$orderId", { $toString: { $add: [{ $toInt: "$$searchId" }, 10800] } }] }
+                    ]
+                  }
+                }
+              },
+              { $limit: 1 } // 🔥 Sabse zaroori line: Kisi bhi haal me 1 se zyada folder nahi aane dega, duplicate khatam!
+            ],
             as: "folder"
           }
         },
@@ -359,6 +374,8 @@ router.get("/capsule-tracking", async (req, res) => {
           $project: {
             order_id: 1,
             orderWebLink: 1,
+            orderDriveLink: 1,
+            allDriveLinks: 1,
             imageUploadCounts: 1,
 
             mainFolderId: "$folder._id",
@@ -561,7 +578,6 @@ router.post("/track-capsule-share-click", async (req, res) => {
 
 router.get("/capsule-users", async (req, res) => {
   try {
-
     let { page = 1, limit = 10, search = "" } = req.query;
 
     page = Number(page);
@@ -572,115 +588,87 @@ router.get("/capsule-users", async (req, res) => {
     // =====================================
     // HOST USERS
     // =====================================
-
     const hostUsers = await Order.aggregate([
-
       {
         $match: {
           type: 8,
           orderWebLink: {
             $exists: true,
             $nin: ["", " ", null]
-          }
+          },
+          fromId: { $exists: true, $ne: null }
         }
       },
-
       {
         $group: {
-
           _id: {
-            $toString: "$fromId"
+            $cond: {
+              if: { $eq: [{ $type: "$fromId" }, "object"] },
+              then: { $toString: "$fromId._id" }, // Agar by chance object ho
+              else: { $toString: "$fromId" }
+            }
           },
-
-          phone: {
-            $first: "$phone_no"
-          },
-
-          totalOrders: {
-            $sum: 1
-          },
-
-          userType: {
-            $first: "host"
-          }
-
+          phone: { $first: "$phone_no" },
+          totalOrders: { $sum: 1 },
+          userType: { $first: "host" }
         }
       }
-
     ]);
 
     // =====================================
-    // GUEST USERS
+    // GUEST USERS (Dono format handle kiya hai)
     // =====================================
-
     const guestUsers = await Folder.aggregate([
-
       {
         $match: {
-          viewedBy: {
-            $exists: true,
-            $ne: []
-          }
+          viewedBy: { $exists: true, $type: "array", $ne: [] }
         }
       },
-
       {
         $unwind: "$viewedBy"
       },
-
       {
         $match: {
-          $expr: {
-            $ne: ["$viewedBy", "$customerId"]
-          }
+          viewedBy: { $exists: true, $ne: null }
         }
       },
-
       {
         $group: {
-
           _id: {
-            $toString: "$viewedBy"
+            // 🔥 Master Stroke Condition for Hybrid Data
+            $cond: {
+              if: { $eq: [{ $type: "$viewedBy" }, "object"] },
+              then: { $toString: "$viewedBy.userId" }, // ✨ Naya Data: Object me se userId nikalega
+              else: { $toString: "$viewedBy" }          // ✨ Purana Data: Direct string ko hi convert karega
+            }
           },
-
-          totalOrders: {
-            $first: 0
-          },
-
-          userType: {
-            $first: "guest"
-          }
-
+          totalOrders: { $first: 0 },
+          userType: { $first: "guest" }
         }
       },
-
+      {
+        $match: {
+          _id: { $ne: "null", $exists: true } // Kuch filter gaps hatane ke liye
+        }
+      }
     ]);
 
     // =====================================
     // MERGE UNIQUE USERS
     // =====================================
-
     const userMap = new Map();
 
     [...hostUsers, ...guestUsers].forEach((user) => {
+      if (!user._id || user._id === "null") return; // Null values skip karein
 
       const id = user._id.toString();
 
       if (userMap.has(id)) {
-
         const existing = userMap.get(id);
-
-        existing.totalOrders = Math.max(
-          existing.totalOrders,
-          user.totalOrders
-        );
-
+        existing.totalOrders = Math.max(existing.totalOrders, user.totalOrders);
       } else {
-
         userMap.set(id, user);
-
       }
-
     });
 
     let users = Array.from(userMap.values());
@@ -688,152 +676,122 @@ router.get("/capsule-users", async (req, res) => {
     // =====================================
     // GET USER DATA
     // =====================================
-
     const userIds = users.map((u) => u._id);
 
     const [
-
       uploadCounts,
       likeCounts,
       guestCapsuleCounts,
       userData
-
     ] = await Promise.all([
 
       // =====================================
       // UPLOADS
       // =====================================
-
       WebLink.aggregate([
-
         {
           $match: {
-            orderById: {
-              $in: userIds
-            }
+            orderById: { $in: userIds }
           }
         },
-
         {
           $group: {
             _id: "$orderById",
-            totalUploads: {
-              $sum: 1
-            }
+            totalUploads: { $sum: 1 }
           }
         }
-
       ]),
 
       // =====================================
       // LIKES
       // =====================================
-
       WebLink.aggregate([
-
+        {
+          $match: {
+            likedBy: { $exists: true, $type: "array", $ne: [] }
+          }
+        },
         {
           $unwind: "$likedBy"
         },
-
-        {
-          $match: {
-            likedBy: {
-              $in: userIds
-            }
-          }
-        },
-
         {
           $group: {
-
             _id: {
-              $toString: "$likedBy"
+              $cond: {
+                if: { $eq: [{ $type: "$likedBy" }, "object"] },
+                then: { $toString: "$likedBy._id" },
+                else: { $toString: "$likedBy" }
+              }
             },
-
-            totalLikes: {
-              $sum: 1
-            }
-
+            totalLikes: { $sum: 1 }
+          }
+        },
+        {
+          $match: {
+            _id: { $in: userIds }
           }
         }
-
       ]),
 
       // =====================================
-      // GUEST CAPSULES
+      // GUEST CAPSULES (Hybrid check yahan bhi)
       // =====================================
-
       Folder.aggregate([
-
+        {
+          $match: {
+            viewedBy: { $exists: true, $type: "array", $ne: [] }
+          }
+        },
         {
           $unwind: "$viewedBy"
         },
-
-        {
-          $match: {
-            viewedBy: {
-              $in: userIds
-            }
-          }
-        },
-
-        {
-          $match: {
-            $expr: {
-              $ne: ["$viewedBy", "$customerId"]
-            }
-          }
-        },
-
         {
           $group: {
-
             _id: {
-              $toString: "$viewedBy"
+              $cond: {
+                if: { $eq: [{ $type: "$viewedBy" }, "object"] },
+                then: { $toString: "$viewedBy.userId" }, // ✨ Same logic yahan bhi backup me
+                else: { $toString: "$viewedBy" }
+              }
             },
-
-            guestCapsulesCount: {
-              $sum: 1
-            }
-
+            guestCapsulesCount: { $sum: 1 }
+          }
+        },
+        {
+          $match: {
+            _id: { $in: userIds }
           }
         }
-
       ]),
 
       // =====================================
       // USER INFO
       // =====================================
-
       User.find({
-        _id: {
-          $in: userIds
-        }
+        _id: { $in: userIds }
       })
         .select("phone fromCapsule createdAt")
         .lean()
-
     ]);
 
     // =====================================
     // MAPS
     // =====================================
-
     const uploadMap = {};
     const likeMap = {};
     const guestMap = {};
     const userDataMap = {};
 
     uploadCounts.forEach((u) => {
-      uploadMap[u._id] = u.totalUploads;
+      if (u._id) uploadMap[u._id.toString()] = u.totalUploads;
     });
 
     likeCounts.forEach((u) => {
-      likeMap[u._id] = u.totalLikes;
+      if (u._id) likeMap[u._id.toString()] = u.totalLikes;
     });
 
     guestCapsuleCounts.forEach((u) => {
-      guestMap[u._id] = u.guestCapsulesCount;
+      if (u._id) guestMap[u._id.toString()] = u.guestCapsulesCount;
     });
 
     userData.forEach((u) => {
@@ -843,122 +801,67 @@ router.get("/capsule-users", async (req, res) => {
     // =====================================
     // FINAL USERS
     // =====================================
-
     let finalUsers = users.map((u) => {
-
-      const userInfo =
-        userDataMap[u._id] || {};
+      const idStr = u._id.toString();
+      const userInfo = userDataMap[idStr] || {};
 
       return {
-
-        userId: u._id,
-
+        userId: idStr,
         userType: u.userType,
-
-        phone:
-          u.phone ||
-          userInfo.phone ||
-          null,
-
-        totalOrders:
-          u.totalOrders || 0,
-
-        totalUploads:
-          uploadMap[u._id] || 0,
-
-        totalLikes:
-          likeMap[u._id] || 0,
-
-        guestCapsulesCount:
-          guestMap[u._id] || 0,
-
-        fromCapsule:
-          userInfo.fromCapsule || false,
-
+        phone: u.phone || userInfo.phone || null,
+        totalOrders: u.totalOrders || 0,
+        totalUploads: uploadMap[idStr] || 0,
+        totalLikes: likeMap[idStr] || 0,
+        guestCapsulesCount: guestMap[idStr] || 0,
+        fromCapsule: userInfo.fromCapsule || false,
         createdAt: userInfo.createdAt || null
-
       };
-
     });
 
     // =====================================
     // SEARCH
     // =====================================
-
     if (search?.trim()) {
-
       finalUsers = finalUsers.filter((u) =>
         (u.phone || "")
           .toString()
           .includes(search.trim())
       );
-
     }
 
     // =====================================
     // SORT (Recent Users First)
     // =====================================
-
     finalUsers.sort((a, b) => {
       const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
       const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
-
       return dateB - dateA;
     });
 
     // =====================================
-    // TOTAL
+    // TOTAL & PAGINATION
     // =====================================
-
     const total = finalUsers.length;
-
-    // =====================================
-    // PAGINATION
-    // =====================================
-
-    finalUsers = finalUsers.slice(
-      skip,
-      skip + limit
-    );
-
-    // =====================================
-    // RESPONSE
-    // =====================================
+    finalUsers = finalUsers.slice(skip, skip + limit);
 
     return res.status(200).json({
-
       success: true,
-
       message: "User data fetched successfully",
-
       data: finalUsers,
-
       pagination: {
-
         total,
-
         page,
-
         limit,
-
         totalPages: Math.ceil(total / limit)
-
       }
-
     });
 
   } catch (error) {
-
     console.error(error);
-
     return res.status(500).json({
-
       success: false,
-
       message: "Server error"
-
     });
-
   }
 });
 

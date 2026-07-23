@@ -10,7 +10,12 @@ const serviceabilityPincodes = new mongoose.Schema({
     status: {
         type: String,
     },
-    category: { type: String, trim: true } 
+    category: [
+        {
+            type: String,
+            trim: true
+        }
+    ]
 }, { timestamps: true });
 
 

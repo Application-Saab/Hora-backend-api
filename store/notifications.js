@@ -25,7 +25,7 @@ exports.sendNotifications = function(deviceToken, user_id, title, MsgBody, ID, T
     "android": {
       priority: "high",
       "notification": {
-        "channel_id": "fcm_custom_sound_channel", // Must match the ID from createChannel
+        "channel_id": "fcm_custom_sound_channel_v2", // Must match the ID from createChannel
         sound: "notification", 
         default_sound: false   
       }

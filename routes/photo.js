@@ -15,6 +15,7 @@ const sharp = require("sharp");
 const WebLink = require("../models/weblink-images");
 const multer = require("multer");
 const UserModel = require("../models/user")
+const EventinvitesModel = require("../models/event-invite") 
 
 // AWS S3 Configuration
 const s3 = new AWS.S3({
@@ -351,6 +352,18 @@ router.get("/thumbnailsWithinProject", async (req, res) => {
     users.forEach(u => {
       userMap[String(u._id)] = u;
     });
+    const eventIdsInFolders = folders
+      .map(f => f.eventId)
+      .filter(Boolean); 
+
+    const events = await EventinvitesModel.find({
+      _id: { $in: eventIdsInFolders }
+    }).lean();
+    
+    const eventMap = {};
+    events.forEach(e => {
+      eventMap[String(e._id)] = e;
+    });
 
     const enrichedFolders = folders.map(folder => ({
       ...folder,
@@ -363,7 +376,8 @@ router.get("/thumbnailsWithinProject", async (req, res) => {
           phone: "",
           avatar: ""
         };
-      })
+      }),
+      eventDetails: folder.eventId ? (eventMap[String(folder.eventId)] || null) : null,
     }));
 
     const folderIds = folders.map((f) => f._id);

@@ -11,6 +11,7 @@ const {
   uploadFileToS3,
 } = require("../store/multerS3Config");
 const fsp = require("fs").promises;
+const EventinvitesModel = require("../models/event-invite")
 
 const apiKey = process.env.GOOGLE_DRIVE_API_KEY;
 const deploymentId = process.env.GOOGLE_SCRIPT_DEPLOYMENT_ID;
@@ -296,6 +297,9 @@ router.post("/add-order-drive-link", async (req, res) => {
     const orderId = order_id;
     const phoneNo = order.phone_no;
 
+    const eventInvite = await EventinvitesModel.findOne({ orderId: Number(order_id) });
+    const eventId = eventInvite ? eventInvite._id : null;
+
     const isRawLinkNewOrChanged = !order.orderDriveLink || order.orderDriveLink !== folderUrl;
 
     if (folderUrl?.trim()) {
@@ -346,7 +350,7 @@ router.post("/add-order-drive-link", async (req, res) => {
     let folder = await FolderModel.findOne({ folderName, customerId });
 
     if (!folder) {
-      folder = new FolderModel({ folderName, customerId, orderId });
+      folder = new FolderModel({ folderName, customerId, orderId, eventId });
       await folder.save();
     }
     let webLink = order.orderWebLink;
@@ -370,13 +374,6 @@ router.post("/add-order-drive-link", async (req, res) => {
     }
 
     if (folderUrl && folderUrl.trim() !== "") {
-      const folderName = `${order_id}_${customerId}_${phoneNo}`;
-
-      let folder = await FolderModel.findOne({ folderName, customerId });
-      if (!folder) {
-        folder = new FolderModel({ folderName, customerId, orderId: order_id });
-        await folder.save();
-      }
 
       let mainFolderId = folder._id;
       webLink = `https://horaservices.com/weblink-gallery?folderName=${folderName}&customerId=${customerId}`;

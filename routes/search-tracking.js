@@ -3,6 +3,7 @@ const router = express.Router();
 const mongoose = require("mongoose");
 
 const SearchTrackings = require("../models/search-tracking");
+const UserCities = require("../models/user-cities");
 const { CustomResponse } = require("../store/commonFunction");
 
 // Save Search Analytics
@@ -13,6 +14,7 @@ router.post("/", async (req, res) => {
       clickedItemId,
       clickedTitle,
       clickedType,
+      pageName,
       userId,
       visitorId,
     } = req.body;
@@ -22,11 +24,38 @@ router.post("/", async (req, res) => {
       ...(clickedItemId && { clickedItemId }),
       ...(clickedTitle && { clickedTitle }),
       ...(clickedType && { clickedType }),
+      ...(pageName && { pageName }),
       ...(userId && { userId }),
       ...(visitorId && { visitorId }),
     });
-
+    
     const savedAnalytics = await analytics.save();
+
+    let filter = {};
+
+    if (userId) {
+      if (!mongoose.Types.ObjectId.isValid(userId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid userId",
+        });
+      }
+
+      filter = { userId };
+    } else if (visitorId) {
+      filter = { visitorId };
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: "Either userId or visitorId is required",
+      });
+    }
+
+    await UserCities.findOneAndUpdate(filter, {
+      $inc: {
+        searchCount: 1,
+      },
+    });
 
     return CustomResponse(
       res,
@@ -117,6 +146,7 @@ router.get("/tracking-list", async (req, res) => {
           clickedType: 1,
           visitorId: 1,
           createdAt: 1,
+          pageName: 1,
 
           user: {
             _id: "$user._id",
@@ -176,12 +206,6 @@ router.get("/stats", async (req, res) => {
     const { startDate, endDate } = req.query;
 
     const matchStage = {};
-
-    // if (startDate || endDate) {
-    //   matchStage.createdAt = {};
-    //   if (startDate) matchStage.createdAt.$gte = new Date(startDate);
-    //   if (endDate) matchStage.createdAt.$lte = new Date(endDate);
-    // }
 
     if (startDate || endDate) {
       matchStage.createdAt = {};

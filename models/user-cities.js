@@ -16,9 +16,27 @@ const userCitiesSchema = new mongoose.Schema(
     cityName: {
       type: String,
       trim: true,
-      default: "",
+      default: "NOT_SELECTED",
       required: true,
     },
+    searchCount : {
+      type : Number,
+      default : 0
+    },
+    eventDateCount : {
+      type : Number,
+      default : 0
+    },
+    clickCounts: {
+      whatsapp : {
+        type: Number,
+        default : 0,
+      },
+      facebook : {
+        type: Number,
+        default : 0
+      }
+    }
   },
   {
     timestamps: true,

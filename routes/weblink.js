@@ -7,6 +7,15 @@ const User = require("../models/user");
 const Users = require("../models/user");
 const mongoose = require("mongoose");
 const capsuleGenerateShortCode = require("../utils/capsuleGenerateShortCode");
+const {
+  generateThumbnail,
+  uploadFileToS3,
+} = require("../store/multerS3Config");
+const path = require("path");
+const fsPromises = require("fs").promises; // Safe async file handling
+const fs = require("fs");
+const { createCanvas, loadImage, GlobalFonts } = require("@napi-rs/canvas");
+
 
 router.put("/assign-to-subfolder", async (req, res) => {
   try {
@@ -1001,6 +1010,546 @@ router.get("/getSubFolders", async (req, res) => {
     });
   }
 });
+
+/**
+ * Multi-line Wrapped Text Helper
+ */
+function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = text.toUpperCase().split(" ");
+  let line = "";
+  let currentY = y;
+
+  for (let n = 0; n < words.length; n++) {
+    const testLine = line + words[n] + " ";
+    const metrics = ctx.measureText(testLine);
+    if (metrics.width > maxWidth && n > 0) {
+      ctx.fillText(line.trim(), x, currentY);
+      line = words[n] + " ";
+      currentY += lineHeight;
+    } else {
+      line = testLine;
+    }
+  }
+  ctx.fillText(line.trim(), x, currentY);
+}
+// /**
+//  * Complete Backend Banner Generator Function (Retina HD Quality - 786x332)
+//  */
+// async function generateAndUploadCapsuleBanner(folderId, leftImageUrl, eventName, phoneNo = "") {
+//   const tempOriginalPath = path.join("/tmp", `temp-banner-${folderId}-${Date.now()}.png`);
+
+//   try {
+//     // 📐 2x Scale Factor for High-DPI / Retina Displays (Crisp & Sharp Quality)
+//     const scale = 6;
+//     const baseWidth = 393;
+//     const baseHeight = 166;
+
+//     const width = baseWidth * scale;   // 786px
+//     const height = baseHeight * scale; // 332px
+
+//     const canvas = createCanvas(width, height);
+//     const ctx = canvas.getContext("2d");
+
+//     ctx.imageSmoothingEnabled = true;
+//     ctx.imageSmoothingQuality = "high";
+
+//     // White base canvas
+//     ctx.fillStyle = "#FFFFFF";
+//     ctx.fillRect(0, 0, width, height);
+
+//     // -------------------------------------------------------------
+//     // 1. LEFT IMAGE (2x Scaled Crop: Width 350px, Height 332px)
+//     // -------------------------------------------------------------
+//     const leftBoxWidth = 175 * scale;  // 350px
+//     const leftBoxHeight = 166 * scale; // 332px
+
+//     if (leftImageUrl && typeof leftImageUrl === "string" && leftImageUrl.startsWith("http")) {
+//       try {
+//         const leftImg = await loadImage(leftImageUrl);
+
+//         // Aspect Ratio Crop Math
+//         const imgRatio = leftImg.width / leftImg.height;
+//         const targetRatio = leftBoxWidth / leftBoxHeight;
+
+//         let sw = leftImg.width;
+//         let sh = leftImg.height;
+//         let sx = 0;
+//         let sy = 0;
+
+//         if (imgRatio > targetRatio) {
+//           sw = leftImg.height * targetRatio;
+//           sx = (leftImg.width - sw) / 2;
+//         } else {
+//           sh = leftImg.width / targetRatio;
+//           sy = (leftImg.height - sh) / 2;
+//         }
+
+//         // Draw Left Cover Photo at 2x
+//         ctx.drawImage(leftImg, sx, sy, sw, sh, 0, 0, leftBoxWidth, leftBoxHeight);
+//       } catch (imgErr) {
+//         console.error("Warning: Left image load failed:", imgErr.message);
+//       }
+//     }
+
+//     // -------------------------------------------------------------
+//     // 2. RIGHT TEMPLATE OVERLAP (2x Scaled - X: 220px)
+//     // -------------------------------------------------------------
+//     const bgPath = path.resolve(__dirname, "./default-capsule-bg.webp");
+//     const rightBgImg = await loadImage(bgPath);
+
+//     const rightX = 110 * scale; // 220px
+//     const rightWidth = width - rightX; // 566px
+
+//     ctx.drawImage(rightBgImg, rightX, 0, rightWidth, height);
+
+//     // -------------------------------------------------------------
+//     // 3. EVENT NAME TEXT OVERLAY (2x Scaled Font & Position)
+//     // -------------------------------------------------------------
+//     if (eventName) {
+//       ctx.save();
+//       ctx.fillStyle = "#4B2882";
+//       ctx.font = `bold ${11 * scale}px Arial`; // 22px Crisp Font
+//       ctx.textAlign = "center";
+//       ctx.textBaseline = "top";
+
+//       const textCenterX = 270 * scale; // 540px
+//       const textStartY = 16 * scale;  // 32px
+//       const maxTextWidth = 160 * scale; // 320px
+//       const lineHeight = 14 * scale;  // 28px
+
+//       drawWrappedText(ctx, eventName, textCenterX, textStartY, maxTextWidth, lineHeight);
+//       ctx.restore();
+//     }
+
+//     // -------------------------------------------------------------
+//     // 4. EXPORT ORIGINAL HIGH-RES PNG DIRECTLY TO S3
+//     // -------------------------------------------------------------
+//     const canvasBuffer = await canvas.toBuffer("image/png");
+//     await fsPromises.writeFile(tempOriginalPath, canvasBuffer);
+
+//     const fileName = `banner-${folderId}-${Date.now()}.png`;
+//     const folderPath = "capsule-banners";
+//     const contentType = "image/png";
+
+//     const s3Result = await uploadFileToS3(
+//       tempOriginalPath,
+//       fileName,
+//       folderPath,
+//       phoneNo,
+//       contentType
+//     );
+
+//     return s3Result.Location || s3Result.fileUrl || s3Result;
+
+//   } catch (error) {
+//     console.error("Backend Banner Generation Error:", error);
+//     throw error;
+//   } finally {
+//     await fsPromises.unlink(tempOriginalPath).catch(() => { });
+//   }
+// }
+
+// /**
+//  * Backend Banner Generator Function (No Compression - Original High-Res PNG to S3)
+//  */
+// async function generateAndUploadCapsuleBanner(folderId, leftImageUrl, eventName, phoneNo = "") {
+//   const tempOriginalPath = path.join("/tmp", `temp-banner-${folderId}-${Date.now()}.png`);
+
+//   try {
+//     const scale = 4;
+//     const baseWidth = 393;
+//     const baseHeight = 166;
+
+//     const width = baseWidth * scale;   // 1572px
+//     const height = baseHeight * scale; // 664px
+
+//     const canvas = createCanvas(width, height);
+//     const ctx = canvas.getContext("2d");
+
+//     ctx.imageSmoothingEnabled = true;
+//     ctx.imageSmoothingQuality = "high";
+
+//     ctx.fillStyle = "#FFFFFF";
+//     ctx.fillRect(0, 0, width, height);
+
+//     // -------------------------------------------------------------
+//     // 1. LEFT IMAGE (Wider width: 210px)
+//     // -------------------------------------------------------------
+//     const leftBoxWidth = 210 * scale;
+//     const leftBoxHeight = 166 * scale;
+
+//     if (leftImageUrl && typeof leftImageUrl === "string" && leftImageUrl.startsWith("http")) {
+//       try {
+//         const leftImg = await loadImage(leftImageUrl);
+
+//         const imgRatio = leftImg.width / leftImg.height;
+//         const targetRatio = leftBoxWidth / leftBoxHeight;
+
+//         let sw = leftImg.width, sh = leftImg.height, sx = 0, sy = 0;
+
+//         if (imgRatio > targetRatio) {
+//           sw = leftImg.height * targetRatio;
+//           sx = (leftImg.width - sw) / 2;
+//         } else {
+//           sh = leftImg.width / targetRatio;
+//           sy = (leftImg.height - sh) / 2;
+//         }
+
+//         ctx.drawImage(leftImg, sx, sy, sw, sh, 0, 0, leftBoxWidth, leftBoxHeight);
+//       } catch (imgErr) {
+//         console.error("Warning: Left image load failed:", imgErr.message);
+//       }
+//     }
+
+//     // -------------------------------------------------------------
+//     // 2. RIGHT TEMPLATE OVERLAP (Shifted Right: X = 160)
+//     // -------------------------------------------------------------
+//     const bgPath = path.resolve(__dirname, "./default-capsule-bg.webp");
+//     const rightBgImg = await loadImage(bgPath);
+
+//     const rightX = 160 * scale;
+//     const rightWidth = width - rightX;
+
+//     ctx.drawImage(rightBgImg, rightX, 0, rightWidth, height);
+
+//     // -------------------------------------------------------------
+//     // 3. EVENT NAME TEXT OVERLAY
+//     // -------------------------------------------------------------
+//     if (eventName) {
+//       ctx.save();
+//       ctx.fillStyle = "#4B2882";
+//       ctx.font = `bold ${11 * scale}px Arial`;
+//       ctx.textAlign = "center";
+//       ctx.textBaseline = "top";
+
+//       const textCenterX = 295 * scale;
+//       const textStartY = 16 * scale;
+//       const maxTextWidth = 140 * scale;
+//       const lineHeight = 14 * scale;
+
+//       drawWrappedText(ctx, eventName, textCenterX, textStartY, maxTextWidth, lineHeight);
+//       ctx.restore();
+//     }
+
+//     // -------------------------------------------------------------
+//     // 4. WRITE TEMP PNG & UPLOAD TO S3
+//     // -------------------------------------------------------------
+//     const canvasBuffer = await canvas.toBuffer("image/png");
+//     await fsPromises.writeFile(tempOriginalPath, canvasBuffer);
+
+//     const fileName = `banner-${folderId}-${Date.now()}.png`;
+//     const folderPath = "capsule-banners";
+//     const contentType = "image/png";
+
+//     // 🚀 High-Quality Original PNG direct S3 upload
+//     const s3Result = await uploadFileToS3(
+//       tempOriginalPath,
+//       fileName,
+//       folderPath,
+//       phoneNo,
+//       contentType
+//     );
+
+//     // Return S3 Cloud URL
+//     return s3Result.Location || s3Result.fileUrl || s3Result;
+
+//   } catch (error) {
+//     console.error("Backend Banner Generation Error:", error);
+//     throw error;
+//   } finally {
+//     // Disk cleanup
+//     await fsPromises.unlink(tempOriginalPath).catch(() => { });
+//   }
+// }
+
+
+// 1. REGISTER CINZEL DECORATIVE FONT
+// (Ensure karein ki .ttf file is path par majood ho)
+
+// -------------------------------------------------------------
+// FONT REGISTRATION
+// -------------------------------------------------------------
+const fontPath = path.resolve(__dirname, "./fonts/CinzelDecorative-Bold.ttf");
+
+if (fs.existsSync(fontPath)) {
+  // Family Name: "CinzelDecorativeBold"
+  GlobalFonts.registerFromPath(fontPath, "CinzelDecorativeBold");
+  console.log("✅ Font 'CinzelDecorativeBold' registered successfully via GlobalFonts!");
+} else {
+  console.error("❌ ERROR: Font file not found at:", fontPath);
+}
+
+/**
+ * Multi-line Text Wrapper Helper
+ */
+// function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight) {
+//   const words = text.toUpperCase().split(" ");
+//   let line = "";
+//   let currentY = y;
+
+//   for (let n = 0; n < words.length; n++) {
+//     const testLine = line + words[n] + " ";
+//     const metrics = ctx.measureText(testLine);
+//     if (metrics.width > maxWidth && n > 0) {
+//       ctx.fillText(line.trim(), x, currentY);
+//       line = words[n] + " ";
+//       currentY += lineHeight;
+//     } else {
+//       line = testLine;
+//     }
+//   }
+//   ctx.fillText(line.trim(), x, currentY);
+// }
+
+/**
+ * Multi-line Text Wrapper (Left Aligned)
+ */
+function drawWrappedTextLeft(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = text.toUpperCase().split(" ");
+  let line = "";
+  let currentY = y;
+
+  for (let n = 0; n < words.length; n++) {
+    const testLine = line + words[n] + " ";
+    const metrics = ctx.measureText(testLine);
+    if (metrics.width > maxWidth && n > 0) {
+      ctx.fillText(line.trim(), x, currentY);
+      line = words[n] + " ";
+      currentY += lineHeight;
+    } else {
+      line = testLine;
+    }
+  }
+  ctx.fillText(line.trim(), x, currentY);
+}
+
+/**
+ * Backend Banner Generator Function (Exact CSS Rules Applied)
+ */
+async function generateAndUploadCapsuleBanner(folderId, leftImageUrl, eventName, phoneNo = "") {
+  const tempOriginalPath = path.join("/tmp", `temp-banner-${folderId}-${Date.now()}.png`);
+
+  try {
+    const scale = 4; // High resolution scale factor
+    const baseWidth = 393;
+    const baseHeight = 166;
+
+    const width = baseWidth * scale;   // 1572px
+    const height = baseHeight * scale; // 664px
+
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext("2d");
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillRect(0, 0, width, height);
+
+    // -------------------------------------------------------------
+    // 1. LEFT IMAGE
+    // -------------------------------------------------------------
+    const leftBoxWidth = 210 * scale;
+    const leftBoxHeight = 166 * scale;
+
+    if (leftImageUrl && typeof leftImageUrl === "string" && leftImageUrl.startsWith("http")) {
+      try {
+        const leftImg = await loadImage(leftImageUrl);
+
+        const imgRatio = leftImg.width / leftImg.height;
+        const targetRatio = leftBoxWidth / leftBoxHeight;
+
+        let sw = leftImg.width, sh = leftImg.height, sx = 0, sy = 0;
+
+        if (imgRatio > targetRatio) {
+          sw = leftImg.height * targetRatio;
+          sx = (leftImg.width - sw) / 2;
+        } else {
+          sh = leftImg.width / targetRatio;
+          sy = (leftImg.height - sh) / 2;
+        }
+
+        ctx.drawImage(leftImg, sx, sy, sw, sh, 0, 0, leftBoxWidth, leftBoxHeight);
+      } catch (imgErr) {
+        console.error("Warning: Left image load failed:", imgErr.message);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // 2. RIGHT TEMPLATE OVERLAP (Right Shifted: X = 160)
+    // -------------------------------------------------------------
+    const bgPath = path.resolve(__dirname, "./default-capsule-bg.webp");
+    const rightBgImg = await loadImage(bgPath);
+
+    const rightX = 160 * scale;
+    const rightWidth = width - rightX;
+
+    ctx.drawImage(rightBgImg, rightX, 0, rightWidth, height);
+    // -------------------------------------------------------------
+    // 3. EVENT NAME TEXT OVERLAY (LEFT ALIGNED LIKE STATIC TEXT)
+    // -------------------------------------------------------------
+    // if (eventName) {
+    //   ctx.save();
+
+    //   // CSS color: #8462ae
+    //   ctx.fillStyle = "#8462ae";
+
+    //   // Font size (13px or 14px)
+    //   const fontSize = 13;
+    //   ctx.font = `700 ${fontSize * scale}px "CinzelDecorativeBold", serif`;
+
+    //   // 🎯 FIX 1: Change to LEFT alignment
+    //   ctx.textAlign = "left";
+    //   ctx.textBaseline = "top";
+
+    //   // 🎯 FIX 2: Exact Left Starting Point (Static text "Save time..." ki line ke saath align)
+    //   // Base width 393px ka 58% ~ 228px hota hai, jo purple torn edge se kaafi dur aur safe hai.
+    //   const textStartX = (baseWidth * 0.58) * scale;
+
+    //   // Top Position
+    //   const textStartY = (baseHeight * 0.08) * scale;
+
+    //   // Max Width Allowed (Right edge tak space rehti hai)
+    //   const maxTextWidth = 150 * scale;
+
+    //   // Line Height
+    //   const lineHeight = (fontSize * 1.3) * scale;
+
+    //   // Left Align Custom Function Call
+    //   drawWrappedTextLeft(ctx, eventName, textStartX, textStartY, maxTextWidth, lineHeight);
+    //   ctx.restore();
+    // }
+
+    // -------------------------------------------------------------
+    // 3. EVENT NAME TEXT OVERLAY (DYNAMIC FONT SCALING)
+    // -------------------------------------------------------------
+    if (eventName) {
+      ctx.save();
+
+      ctx.fillStyle = "#8462ae";
+
+      // 🛠️ Dynamic Font & Position Tuning based on length
+      const textLength = eventName.trim().length;
+
+      let fontSize = 13.5;
+      let startYRatio = 0.08;
+
+      if (textLength > 45) {
+        fontSize = 8.5;       // Very long text (5 lines)
+        startYRatio = 0.03;   // Shift up to avoid bottom collision
+      } else if (textLength > 30) {
+        fontSize = 10.5;      // Medium-long text (3-4 lines)
+        startYRatio = 0.04;   // Shift slightly up
+      } else {
+        fontSize = 13.5;      // Short text (1-2 lines)
+        startYRatio = 0.08;   // Default clean top padding
+      }
+
+      ctx.font = `700 ${fontSize * scale}px "CinzelDecorativeBold", serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+
+      // Precise Alignment
+      const textCenterX = (baseWidth * 0.72) * scale;
+      const textStartY = (baseHeight * startYRatio) * scale;
+      const maxTextWidth = 140 * scale;
+
+      // Line Height proportional to chosen fontSize
+      const lineHeight = (fontSize * 1.3) * scale;
+
+      drawWrappedText(ctx, eventName, textCenterX, textStartY, maxTextWidth, lineHeight);
+      ctx.restore();
+    }
+
+    // -------------------------------------------------------------
+    // 4. WRITE TEMP PNG & UPLOAD TO S3
+    // -------------------------------------------------------------
+    const canvasBuffer = await canvas.toBuffer("image/png");
+    await fsPromises.writeFile(tempOriginalPath, canvasBuffer);
+
+    const fileName = `banner-${folderId}-${Date.now()}.png`;
+    const folderPath = "capsule-banners";
+    const contentType = "image/png";
+
+    const s3Result = await uploadFileToS3(
+      tempOriginalPath,
+      fileName,
+      folderPath,
+      phoneNo,
+      contentType
+    );
+
+    return s3Result.Location || s3Result.fileUrl || s3Result;
+
+  } catch (error) {
+    console.error("Backend Banner Generation Error:", error);
+    throw error;
+  } finally {
+    await fsPromises.unlink(tempOriginalPath).catch(() => { });
+  }
+}
+
+
+// Controller
+async function handleFolderBannerCreation(req, res) {
+  try {
+    const { folderId, leftImageUrl, eventName, phoneNo } = req.body;
+
+    if (!folderId) {
+      return res.status(400).json({
+        success: false,
+        message: "folderId is required",
+      });
+    }
+
+    // 1. Banner background engine se generate & S3 upload karein
+    const s3BannerUrl = await generateAndUploadCapsuleBanner(
+      folderId,
+      leftImageUrl,
+      eventName,
+      phoneNo
+    );
+
+    // 2. Database mein capsuleBannerImageUrl safe set se save karein
+    const updatedFolder = await Folder.findByIdAndUpdate(
+      folderId,
+      {
+        $set: {
+          capsuleBannerImageUrl: s3BannerUrl,
+          bannerUrl: s3BannerUrl // Backup field in case your schema uses 'bannerUrl'
+        }
+      },
+      { new: true, strict: false } // strict: false allows field update even if missing in schema definition
+    ).lean();
+
+    if (!updatedFolder) {
+      return res.status(404).json({
+        success: false,
+        message: "Folder not found with the provided folderId",
+      });
+    }
+
+    // 3. Clean JSON Response (Root par bhi bannerUrl pass kar diya hai)
+    return res.status(200).json({
+      success: true,
+      message: "Capsule banner generated and saved successfully!",
+      bannerUrl: s3BannerUrl,
+      data: {
+        ...updatedFolder,
+        capsuleBannerImageUrl: s3BannerUrl
+      }
+    });
+  } catch (error) {
+    console.error("Controller Error:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to generate banner",
+    });
+  }
+}
+
+// Router Endpoint
+router.post("/generate-banner", handleFolderBannerCreation);
 
 
 

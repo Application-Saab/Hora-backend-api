@@ -11,6 +11,11 @@ const FolderSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+
+    capsuleBannerImageUrl:{
+      type: String,
+    },
+
     viewedBy: [
   {
     userId: {
@@ -128,15 +133,6 @@ const FolderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-FolderSchema.index(
-  { customerId: 1, eventId: 1 },
-  {
-    unique: true,
-    partialFilterExpression: {
-      eventId: { $exists: true }
-    }
-  }
-);
 FolderSchema.index({ orderId: 1 }, { unique: true });
 
 

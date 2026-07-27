@@ -244,16 +244,34 @@ router.post("/import-drive-folder", async (req, res) => {
 
     const webLink = `https://horaservices.com/weblink-gallery?folderName=${folderName}&customerId=${customerId}`;
 
+    const isLinkAlreadyProvided = order.orderDriveLink === folderUrl;
+
+    let updateFields = {
+      orderDriveLink: folderUrl,
+      orderWebLink: webLink,
+    };
+
+    if (order.allDriveLinks && order.allDriveLinks.length > 0) {
+      updateFields.allDriveLinks = order.allDriveLinks.map((item) => {
+        if (item.linkType === "Raw Photos" || !item.linkType) {
+          return {
+            ...item,
+            link: folderUrl,
+            submittedAt: item.submittedAt || new Date(),
+          };
+        }
+        return item;
+      });
+    }
+
+    if (!isLinkAlreadyProvided || !order.imageUploadCounts?.driveProvidedAt) {
+      updateFields["imageUploadCounts.driveProvidedAt"] = new Date();
+    }
+
     // MongoDB update
     await OrderModel.updateOne(
       { order_id },
-      {
-        $set: {
-          orderDriveLink: folderUrl,
-          orderWebLink: webLink,
-       "imageUploadCounts.driveProvidedAt": new Date(),
-        },
-      }
+      { $set: updateFields }
     );
 
     res.status(201).json({

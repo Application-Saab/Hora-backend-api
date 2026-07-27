@@ -105,6 +105,7 @@ router.get("/capsule-tracking", async (req, res) => {
     const limit = Number(req.query.limit) || 10;
     const skip = (page - 1) * limit;
     const search = req.query.search;
+    const date = req.query.date; 
 
     const matchQuery = {
       type: 8,
@@ -116,6 +117,17 @@ router.get("/capsule-tracking", async (req, res) => {
 
     if (search) {
       matchQuery.order_id = Number(search);
+    }
+
+    if (date) {
+      const startOfDay = new Date(`${date}T00:00:00.000+05:30`);
+
+      const endOfDay = new Date(`${date}T23:59:59.999+05:30`);
+
+      matchQuery["imageUploadCounts.driveProvidedAt"] = {
+        $gte: startOfDay,
+        $lte: endOfDay
+      };
     }
 
     const [orders, totalOrders] = await Promise.all([

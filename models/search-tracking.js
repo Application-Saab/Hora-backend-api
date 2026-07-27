@@ -17,6 +17,10 @@ const searchTrackingSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    pageName : {
+      type: String,
+      trim: true,
+    },
 
     clickedType: {
       type: String,

@@ -4,6 +4,7 @@ const mongoose = require("mongoose");
 
 const EventDates = require("../models/event-dates");
 const UserCities = require("../models/user-cities");
+const SearchTrackings = require("../models/search-tracking");
 const { CustomResponse } = require("../store/commonFunction");
 
 // Create new entry of event dates for a user or visitor
@@ -45,6 +46,32 @@ router.post("/", async (req, res) => {
     });
 
     const savedEntry = await newEntry.save();
+
+    let filter = {};
+
+    if (userId) {
+      if (!mongoose.Types.ObjectId.isValid(userId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid userId",
+        });
+      }
+
+      filter = { userId };
+    } else if (visitorId) {
+      filter = { visitorId };
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: "Either userId or visitorId is required",
+      });
+    }
+
+    await UserCities.findOneAndUpdate(filter, {
+      $inc: {
+        eventDateCount: 1,
+      },
+    });
 
     return CustomResponse(
       res,
@@ -110,6 +137,32 @@ router.patch("/add-date", async (req, res) => {
       );
     }
 
+    let filter = {};
+
+    if (userId) {
+      if (!mongoose.Types.ObjectId.isValid(userId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid userId",
+        });
+      }
+
+      filter = { userId };
+    } else if (visitorId) {
+      filter = { visitorId };
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: "Either userId or visitorId is required",
+      });
+    }
+
+    await UserCities.findOneAndUpdate(filter, {
+      $inc: {
+        eventDateCount: 1,
+      },
+    });
+
     return CustomResponse(
       res,
       200,
@@ -141,9 +194,7 @@ router.get("/my-events", async (req, res) => {
 
     // Fetch both in parallel
     const [events, cityData] = await Promise.all([
-      EventDates.findOne(query)
-        .populate("userId", "name phone")
-        .lean(),
+      EventDates.findOne(query).populate("userId", "name phone").lean(),
 
       UserCities.findOne(query).lean(),
     ]);
@@ -279,7 +330,7 @@ router.get("/list", async (req, res) => {
     pipeline.push(
       {
         $sort: {
-          "eventDates.date": -1,
+          updatedAt: -1,
         },
       },
       {
@@ -386,7 +437,7 @@ router.post("/user-city", async (req, res) => {
         upsert: true,
         runValidators: true,
         setDefaultsOnInsert: true,
-      }
+      },
     );
 
     return res.status(200).json({
@@ -487,7 +538,6 @@ router.patch("/assign-user-city", async (req, res) => {
   }
 });
 
-// Get User Cities List
 router.get("/city-tracking-list", async (req, res) => {
   try {
     const {
@@ -495,13 +545,18 @@ router.get("/city-tracking-list", async (req, res) => {
       limit = 10,
       search = "",
       cityName = "",
+      startDate = "",
+      endDate = "",
+      searchedUsers = "",
+      eventDateUsers = "",
+      whatsappUsers = "",
+      loggedInUsers = "",
     } = req.query;
 
     const skip = (Number(page) - 1) * Number(limit);
 
     const match = {};
 
-    // Filter by city
     if (cityName) {
       match.cityName = {
         $regex: cityName,
@@ -509,10 +564,52 @@ router.get("/city-tracking-list", async (req, res) => {
       };
     }
 
+    if (searchedUsers === "true") {
+      match.searchCount = {
+        $gt: 0,
+      };
+    }
+
+    if (eventDateUsers === "true") {
+      match.eventDateCount = {
+        $gt: 0,
+      };
+    }
+
+    if (whatsappUsers === "true") {
+      match["clickCounts.whatsapp"] = { $gt: 0 };
+    }
+
+    if (startDate || endDate) {
+      match.createdAt = {};
+
+      if (startDate) {
+        match.createdAt.$gte = new Date(startDate);
+      }
+
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+
+        match.createdAt.$lte = end;
+      }
+    }
+
+    if (loggedInUsers === "true") {
+      match.userId = {
+        $ne: null,
+      };
+
+      match.visitorId = {
+        $ne: null,
+      };
+    }
+
     const pipeline = [
       {
         $match: match,
       },
+
       {
         $lookup: {
           from: "users",
@@ -521,6 +618,7 @@ router.get("/city-tracking-list", async (req, res) => {
           as: "user",
         },
       },
+
       {
         $unwind: {
           path: "$user",
@@ -529,7 +627,7 @@ router.get("/city-tracking-list", async (req, res) => {
       },
     ];
 
-    // Search
+    // Search by user name / phone
     if (search) {
       pipeline.push({
         $match: {
@@ -551,6 +649,7 @@ router.get("/city-tracking-list", async (req, res) => {
       });
     }
 
+    // Listing
     pipeline.push(
       {
         $project: {
@@ -560,6 +659,16 @@ router.get("/city-tracking-list", async (req, res) => {
           createdAt: 1,
           updatedAt: 1,
 
+          searchCount: {
+            $ifNull: ["$searchCount", 0],
+          },
+
+          eventDateCount: {
+            $ifNull: ["$eventDateCount", 0],
+          },
+
+          clickCounts: 1,
+
           user: {
             _id: "$user._id",
             name: "$user.name",
@@ -567,14 +676,17 @@ router.get("/city-tracking-list", async (req, res) => {
           },
         },
       },
+
       {
         $sort: {
           createdAt: -1,
         },
       },
+
       {
         $skip: skip,
       },
+
       {
         $limit: Number(limit),
       },
@@ -583,7 +695,48 @@ router.get("/city-tracking-list", async (req, res) => {
     const cityList = await UserCities.aggregate(pipeline);
 
     // Total Count
-    const totalPipeline = pipeline.slice(0, pipeline.length - 3);
+    const totalPipeline = [
+      {
+        $match: match,
+      },
+
+      {
+        $lookup: {
+          from: "users",
+          localField: "userId",
+          foreignField: "_id",
+          as: "user",
+        },
+      },
+
+      {
+        $unwind: {
+          path: "$user",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+    ];
+
+    if (search) {
+      totalPipeline.push({
+        $match: {
+          $or: [
+            {
+              "user.name": {
+                $regex: search,
+                $options: "i",
+              },
+            },
+            {
+              "user.phone": {
+                $regex: search,
+                $options: "i",
+              },
+            },
+          ],
+        },
+      });
+    }
 
     totalPipeline.push({
       $count: "total",
@@ -591,7 +744,172 @@ router.get("/city-tracking-list", async (req, res) => {
 
     const totalResult = await UserCities.aggregate(totalPipeline);
 
-    const total = totalResult.length ? totalResult[0].total : 0;
+    const total = totalResult?.[0]?.total || 0;
+
+    // Stats Pipeline
+    const statsPipeline = [
+      {
+        $match: match,
+      },
+
+      {
+        $lookup: {
+          from: "users",
+          localField: "userId",
+          foreignField: "_id",
+          as: "user",
+        },
+      },
+
+      {
+        $unwind: {
+          path: "$user",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+    ];
+
+    if (search) {
+      statsPipeline.push({
+        $match: {
+          $or: [
+            {
+              "user.name": {
+                $regex: search,
+                $options: "i",
+              },
+            },
+            {
+              "user.phone": {
+                $regex: search,
+                $options: "i",
+              },
+            },
+          ],
+        },
+      });
+    }
+
+    statsPipeline.push({
+      $group: {
+        _id: null,
+
+        totalSearchCount: {
+          $sum: {
+            $ifNull: ["$searchCount", 0],
+          },
+        },
+
+        totalEventDateCount: {
+          $sum: {
+            $ifNull: ["$eventDateCount", 0],
+          },
+        },
+
+        whatsappUsers: {
+          $sum: {
+            $cond: [
+              {
+                $gt: [
+                  {
+                    $ifNull: ["$clickCounts.whatsapp", 0],
+                  },
+                  0,
+                ],
+              },
+              1,
+              0,
+            ],
+          },
+        },
+
+        totalWhatsappClicks: {
+          $sum: {
+            $ifNull: ["$clickCounts.whatsapp", 0],
+          },
+        },
+
+        searchedUsers: {
+          $sum: {
+            $cond: [
+              {
+                $gt: [
+                  {
+                    $ifNull: ["$searchCount", 0],
+                  },
+                  0,
+                ],
+              },
+              1,
+              0,
+            ],
+          },
+        },
+
+        eventDateUsers: {
+          $sum: {
+            $cond: [
+              {
+                $gt: [
+                  {
+                    $ifNull: ["$eventDateCount", 0],
+                  },
+                  0,
+                ],
+              },
+              1,
+              0,
+            ],
+          },
+        },
+
+        notSelectedUsers: {
+          $sum: {
+            $cond: [
+              {
+                $eq: ["$cityName", "NOT_SELECTED"],
+              },
+              1,
+              0,
+            ],
+          },
+        },
+        loggedInUsers: {
+          $sum: {
+            $cond: [
+              {
+                $and: [
+                  {
+                    $ne: ["$userId", null],
+                  },
+                  {
+                    $ne: ["$visitorId", null],
+                  },
+                  {
+                    $ne: ["$visitorId", ""],
+                  },
+                ],
+              },
+              1,
+              0,
+            ],
+          },
+        },
+      },
+    });
+
+    const statsResult = await UserCities.aggregate(statsPipeline);
+
+    const stats = statsResult?.[0] || {
+      totalSearchCount: 0,
+      totalEventDateCount: 0,
+      searchedUsers: 0,
+      eventDateUsers: 0,
+      whatsappUsers: 0,
+      totalWhatsappClicks: 0,
+      notSelectedUsers: 0,
+      loggedInUsers: 0,
+    };
 
     return CustomResponse(
       res,
@@ -600,16 +918,162 @@ router.get("/city-tracking-list", async (req, res) => {
       "City tracking fetched successfully",
       {
         cityList,
+
+        stats: {
+          totalSearchCount: stats.totalSearchCount,
+          totalEventDateCount: stats.totalEventDateCount,
+          searchedUsers: stats.searchedUsers,
+          eventDateUsers: stats.eventDateUsers,
+          whatsappUsers: stats.whatsappUsers,
+          totalWhatsappClicks: stats.totalWhatsappClicks,
+          notSelectedUsers: stats.notSelectedUsers,
+          loggedInUsers: stats.loggedInUsers,
+        },
+
         pagination: {
           total,
           page: Number(page),
           limit: Number(limit),
           totalPages: Math.ceil(total / Number(limit)),
         },
-      }
+      },
     );
   } catch (err) {
     console.error("Fetch City Tracking Error:", err);
+
+    return CustomResponse(res, 500, true, "Server error");
+  }
+});
+
+// Track whatsapp click counts from website
+router.patch("/user-city/click-count", async (req, res) => {
+  try {
+    const { userId, visitorId, type } = req.body;
+
+    if (!type) {
+      return res.status(400).json({
+        success: false,
+        message: "type is required",
+      });
+    }
+
+    const allowedTypes = ["whatsapp", "facebook"];
+
+    if (!allowedTypes.includes(type)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid click type",
+      });
+    }
+
+    let filter = {};
+
+    if (userId) {
+      if (!mongoose.Types.ObjectId.isValid(userId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid userId",
+        });
+      }
+
+      filter = { userId };
+    } else if (visitorId) {
+      filter = { visitorId };
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: "Either userId or visitorId is required",
+      });
+    }
+
+    const updatedCity = await UserCities.findOneAndUpdate(
+      filter,
+      {
+        $inc: {
+          [`clickCounts.${type}`]: 1,
+        },
+      },
+      {
+        new: true,
+      },
+    );
+
+    if (!updatedCity) {
+      return res.status(404).json({
+        success: false,
+        message: "User city not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `${type} click count updated successfully`,
+      data: {},
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong",
+      error: error.message,
+    });
+  }
+});
+
+// Assing user to city, event date, and search tracking
+router.patch("/assign-user-history", async (req, res) => {
+  try {
+    const { visitorId, userId } = req.body;
+
+    if (!visitorId) {
+      return CustomResponse(res, 400, true, "visitorId is required");
+    }
+
+    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+      return CustomResponse(res, 400, true, "Valid userId is required");
+    }
+
+    const filter = {
+      visitorId,
+      $or: [{ userId: { $exists: false } }, { userId: null }],
+    };
+
+    const update = {
+      $set: {
+        userId,
+      },
+    };
+
+    const [searchTrackingResult, eventDateResult, userCityResult] =
+      await Promise.all([
+        SearchTrackings.updateMany(filter, update),
+        EventDates.updateMany(filter, update),
+        UserCities.updateMany(filter, update),
+      ]);
+
+    return CustomResponse(
+      res,
+      200,
+      false,
+      "Visitor history linked successfully",
+      {
+        searchTracking: {
+          matchedCount: searchTrackingResult.matchedCount,
+          modifiedCount: searchTrackingResult.modifiedCount,
+        },
+        eventDates: {
+          matchedCount: eventDateResult.matchedCount,
+          modifiedCount: eventDateResult.modifiedCount,
+        },
+        userCities: {
+          matchedCount: userCityResult.matchedCount,
+          modifiedCount: userCityResult.modifiedCount,
+        },
+      },
+    );
+  } catch (err) {
+    console.error("Assign User History Error:", err);
     return CustomResponse(res, 500, true, "Server error");
   }
 });

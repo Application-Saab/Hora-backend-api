@@ -11,7 +11,7 @@ if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
 webpush.setVapidDetails(
   process.env.VAPID_SUBJECT,
   process.env.VAPID_PUBLIC_KEY,
-  process.env.VAPID_PRIVATE_KEY
+  process.env.VAPID_PRIVATE_KEY,
 );
 
 try {
@@ -26,12 +26,11 @@ try {
   console.warn("Firebase admin init error", e);
 }
 
-
 async function sendToWebPushSubscription(subscriptionDoc, payloadObj) {
   try {
     await webpush.sendNotification(
       subscriptionDoc.subscription,
-      JSON.stringify(payloadObj)
+      JSON.stringify(payloadObj),
     );
     return { ok: true };
   } catch (err) {
@@ -81,7 +80,7 @@ async function sendPushToRoom(groupId, messageText, options = {}) {
   const room = await ChatRoom.findById(groupId).lean();
   if (!room) return;
 
-  const memberUserIds = room.members.map(m => String(m.userId));
+  const memberUserIds = room.members.map((m) => String(m.userId));
 
   // get only those subscriptions whose userId is in room members
   const subs = await PushSub.find({
@@ -95,14 +94,17 @@ async function sendPushToRoom(groupId, messageText, options = {}) {
     data: {
       groupId: String(groupId),
       ...(options.data || {}),
-      url: options.url || `/chat/room?groupId=${String(groupId) || ""}&id=${String(options.data.senderId || "")}`,
-    }
+      url:
+        options.url ||
+        `/chat/room?groupId=${String(groupId) || ""}&id=${String(options.data.senderId || "")}`,
+    },
   };
 
   // send
   const promises = subs.map(async (s) => {
     if (s.fcmToken) {
-      return sendToFcmToken(s.fcmToken, payloadBase);
+      return;
+      sendToFcmToken(s.fcmToken, payloadBase);
     }
     return sendToWebPushSubscription(s, payloadBase);
   });
@@ -110,5 +112,8 @@ async function sendPushToRoom(groupId, messageText, options = {}) {
   return Promise.all(promises);
 }
 
-
-module.exports = { sendPushToRoom, sendToWebPushSubscription, sendToFcmToken };
+module.exports = {
+  sendPushToRoom,
+  sendToWebPushSubscription,
+  sendToFcmToken
+};

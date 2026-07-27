@@ -148,40 +148,31 @@ router.get("/serviceability", async (req, res) => {
 router.put("/update/:id", async (req, res) => {
     try {
         const { id } = req.params;
-        const { pincode, city, status, category } = req.body; 
+        const { status, category } = req.body;
 
-        const updateData = {};
+        const categoryArray = Array.isArray(category) ? category : [category];
 
-        if (pincode !== undefined) updateData.pincode = pincode.toString().trim();
-        if (city !== undefined) updateData.city = city.toString().trim();
-        if (status !== undefined) updateData.status = status.toString().trim();
-        if (category !== undefined) updateData.category = category.toString().trim(); 
-
-        if (Object.keys(updateData).length === 0) {
-            return res.status(400).json({
-                success: false,
-                message: "Please provide at least one field to update."
-            });
-        }
-
-        const updatedRecord = await Serviceability.findByIdAndUpdate(
+        const updatedPincode = await Serviceability.findByIdAndUpdate(
             id,
-            updateData,
-            { new: true, runValidators: true }
+            {
+                status,
+                category: categoryArray
+            },
+            { new: true }
         );
 
-        if (!updatedRecord) {
-            return res.status(404).json({ success: false, message: "Record not found." });
+        if (!updatedPincode) {
+            return res.status(404).json({ success: false, message: "Pincode not found" });
         }
 
-        return res.json({
+        return res.status(200).json({
             success: true,
-            message: "Record updated successfully!",
-            data: updatedRecord
+            message: "Pincode updated successfully",
+            data: updatedPincode
         });
-
     } catch (error) {
-        return res.status(500).json({ success: false, message: error.message });
+        console.error("Update error:", error);
+        return res.status(500).json({ success: false, message: "Server error" });
     }
 });
 

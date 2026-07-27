@@ -3,6 +3,7 @@ const router = express.Router();
 const mongoose = require("mongoose");
 
 const SearchTrackings = require("../models/search-tracking");
+const UserCities = require("../models/user-cities");
 const { CustomResponse } = require("../store/commonFunction");
 
 // Save Search Analytics
@@ -13,6 +14,7 @@ router.post("/", async (req, res) => {
       clickedItemId,
       clickedTitle,
       clickedType,
+      pageName,
       userId,
       visitorId,
     } = req.body;
@@ -22,11 +24,38 @@ router.post("/", async (req, res) => {
       ...(clickedItemId && { clickedItemId }),
       ...(clickedTitle && { clickedTitle }),
       ...(clickedType && { clickedType }),
+      ...(pageName && { pageName }),
       ...(userId && { userId }),
       ...(visitorId && { visitorId }),
     });
-
+    
     const savedAnalytics = await analytics.save();
+
+    let filter = {};
+
+    if (userId) {
+      if (!mongoose.Types.ObjectId.isValid(userId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid userId",
+        });
+      }
+
+      filter = { userId };
+    } else if (visitorId) {
+      filter = { visitorId };
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: "Either userId or visitorId is required",
+      });
+    }
+
+    await UserCities.findOneAndUpdate(filter, {
+      $inc: {
+        searchCount: 1,
+      },
+    });
 
     return CustomResponse(
       res,
@@ -44,7 +73,14 @@ router.post("/", async (req, res) => {
 // Get Search Tracking List for admin panel
 router.get("/tracking-list", async (req, res) => {
   try {
-    const { page = 1, limit = 10, search = "", clickedType = "" } = req.query;
+    const {
+      page = 1,
+      limit = 10,
+      search = "",
+      clickedType = "",
+      startDate = "",
+      endDate = "",
+    } = req.query;
 
     const skip = (Number(page) - 1) * Number(limit);
 
@@ -52,6 +88,20 @@ router.get("/tracking-list", async (req, res) => {
 
     if (clickedType) {
       match.clickedType = clickedType;
+    }
+
+    if (startDate || endDate) {
+      match.createdAt = {};
+
+      if (startDate) {
+        match.createdAt.$gte = new Date(startDate);
+      }
+
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999); // poora end day include hoga
+        match.createdAt.$lte = end;
+      }
     }
 
     const pipeline = [
@@ -96,6 +146,7 @@ router.get("/tracking-list", async (req, res) => {
           clickedType: 1,
           visitorId: 1,
           createdAt: 1,
+          pageName: 1,
 
           user: {
             _id: "$user._id",
@@ -149,47 +200,6 @@ router.get("/tracking-list", async (req, res) => {
   }
 });
 
-// Link visitor history with logged-in user
-router.patch("/assign-user", async (req, res) => {
-  try {
-    const { visitorId, userId } = req.body;
-
-    if (!visitorId) {
-      return CustomResponse(res, 400, true, "visitorId is required");
-    }
-
-    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
-      return CustomResponse(res, 400, true, "Valid userId is required");
-    }
-
-    const result = await SearchTrackings.updateMany(
-      {
-        visitorId,
-        $or: [{ userId: { $exists: false } }, { userId: null }],
-      },
-      {
-        $set: {
-          userId,
-        },
-      },
-    );
-
-    return CustomResponse(
-      res,
-      200,
-      false,
-      "Visitor history linked successfully",
-      {
-        matchedCount: result.matchedCount,
-        modifiedCount: result.modifiedCount,
-      },
-    );
-  } catch (err) {
-    console.error("Assign User Error:", err);
-    return CustomResponse(res, 500, true, "Server error");
-  }
-});
-
 // Get all stats for search tracking
 router.get("/stats", async (req, res) => {
   try {
@@ -199,8 +209,16 @@ router.get("/stats", async (req, res) => {
 
     if (startDate || endDate) {
       matchStage.createdAt = {};
-      if (startDate) matchStage.createdAt.$gte = new Date(startDate);
-      if (endDate) matchStage.createdAt.$lte = new Date(endDate);
+
+      if (startDate) {
+        matchStage.createdAt.$gte = new Date(startDate);
+      }
+
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        matchStage.createdAt.$lte = end;
+      }
     }
 
     const pipeline = [
@@ -215,10 +233,14 @@ router.get("/stats", async (req, res) => {
                 _id: null,
                 totalSearches: { $sum: 1 },
                 totalClicks: {
-                  $sum: { $cond: [{ $ifNull: ["$clickedItemId", false] }, 1, 0] },
+                  $sum: {
+                    $cond: [{ $ifNull: ["$clickedItemId", false] }, 1, 0],
+                  },
                 },
                 uniqueLoggedInUsers: {
-                  $addToSet: { $cond: [{ $ifNull: ["$userId", false] }, "$userId", null] },
+                  $addToSet: {
+                    $cond: [{ $ifNull: ["$userId", false] }, "$userId", null],
+                  },
                 },
               },
             },
@@ -263,7 +285,9 @@ router.get("/stats", async (req, res) => {
                 _id: null,
                 totalGuestSearches: { $sum: 1 },
                 guestClicks: {
-                  $sum: { $cond: [{ $ifNull: ["$clickedItemId", false] }, 1, 0] },
+                  $sum: {
+                    $cond: [{ $ifNull: ["$clickedItemId", false] }, 1, 0],
+                  },
                 },
               },
             },
@@ -313,7 +337,9 @@ router.get("/stats", async (req, res) => {
           ],
 
           topClickedProducts: [
-            { $match: { clickedType: "product", clickedItemId: { $ne: null } } },
+            {
+              $match: { clickedType: "product", clickedItemId: { $ne: null } },
+            },
             {
               $group: {
                 _id: { id: "$clickedItemId", title: "$clickedTitle" },
@@ -333,7 +359,9 @@ router.get("/stats", async (req, res) => {
           ],
 
           topClickedCategories: [
-            { $match: { clickedType: "category", clickedItemId: { $ne: null } } },
+            {
+              $match: { clickedType: "category", clickedItemId: { $ne: null } },
+            },
             {
               $group: {
                 _id: { id: "$clickedItemId", title: "$clickedTitle" },
@@ -360,7 +388,9 @@ router.get("/stats", async (req, res) => {
                 _id: "$userId",
                 totalSearches: { $sum: 1 },
                 totalClicks: {
-                  $sum: { $cond: [{ $ifNull: ["$clickedItemId", false] }, 1, 0] },
+                  $sum: {
+                    $cond: [{ $ifNull: ["$clickedItemId", false] }, 1, 0],
+                  },
                 },
               },
             },
@@ -375,7 +405,9 @@ router.get("/stats", async (req, res) => {
                 _id: "$visitorId",
                 totalSearches: { $sum: 1 },
                 totalClicks: {
-                  $sum: { $cond: [{ $ifNull: ["$clickedItemId", false] }, 1, 0] },
+                  $sum: {
+                    $cond: [{ $ifNull: ["$clickedItemId", false] }, 1, 0],
+                  },
                 },
               },
             },
@@ -423,24 +455,71 @@ router.get("/stats", async (req, res) => {
 
     const uniqueGuestVisitors = data.uniqueGuestVisitors[0]?.count || 0;
 
-    return CustomResponse(res, 200, false, "Search analytics fetched successfully", {
-      totalSearches: totalStats.totalSearches,
-      totalClicks: totalStats.totalClicks,
-      uniqueLoggedInUsers: totalStats.uniqueLoggedInUsers,
-      uniqueGuestVisitors,
-      totalGuestSearches: guestData.totalGuestSearches,
+    return CustomResponse(
+      res,
+      200,
+      false,
+      "Search analytics fetched successfully",
+      {
+        totalSearches: totalStats.totalSearches,
+        totalClicks: totalStats.totalClicks,
+        uniqueLoggedInUsers: totalStats.uniqueLoggedInUsers,
+        uniqueGuestVisitors,
+        totalGuestSearches: guestData.totalGuestSearches,
 
-      topSearchTerms: data.topSearchTerms,
-      topClickedThemes: data.topClickedThemes,
-      topClickedProducts: data.topClickedProducts,
-      topClickedCategories: data.topClickedCategories,
+        topSearchTerms: data.topSearchTerms,
+        topClickedThemes: data.topClickedThemes,
+        topClickedProducts: data.topClickedProducts,
+        topClickedCategories: data.topClickedCategories,
 
-      topUsers: data.topUsers,
-      topVisitors: data.topVisitors,
-      topSearchesNoClick: data.topSearchesNoClick,
-    });
+        topUsers: data.topUsers,
+        topVisitors: data.topVisitors,
+        topSearchesNoClick: data.topSearchesNoClick,
+      },
+    );
   } catch (err) {
     console.error("Search Stats Error:", err);
+    return CustomResponse(res, 500, true, "Server error");
+  }
+});
+
+// Link visitor history with logged-in user
+router.patch("/assign-user", async (req, res) => {
+  try {
+    const { visitorId, userId } = req.body;
+
+    if (!visitorId) {
+      return CustomResponse(res, 400, true, "visitorId is required");
+    }
+
+    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+      return CustomResponse(res, 400, true, "Valid userId is required");
+    }
+
+    const result = await SearchTrackings.updateMany(
+      {
+        visitorId,
+        $or: [{ userId: { $exists: false } }, { userId: null }],
+      },
+      {
+        $set: {
+          userId,
+        },
+      },
+    );
+
+    return CustomResponse(
+      res,
+      200,
+      false,
+      "Visitor history linked successfully",
+      {
+        matchedCount: result.matchedCount,
+        modifiedCount: result.modifiedCount,
+      },
+    );
+  } catch (err) {
+    console.error("Assign User Error:", err);
     return CustomResponse(res, 500, true, "Server error");
   }
 });

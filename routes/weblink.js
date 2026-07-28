@@ -1188,7 +1188,8 @@ async function handleFolderBannerCreation(req, res) {
       });
     }
 
-    let eventName = "SPECIAL EVENT"; 
+    let eventName = ""; 
+    let phoneNo = "";
 
     if (folderDoc.eventId) {
       const eventDoc = await EventinvitesModel.findById(folderDoc.eventId).lean();
@@ -1196,8 +1197,17 @@ async function handleFolderBannerCreation(req, res) {
         eventName = eventDoc.hostName; 
       }
     }
+    if (folderDoc.orderId) {
+      const rawOrderId = folderDoc.orderId - 10800;
 
-    const phoneNo = "9876543210";
+      const order = await Order.findOne({ order_id: rawOrderId }).lean();
+
+      if (order) {
+        phoneNo = order.phone_no || order.online_phone_no || "";
+      }
+    }
+
+    
 
     let leftImageInput = null;
     if (req.file && req.file.buffer) {

@@ -257,6 +257,7 @@ router.post("/import-drive-folder", async (req, res) => {
             ...item,
             link: folderUrl,
             submittedAt: item.submittedAt || new Date(),
+            updatedAt: now,                      
           };
         }
         return item;

@@ -7,6 +7,16 @@ const User = require("../models/user");
 const Users = require("../models/user");
 const mongoose = require("mongoose");
 const capsuleGenerateShortCode = require("../utils/capsuleGenerateShortCode");
+const { uploadFileToS3 } = require("../store/multerS3Config");
+const path = require("path");
+const fsPromises = require("fs").promises; 
+const fs = require("fs");
+const { createCanvas, loadImage, GlobalFonts } = require("@napi-rs/canvas");
+const EventinvitesModel = require("../models/event-invite");
+const multer = require("multer");
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
+
 
 router.put("/assign-to-subfolder", async (req, res) => {
   try {
@@ -1015,5 +1025,237 @@ router.get("/getSubFolders", async (req, res) => {
 });
 
 
+const fontPath = path.resolve(__dirname, "./fonts/CinzelDecorative-Bold.ttf");
+if (fs.existsSync(fontPath)) {
+  GlobalFonts.registerFromPath(fontPath, "CinzelDecorativeBold");
+}
+
+async function generateAndUploadCapsuleBanner(folderId, leftImageInput, eventName, phoneNo = "9876543210") {
+  const tempOriginalPath = path.join("/tmp", `temp-banner-${folderId}-${Date.now()}.png`);
+
+  try {
+    const scale = 4;
+    const baseWidth = 393;
+    const baseHeight = 166;
+
+    const width = baseWidth * scale;
+    const height = baseHeight * scale;
+
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext("2d");
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillRect(0, 0, width, height);
+
+    const leftBoxWidth = 210 * scale;
+    const leftBoxHeight = 166 * scale;
+
+    if (leftImageInput) {
+      try {
+        let leftImg;
+        if (Buffer.isBuffer(leftImageInput)) {
+          leftImg = await loadImage(leftImageInput);
+        } else if (typeof leftImageInput === "string" && leftImageInput.startsWith("http")) {
+          leftImg = await loadImage(leftImageInput);
+        }
+
+        if (leftImg) {
+          const imgRatio = leftImg.width / leftImg.height;
+          const targetRatio = leftBoxWidth / leftBoxHeight;
+
+          let sw = leftImg.width, sh = leftImg.height, sx = 0, sy = 0;
+
+          if (imgRatio > targetRatio) {
+            sw = leftImg.height * targetRatio;
+            sx = (leftImg.width - sw) / 2;
+          } else {
+            sh = leftImg.width / targetRatio;
+            sy = (leftImg.height - sh) / 2;
+          }
+
+          ctx.drawImage(leftImg, sx, sy, sw, sh, 0, 0, leftBoxWidth, leftBoxHeight);
+        }
+      } catch (imgErr) {
+        console.error("Warning: Left image render failed:", imgErr.message);
+      }
+    }
+
+    const bgPath = path.resolve(__dirname, "./default-capsule-bg.webp");
+    const rightBgImg = await loadImage(bgPath);
+
+    const rightX = 160 * scale;
+    const rightWidth = width - rightX;
+
+    ctx.drawImage(rightBgImg, rightX, 0, rightWidth, height);
+    if (eventName) {
+      ctx.save();
+      ctx.fillStyle = "#8462ae";
+
+      const textLength = eventName.trim().length;
+      let fontSize = 13.5;
+
+      if (textLength > 45) {
+        fontSize = 8.5;
+      } else if (textLength > 30) {
+        fontSize = 10.5;
+      } else {
+        fontSize = 13.5;
+      }
+
+      ctx.font = `700 ${fontSize * scale}px "CinzelDecorativeBold", serif`;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+
+      const paddingLeft = 32 * scale;
+      const textStartX = (baseWidth * 0.48) * scale + paddingLeft;
+
+      const maxTextWidth = 145 * scale;
+      const lineHeight = (fontSize * 1.35) * scale;
+
+      const words = eventName.toUpperCase().split(" ");
+      let lines = [];
+      let currentLine = "";
+
+      for (let i = 0; i < words.length; i++) {
+        const testLine = currentLine ? `${currentLine} ${words[i]}` : words[i];
+        const metrics = ctx.measureText(testLine);
+
+        if (metrics.width > maxTextWidth && i > 0) {
+          lines.push(currentLine);
+          currentLine = words[i];
+        } else {
+          currentLine = testLine;
+        }
+      }
+      lines.push(currentLine);
+
+      const totalTextHeight = lines.length * lineHeight;
+      const centerY = (baseHeight * 0.23) * scale;
+      const centeredStartY = centerY - (totalTextHeight / 2);
+
+      lines.forEach((line, index) => {
+        const lineY = centeredStartY + (index * lineHeight);
+        ctx.fillText(line, textStartX, lineY);
+      });
+
+      ctx.restore();
+    }
+
+    const canvasBuffer = await canvas.toBuffer("image/png");
+    await fsPromises.writeFile(tempOriginalPath, canvasBuffer);
+
+    const fileName = `banner-${folderId}-${Date.now()}.png`;
+    const folderPath = "capsule-banners";
+    const contentType = "image/png";
+
+    const s3Result = await uploadFileToS3(
+      tempOriginalPath,
+      fileName,
+      folderPath,
+      phoneNo,
+      contentType
+    );
+
+    return s3Result.Location || s3Result.fileUrl || s3Result;
+
+  } catch (error) {
+    console.error("Backend Banner Generation Error:", error);
+    throw error;
+  } finally {
+    await fsPromises.unlink(tempOriginalPath).catch(() => { });
+  }
+}
+
+async function handleFolderBannerCreation(req, res) {
+  try {
+    const { folderId } = req.body;
+
+    if (!folderId) {
+      return res.status(400).json({
+        success: false,
+        message: "folderId is required",
+      });
+    }
+
+    const folderDoc = await Folder.findById(folderId).lean();
+    if (!folderDoc) {
+      return res.status(404).json({
+        success: false,
+        message: "Folder not found",
+      });
+    }
+
+    let eventName = ""; 
+    let phoneNo = "";
+
+    if (folderDoc.eventId) {
+      const eventDoc = await EventinvitesModel.findById(folderDoc.eventId).lean();
+      if (eventDoc && eventDoc.hostName) {
+        eventName = eventDoc.hostName; 
+      }
+    }
+    if (folderDoc.orderId) {
+      const rawOrderId = folderDoc.orderId - 10800;
+
+      const order = await Order.findOne({ order_id: rawOrderId }).lean();
+
+      if (order) {
+        phoneNo = order.phone_no || order.online_phone_no || "";
+      }
+    }
+
+    
+
+    let leftImageInput = null;
+    if (req.file && req.file.buffer) {
+      leftImageInput = req.file.buffer; 
+    } else if (req.body.leftImageUrl) {
+      leftImageInput = req.body.leftImageUrl;
+    }
+
+    const s3BannerUrl = await generateAndUploadCapsuleBanner(
+      folderId,
+      leftImageInput,
+      eventName,
+      phoneNo
+    );
+
+    const updatedFolder = await Folder.findByIdAndUpdate(
+      folderId,
+      {
+        $set: {
+          capsuleBannerImageUrl: s3BannerUrl,
+        }
+      },
+      { new: true, strict: false }
+    ).lean();
+
+    return res.status(200).json({
+      success: true,
+      message: "Capsule banner generated and saved successfully!",
+      bannerUrl: s3BannerUrl,
+      data: {
+        ...updatedFolder,
+        capsuleBannerImageUrl: s3BannerUrl
+      }
+    });
+
+  } catch (error) {
+    console.error("Controller Error:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to generate banner",
+    });
+  }
+}
+
+router.post(
+  "/generate-banner",
+  upload.single("leftImage"),
+  handleFolderBannerCreation
+);
 
 module.exports = router;

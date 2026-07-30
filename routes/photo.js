@@ -363,7 +363,7 @@ router.get("/thumbnailsWithinProject", async (req, res) => {
           phone: "",
           avatar: ""
         };
-      })
+      }),
     }));
 
     const folderIds = folders.map((f) => f._id);

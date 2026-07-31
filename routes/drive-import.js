@@ -458,14 +458,22 @@ router.post("/add-order-drive-link", async (req, res) => {
           });
         }
 
-      const googlePayload = {
-        targetSheet: "photography_drivelink",
-        orderId: String(Number(order_id) + 10800), 
-        orderFulfilmentDate: order?.order_date
-          ? new Date(order.order_date).toLocaleDateString("en-GB")
-          : "N/A",
-        contentTypes: contentTypesPayload 
-      };
+        const googlePayload = {
+          targetSheet: "photography_drivelink",
+
+          rawOrderId:String(Number(order_id)),
+          orderId: String(Number(order_id) + 10800),
+          orderFulfilmentDate: order?.order_date
+            ? new Date(order.order_date).toLocaleDateString("en-GB")
+            : "N/A",
+
+          customerNumber: phoneNo,
+          service: "Photography",
+          driveLink: folderUrl,
+          webLink: webLink,
+
+          contentTypes: contentTypesPayload
+        };
 
       axios
         .post(

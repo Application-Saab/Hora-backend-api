@@ -458,6 +458,15 @@ router.post("/add-order-drive-link", async (req, res) => {
           });
         }
 
+        const formattedPhoneNo = String(phoneNo)
+          .replace(/\s+/g, "")     // remove spaces
+          .replace(/-/g, "")       // remove dashes
+          .replace(/^\+/, "");     // remove leading +
+
+        const customerNumber = formattedPhoneNo.startsWith("91")
+          ? `+${formattedPhoneNo}`
+          : `+91${formattedPhoneNo}`;
+
         const googlePayload = {
           targetSheet: "photography_drivelink",
 
@@ -467,7 +476,7 @@ router.post("/add-order-drive-link", async (req, res) => {
             ? new Date(order.order_date).toLocaleDateString("en-GB")
             : "N/A",
 
-          customerNumber: phoneNo,
+          customerNumber: `="${customerNumber}"`,
           service: "Photography",
           driveLink: folderUrl,
           webLink: webLink,

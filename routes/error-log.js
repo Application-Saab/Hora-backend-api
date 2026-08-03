@@ -6,7 +6,7 @@ const ErrorLog = require("../models/error-log");
 const { CustomResponse } = require("../store/commonFunction");
 
 // Save Error Logs
-router.post("/", async (req, res) => {
+router.post("/", async (req, res, next) => {
   try {
     const errorData = {
       ...req.body,
@@ -15,13 +15,12 @@ router.post("/", async (req, res) => {
     await ErrorLog.create(errorData);
     res.status(200).json({ success: true });
   } catch (err) {
-    console.error("Failed to save error log:", err);
-    res.status(500).json({ success: false });
+    next(err);
   }
 });
 
 // Get Error Logs List
-router.get("/list", async (req, res) => {
+router.get("/list", async (req, res, next) => {
   try {
     const {
       page = 1,
@@ -188,28 +187,32 @@ router.get("/list", async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("Fetch Error Logs Error:", err);
-    return CustomResponse(res, 500, true, "Server error");
+    next(err);
   }
 });
 
-const globalErrorHandler = (err, req, res, next) => {
+const globalErrorHandler = async (err, req, res, next) => {
   console.error(err);
 
-  ErrorLog.create({
-    type: "server",
-    message: err.message,
-    stack: err.stack,
-    url: req.originalUrl,
-    statusCode: res.statusCode || 500,
-    endpoint: req.method + " " + req.originalUrl,
-  });
+  try {
+    await ErrorLog.create({
+      type: "server",
+      message: err.message,
+      stack: err.stack,
+      url: req.originalUrl,
+      endpoint: `${req.method} ${req.originalUrl}`,
+      statusCode: err.status || 500,
+    });
+  } catch (e) {
+    console.error("Unable to save error", e);
+  }
 
-  res.status(500).json({
-    success: false,
-    message: "Internal Server Error",
-    errorId: Date.now(), // for tracking
-  });
+  return CustomResponse(
+    res,
+    err.status || 500,
+    true,
+    err.isPublic ? err.message : "Internal Server Error",
+  );
 };
 
 module.exports = { router, globalErrorHandler };

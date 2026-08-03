@@ -83,7 +83,7 @@ const normalizeInclusion = (inclusion) => {
   }
 };
 
-router.post("/edit", upload.array("featured_images", 10), async (req, res) => {
+router.post("/edit", upload.array("featured_images", 10), async (req, res, next) => {
   try {
     const id = req.body._id;
 
@@ -198,11 +198,7 @@ router.post("/edit", upload.array("featured_images", 10), async (req, res) => {
       data: updated,
     });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({
-      error: true,
-      message: err.message,
-    });
+    next(err);
   }
 });
 
@@ -299,7 +295,7 @@ router.post("/edit", upload.array("featured_images", 10), async (req, res) => {
 //     }
 // });
 
-router.post("/add", upload.single("featured_image"), async (req, res) => {
+router.post("/add", upload.single("featured_image"), async (req, res, next) => {
   try {
     const file = req.file;
 
@@ -373,12 +369,11 @@ router.post("/add", upload.single("featured_image"), async (req, res) => {
       data: savedData,
     });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: true, message: "Server error" });
+    next(err);
   }
 });
 
-router.post("/update_decoration_status", async (req, res) => {
+router.post("/update_decoration_status", async (req, res, next) => {
   const { _id, status } = req.body;
 
   if (!_id) {
@@ -414,7 +409,7 @@ router.post("/update_decoration_status", async (req, res) => {
       });
     }
   } catch (error) {
-    res.status(400).json({ error: true, message: error.message });
+    next(error);
   }
 });
 

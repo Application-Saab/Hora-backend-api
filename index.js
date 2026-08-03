@@ -476,7 +476,6 @@ app.use("/smartinvite/share", EventShareRoutes);
 app.use("/eventcapsule/share", ShareCapsule);
 app.use("/api/addon", AddonRoutes);
 app.use("/api/error-log", ErrorLogRoutes.router);
-app.use(ErrorLogRoutes.globalErrorHandler);
 app.use("/api/pincode", pinCodes)
 
 const notificationFunction = require("./store/notifications");
@@ -702,27 +701,16 @@ app.get("/test-s3", async (req, res) => {
   }
 });
 
-// Not Found Error
-// app.use(function (req, res) {
-//   res.status(404).json({ message: "Api Not Exits In Server.", error: true });
-// });
-
 app.use((req, res, next) => {
   if (req.path.startsWith("/socket.io")) {
-    return next(); // let socket.io handle it
+    return next();
   }
 
   res.status(404).json({ message: "Api Not Exits In Server.", error: true });
 });
 
-// error handler
-app.use(function (err, req, res, next) {
-  // set locals, only providing error in development
-  res.locals.message = err.message;
-  res.locals.error = req.app.get("env") === "development" ? err : {};
-  // render the error page
-  res.status(err.status || 500);
-  res.json(err);
-});
-
+// Global error handler
+if (process.env.NODE_ENV != "development") {
+  app.use(ErrorLogRoutes.globalErrorHandler);
+}
 module.exports = app;

@@ -16,7 +16,7 @@ const notificationFunction = require("../store/notifications");
 const cityServedModel = require("../models/city-served");
 const cityServedLocalityModel = require("../models/city-served-locality");
 
-router.post('/admin_signup', async (req, res) => {
+router.post('/admin_signup', async (req, res, next) => {
     const data = new UserModel({
         email: req.body.email,
         name: req.body.name,
@@ -41,11 +41,11 @@ router.post('/admin_signup', async (req, res) => {
         });
     }
     catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
+      next(error);
     }
 })
 
-router.post("/admin_signin", async (req, res) => {
+router.post("/admin_signin", async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
@@ -76,11 +76,11 @@ router.post("/admin_signin", async (req, res) => {
       token,
     });
   } catch (error) {
-    return res.status(400).json({ message: error.message, error: true });
+      next(error);
   }
 });
 
-router.post("/admin_user_list", async (req, res) => {
+router.post("/admin_user_list", async (req, res, next) => {
   try {
     let { role, email, phone, _id, page, per_page, city, job_profile, performanceBadge } = req.body;
 
@@ -147,14 +147,11 @@ router.post("/admin_user_list", async (req, res) => {
       });
     }
   } catch (error) {
-    res.status(400).json({
-      error: true,
-      message: error.message,
-    });
+      next(error);
   }
 });
 
-router.post("/update_user_status", async (req, res) => {
+router.post("/update_user_status", async (req, res, next) => {
   const { _id } = req.body;
 
   if (!_id) {
@@ -202,14 +199,11 @@ router.post("/update_user_status", async (req, res) => {
       });
     }
   } catch (error) {
-    return res.status(400).json({
-      message: error.message,
-      error: true,
-    });
+      next(error);
   }
 });
 
-router.post('/admin_user_update', async (req, res) => {
+router.post('/admin_user_update', async (req, res, next) => {
     const id = req.body._id;
     const updatedData = req.body;
     const options = { new: true };
@@ -220,21 +214,21 @@ router.post('/admin_user_update', async (req, res) => {
         return res.json({ error: false,status:200, message: 'Updated Successfully', data:result})
     }
     catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
+        next(error);
     }
 })
 
-router.get('/admin_user_details/:id', async (req, res) => {
+router.get('/admin_user_details/:id', async (req, res, next) => {
     try {
      const data = await UserModel.findById(req.params.id).populate('userAppliance','_id name image').populate('userCuisioness','_id name image').populate('userDishArray','_id name image').populate('userServedLocalities','_id name ')
      return res.json({ error: false,status:200, message: 'Details Fetch Successfully', data:data})
     }
     catch (error) {
-     res.status(400).json({ message: error.message ,error: true})
+      next(error);
      }
 })
 
-router.post('/user_signup', async (req, res) => {
+router.post('/user_signup', async (req, res, next) => {
     try {
         const {
             email,
@@ -306,14 +300,11 @@ router.post('/user_signup', async (req, res) => {
         });
 
     } catch (error) {
-        return res.status(400).json({
-            error: true,
-            message: error.message
-        });
+      next(error);
     }
 });
 
-router.post('/admin_user_address_list', async (req, res) => {
+router.post('/admin_user_address_list', async (req, res, next) => {
     let finder ={
         status: { $ne: 2 }
     };
@@ -345,7 +336,7 @@ router.post('/admin_user_address_list', async (req, res) => {
         }
     }
     catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
+      next(error);
     }
 })
 
@@ -420,7 +411,7 @@ router.get('/getDashboardCount', async (req, res) => {
     });
 })
 
-router.post("/adminOrderList", async (req, res) => {
+router.post("/adminOrderList", async (req, res, next) => {
   try {
     const {
       page = 1,
@@ -546,11 +537,11 @@ router.post("/adminOrderList", async (req, res) => {
       return res.json({ error: true, status: 503, message: "No Record Found" });
     }
   } catch (error) {
-    return res.status(400).json({ message: error.message, error: true });
+      next(error);
   }
 });
 
-router.post("/downloadOrderReport", async (req, res) => {
+router.post("/downloadOrderReport", async (req, res, next) => {
   try {
     const {
       order_id,
@@ -892,17 +883,11 @@ router.post("/downloadOrderReport", async (req, res) => {
       data: orders,
     });
   } catch (error) {
-    console.error(error);
-
-    return res.status(500).json({
-      error: true,
-      status: 500,
-      message: error.message,
-    });
+      next(error);
   }
 });
 
-router.get("/getUserDetails/:id", async (req, res) => {
+router.get("/getUserDetails/:id", async (req, res, next) => {
   try {
     const id = new ObjectId(req.params.id);
 
@@ -915,10 +900,7 @@ router.get("/getUserDetails/:id", async (req, res) => {
       data: data,
     });
   } catch (error) {
-    return res.status(400).json({
-      message: error.message,
-      error: true,
-    });
+      next(error);
   }
 });
 

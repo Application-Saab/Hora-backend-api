@@ -397,8 +397,8 @@ router.post('/add', async(req, res) => {
 	    order_taken_by:req.body.order_taken_by,
         eventName:req.body.eventName,
         inclusionVariables :req.body.inclusionVariables,
-        // notificationStep: 1,
-        // lastNotifiedAt: new Date(),
+        notificationStep: 1,
+        lastNotifiedAt: new Date(),
     })
     if(req.body.items.length>0){
         let hasKey = req.body.items[0].hasOwnProperty('item_id');
@@ -468,8 +468,8 @@ router.post('/add', async(req, res) => {
                            user.city &&
                            user.order_type &&
                            user.city == orderLocality &&
-                           user.order_type == orderType
-                        //    user.performanceBadge == "Elite"
+                           user.order_type == orderType &&
+                           user.performanceBadge == "Elite"
                        );
                    });
 

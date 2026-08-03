@@ -4,11 +4,13 @@ const mongoose = require("mongoose");
 const Joi = require("joi");
 const EventInvite = require("../models/event-invite");
 const EventGuest = require("../models/event-guest");
+const Folders = require("../models/folder");
 const TicketCounter = require("../models/ticket-counter-luckydraw");
 const EventMessage = require("../models/eventMessage");
 const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
+const axios = require("axios");
 
 const {
   generateTemplateThumbnail,
@@ -224,6 +226,26 @@ router.post("/create-event-invite", async (req, res) => {
 
       throw innerErr;
     }
+    
+    if (orderId) {
+      try {
+        const folder = await Folders.findOne({ orderId });
+
+        if (!folder) {
+          console.warn(`Folder not found for orderId: ${orderId}`);
+        } else {
+          await axios.post(
+            `https://horaservices.com/face-api/api/test/generate-banner/${folder._id}`,
+            {},
+          );
+        }
+      } catch (err) {
+        console.error(
+          `Generate banner failed for orderId ${orderId}:`,
+          err.message,
+        );
+      }
+    }
 
     return sendResponse(res, 201, false, "Event created successfully", event);
   } catch (err) {
@@ -391,8 +413,7 @@ router.put("/event-invites/:id", async (req, res) => {
       userId: existing.userId,
     }).sort({ createdAt: 1 });
 
-    const isFirstEvent =
-      oldestEvent && oldestEvent._id.equals(existing._id);
+    const isFirstEvent = oldestEvent && oldestEvent._id.equals(existing._id);
 
     // Update user name if needed
     if (isFirstEvent && !existing.hostName && hostName) {
@@ -414,9 +435,7 @@ router.put("/event-invites/:id", async (req, res) => {
     }
 
     if (eventDate !== undefined) {
-      existing.eventDate = eventDate
-        ? new Date(eventDate)
-        : "";
+      existing.eventDate = eventDate ? new Date(eventDate) : "";
     }
 
     if (eventTime !== undefined) {
@@ -487,7 +506,7 @@ router.put("/event-invites/:id", async (req, res) => {
       200,
       false,
       "Invite updated successfully",
-      updated
+      updated,
     );
   } catch (err) {
     console.error("Update Invite Error:", {
@@ -1065,9 +1084,7 @@ router.post("/:postId/like", async (req, res) => {
       // Unlike
       await postLikes.findByIdAndDelete(existingLike._id);
 
-      post.likeCounts = String(
-        Math.max(currentLikes - 1, 0),
-      );
+      post.likeCounts = String(Math.max(currentLikes - 1, 0));
 
       await post.save();
 
@@ -1251,7 +1268,12 @@ router.put(
 
       // If no file is provided and not clearing, return error
       if (!file && req.body.clearImage !== "true") {
-        return sendResponse(res, 400, true, "File is required or set clearImage=true");
+        return sendResponse(
+          res,
+          400,
+          true,
+          "File is required or set clearImage=true",
+        );
       }
 
       // Handle image upload
@@ -1267,22 +1289,22 @@ router.put(
 
         if (isAnimated) {
           const fileName = `external-template-${Date.now()}${path.extname(file.originalname)}`;
-          
+
           const uploadResult = await uploadImageToS3(
             file.path,
             fileName,
             userId,
             eventId,
             mime,
-            "event-invites"
+            "event-invites",
           );
 
           finalUrl = uploadResult.Location;
           finalKey = uploadResult.Key;
-
         } else {
           const webpFileName = `external-template-${Date.now()}.webp`;
-          const webpPath = file.path.replace(/\.(png|jpeg|jpg)$/i, "") + ".webp";
+          const webpPath =
+            file.path.replace(/\.(png|jpeg|jpg)$/i, "") + ".webp";
 
           await generateTemplateThumbnail(file.path, webpPath);
 
@@ -1292,7 +1314,7 @@ router.put(
             userId,
             eventId,
             "image/webp",
-            "event-invites"
+            "event-invites",
           );
 
           finalUrl = uploadResult.Location;
@@ -1310,14 +1332,12 @@ router.put(
         // Chat room profile bhi update kar do
         await ChatRoom.findOneAndUpdate(
           { eventId },
-          { roomProfileUrl: finalUrl }
+          { roomProfileUrl: finalUrl },
         );
 
         // Cleanup original file
         await deleteFileWithRetry(file.path);
-
-      } 
-      else if (req.body.clearImage === "true") {
+      } else if (req.body.clearImage === "true") {
         // Clear image
         if (existing.externalTemplateImageKey) {
           await deleteFromS3(existing.externalTemplateImageKey);
@@ -1334,14 +1354,13 @@ router.put(
         200,
         false,
         "External template updated successfully",
-        updated
+        updated,
       );
-
     } catch (err) {
       console.error("External Template Update Error:", err);
       return sendResponse(res, 500, true, "Server error");
     }
-  }
+  },
 );
 
 router.get("/all-tracking", async (req, res) => {

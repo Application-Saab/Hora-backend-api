@@ -51,8 +51,8 @@ const orderSchema = new mongoose.Schema({
     eventName : { type: String, default: '' },
     call_checklist: {type: Object, default: {}},
     call_checklist_exists: {type: Boolean, default: false},
-    // notificationStep: { type: Number, default: 0 },
-    // lastNotifiedAt: { type: Date, default: null },
+    notificationStep: { type: Number, default: 0 },
+    lastNotifiedAt: { type: Date, default: null },
     orderDriveLink: {type: String, default:""},
 allDriveLinks: {
   type: [

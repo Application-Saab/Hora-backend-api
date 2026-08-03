@@ -12,7 +12,7 @@ const photographyModel = require('../models/photography');
 
 //........... used api ...........
 
-router.post('/add', async (req, res) => {
+router.post('/add', async (req, res, next) => {
     const {
         name,
         short_link,
@@ -72,14 +72,12 @@ router.post('/add', async (req, res) => {
         });
 
     } catch (error) {
-        return res.status(400).json({
-            error: true,
-            message: error.message
-        });
+        error.isPublic = true;
+        next(error);
     }
 });
 
-router.post('/edit', async (req, res) => {
+router.post('/edit', async (req, res, next) => {
     const id = req.body._id;
     const updatedData = req.body;
     const options = { new: true }; // return updated doc
@@ -103,14 +101,12 @@ router.post('/edit', async (req, res) => {
         }
 
     } catch (error) {
-        return res.status(400).json({
-            error: true,
-            message: error.message
-        });
+        error.isPublic = true;
+        next(error);
     }
 });
 
-router.get('/searchByTag/:tag', async (req, res) => {
+router.get('/searchByTag/:tag', async (req, res, next) => {
     const { tag } = req.params;
 
     try {
@@ -133,16 +129,14 @@ router.get('/searchByTag/:tag', async (req, res) => {
             });
         }
     } catch (error) {
-        return res.status(400).json({
-            error: true,
-            message: error.message
-        });
+        error.isPublic = true;
+        next(error);
     }
 });
 
 //............. not used ..............
 
-router.get('/details/:id', async (req, res) => {
+router.get('/details/:id', async (req, res, next) => {
     try {
         const data = await photographyModel.findById(req.params.id).populate({
             path: "tag"
@@ -150,11 +144,12 @@ router.get('/details/:id', async (req, res) => {
         return res.json({ error: false,status:200, message: 'Details Fetch Successfully', data:data})
     }
     catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 
-router.post('/update_photography_status', async (req, res) => {
+router.post('/update_photography_status', async (req, res, next) => {
     const { _id, status } = req.body;
 
     if (!_id) {
@@ -182,11 +177,12 @@ router.post('/update_photography_status', async (req, res) => {
             return res.json({ error: true, status: 404, message: 'Photograph Not Found' });
         }
     } catch (error) {
-        res.status(400).json({ error: true, message: error.message });
+        error.isPublic = true;
+        next(error);
     }
 });
 
-router.get('/searchByName/:name', async (req, res) => {
+router.get('/searchByName/:name', async (req, res, next) => {
     const { name } = req.params;
 
     try {
@@ -198,11 +194,12 @@ router.get('/searchByName/:name', async (req, res) => {
             return res.json({ error: true, status: 404, message: 'No matching photograph found.' });
         }
     } catch (error) {
-        res.status(400).json({ error: true, message: error.message });
+        error.isPublic = true;
+        next(error);
     }
 });
 
-router.get('/searchByTag/:tag', async (req, res) => {
+router.get('/searchByTag/:tag', async (req, res, next) => {
     const { tag } = req.params;
 
     try {
@@ -225,14 +222,12 @@ router.get('/searchByTag/:tag', async (req, res) => {
             });
         }
     } catch (error) {
-        return res.status(400).json({
-            error: true,
-            message: error.message
-        });
+        error.isPublic = true;
+        next(error);
     }
 });
 
-router.get('/details/:id', async (req, res) => {
+router.get('/details/:id', async (req, res, next) => {
     try {
         const data = await photographyModel.findById(req.params.id).populate({
             path: "tag"
@@ -240,7 +235,8 @@ router.get('/details/:id', async (req, res) => {
         return res.json({ error: false,status:200, message: 'Details Fetch Successfully', data:data})
     }
     catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 

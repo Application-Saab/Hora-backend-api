@@ -20,7 +20,7 @@ const path = require("path");
 const fs = require("fs"); 
 const { getIO } = require("../socket")
 
-router.post('/add_backup1', async(req, res) => {
+router.post('/add_backup1', async(req, res, next) => {
     const otp = commonFunction.OTP();
     const totalorder = await orderModel.find({});
     const data = new orderModel({
@@ -59,11 +59,12 @@ router.post('/add_backup1', async(req, res) => {
         const dataToSave = await data.save();
         return res.json({ error: false, status: 200, message: 'Order Created Successfully', data: dataToSave })
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 
-router.post('/add/v2', async(req, res) => {
+router.post('/add/v2', async(req, res, next) => {
     const totalorder = await orderModel.find({});
     const otp = commonFunction.OTP();
     const data = new orderModel({
@@ -161,11 +162,12 @@ router.post('/add/v2', async(req, res) => {
             return res.json({ error: true, status: 503, message: 'Sorry, we are not in your city!! We will notify you as soon we enter into the city.' }) 
         }
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 
-router.post('/add/v3', async(req, res) => {
+router.post('/add/v3', async(req, res, next) => {
     const totalorder = await orderModel.find({});
     const otp = commonFunction.OTP();
     const data = new orderModel({
@@ -254,11 +256,12 @@ router.post('/add/v3', async(req, res) => {
         })
 
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 
-router.post('/add_backup', async(req, res) => {
+router.post('/add_backup', async(req, res, next) => {
     const totalorder = await orderModel.find({});
     const otp = commonFunction.OTP();
     const data = new orderModel({
@@ -357,11 +360,12 @@ router.post('/add_backup', async(req, res) => {
             }
         })
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 
-router.post('/add', async(req, res) => {
+router.post('/add', async(req, res, next) => {
     const lastOrder = await orderModel.findOne().sort({ order_id: -1 }).select('order_id');
     const nextOrderId = lastOrder ? lastOrder.order_id + 1 : 1;
     const otp = commonFunction.OTP();
@@ -533,11 +537,12 @@ router.post('/add', async(req, res) => {
             }
         })
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 
-router.post('/edit', async (req, res) => {
+router.post('/edit', async (req, res, next) => {
   try {
     const id = req.body._id;
 
@@ -555,20 +560,22 @@ router.post('/edit', async (req, res) => {
     return res.json({ error: false, status: 200, message: 'Updated Successfully', data: result });
   } catch (error) {
     console.error("Error updating order:", error);
-    return res.status(400).json({ message: error.message, error: true });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.get('/details/:id', async(req, res) => {
+router.get('/details/:id', async(req, res, next) => {
     try {
         const data = await orderModel.findById(req.params.id).populate("categoryId")
         return res.json({ error: false, status: 200, message: 'Details Fetch Successfully', data: data })
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 
-router.post('/update_order_status', async (req, res) => {
+router.post('/update_order_status', async (req, res, next) => {
   const { _id, status } = req.body;
 
   if (!_id) {
@@ -633,11 +640,12 @@ router.post('/update_order_status', async (req, res) => {
     }
 
   } catch (error) {
-    return res.status(400).json({ message: error.message, error: true });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.post('/order_list', async(req, res) => {
+router.post('/order_list', async(req, res, next) => {
     let finder = {
         status: { $ne: 2 }
     };
@@ -684,11 +692,12 @@ router.post('/order_list', async(req, res) => {
             return res.json({ error: true, status: 503, message: 'No Record Found' })
         }
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 
-router.get('/order_details/:id', async(req, res) => {
+router.get('/order_details/:id', async(req, res, next) => {
     try {
         const order = await orderModel.findById(req.params.id).populate('addressId');
         order.items.forEach(element => {
@@ -709,11 +718,12 @@ router.get('/order_details/:id', async(req, res) => {
             }
         }, 1000);
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+    error.isPublic = true;
+    next(error);
     }
 })
 
-router.get('/order_details/v1/:id', async (req, res) => {
+router.get('/order_details/v1/:id', async (req, res, next) => {
     const { id } = req.params;
 
     try {
@@ -751,14 +761,12 @@ router.get('/order_details/v1/:id', async (req, res) => {
         }
 
     } catch (error) {
-        return res.status(400).json({
-            error: true,
-            message: error?.message || "Something went wrong"
-        });
+    error.isPublic = true;
+    next(error);
     }
 });
 
-router.post('/acceptOrder', async (req, res) => {
+router.post('/acceptOrder', async (req, res, next) => {
     const { requestdata } = req.body;
 
     if (!req.body._id) {
@@ -820,11 +828,12 @@ router.post('/acceptOrder', async (req, res) => {
             });
         }
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true });
+        error.isPublic = true;
+        next(error);
     }
 });
 
-router.post('/startOrder', async (req, res) => {
+router.post('/startOrder', async (req, res, next) => {
     const { requestdata } = req.body;
 
     if (!req.body._id) {
@@ -888,11 +897,12 @@ router.post('/startOrder', async (req, res) => {
         }
 
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true });
+        error.isPublic = true;
+        next(error);
     }
 });
 
-router.post('/completeOrder', async (req, res) => {
+router.post('/completeOrder', async (req, res, next) => {
     const { _id, userId, job_end_time } = req.body;
 
     if (!_id) {
@@ -951,14 +961,12 @@ router.post('/completeOrder', async (req, res) => {
         });
 
     } catch (error) {
-        return res.status(400).json({
-            error: true,
-            message: error.message
-        });
+        error.isPublic = true;
+        next(error);
     }
 });
 
-router.get('/order_details/:id', async(req, res) => {
+router.get('/order_details/:id', async(req, res, next) => {
     try {
         const order = await orderModel.findById(req.params.id).populate('addressId');
         order.items.forEach(element => {
@@ -979,12 +987,13 @@ router.get('/order_details/:id', async(req, res) => {
             }
         }, 1000);
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+    error.isPublic = true;
+    next(error);
     }
 })
 
 //not used
-router.post('/publicOrderList/v2', async(req, res) => {
+router.post('/publicOrderList/v2', async(req, res, next) => {
     let finder = { status: 1 };
     finder['toId'] = "";
     
@@ -1040,12 +1049,13 @@ router.post('/publicOrderList/v2', async(req, res) => {
         }
         
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 
 
-router.get('/order_view_details/:id', async(req, res) => {
+router.get('/order_view_details/:id', async(req, res, next) => {
     let responseobject={};
     try {
         const order = await orderModel.findById(req.params.id).populate('addressId').populate('fromId').populate('addressId').populate({
@@ -1184,12 +1194,13 @@ router.get('/order_view_details/:id', async(req, res) => {
         }
         }, 3000);
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 
 // not used in admin
-router.post('/getInProgressOrderList', async(req, res) => {
+router.post('/getInProgressOrderList', async(req, res, next) => {
     let finder = {fromId:req.body.userId};
     finder[`order_status`] = {
         $in: [0,1,2]
@@ -1258,12 +1269,13 @@ router.post('/getInProgressOrderList', async(req, res) => {
             return res.json({ error: true, status: 503, message: 'No Record Found' })
         }
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 
 
-router.post('/add-order-feedback', async (req, res) => {
+router.post('/add-order-feedback', async (req, res, next) => {
     const data = new orderFeedbackModel({
         slabPicture: req.body.slabPicture,
         sinkPicture: req.body.sinkPicture,
@@ -1289,12 +1301,13 @@ router.post('/add-order-feedback', async (req, res) => {
         return res.json({ error: false,status:200, message: 'Order Feedback Added Successfully', data:dataToSave})
     }
     catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 
 
-router.post('/order_status_list', async(req, res) => {
+router.post('/order_status_list', async(req, res, next) => {
     if (!req.body._id) {
         return res.json({
             error: true,
@@ -1365,12 +1378,13 @@ router.post('/order_status_list', async(req, res) => {
             return res.json({ error: true,status:503, message: 'No Record Found'})
         }
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 
 
-router.post('/updateBookingDetails', async(req, res) => {
+router.post('/updateBookingDetails', async(req, res, next) => {
     if (!req.body._id) {
         return res.json({
             error: true,
@@ -1393,12 +1407,13 @@ router.post('/updateBookingDetails', async(req, res) => {
             return res.json({ error: true, status: 503, message: 'No Order Found' })
         }
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 
 
-router.post('/createCustomerFeedback', async(req, res) => {
+router.post('/createCustomerFeedback', async(req, res, next) => {
     if (!req.body._id) {
         return res.json({
             error: true,
@@ -1433,12 +1448,13 @@ router.post('/createCustomerFeedback', async(req, res) => {
             return res.json({ error: true, status: 503, message: 'No Order Found' })
         }
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 
 
-router.post('/user_review_list', async(req, res) => {
+router.post('/user_review_list', async(req, res, next) => {
     if (!req.body._id) {
         return res.json({
             error: true,
@@ -1478,11 +1494,12 @@ router.post('/user_review_list', async(req, res) => {
             return res.json({ error: true,status:503, message: 'No Record Found'})
         }
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 
-router.post('/cancelOrder', async (req, res) => {
+router.post('/cancelOrder', async (req, res, next) => {
     const { _id } = req.body;
 
     if (!_id) {
@@ -1516,14 +1533,12 @@ router.post('/cancelOrder', async (req, res) => {
             data: result
         });
     } catch (error) {
-        return res.status(400).json({
-            error: true,
-            message: error.message
-        });
+    error.isPublic = true;
+    next(error);
     }
 });
 
-router.get('/booking_details/:id', async(req, res) => {
+router.get('/booking_details/:id', async(req, res, next) => {
     let responseOrderObject={};
     try {
         const order = await orderModel.findById(req.params.id).populate('addressId').populate('fromId').populate('addressId').populate({
@@ -1642,11 +1657,12 @@ router.get('/booking_details/:id', async(req, res) => {
             return res.json({ error: false, status: 200, message: 'Fetch Data Successfully', data: responseOrderObject }) 
         }, 1000);
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 
-router.post('/user_order_list', async(req, res) => {
+router.post('/user_order_list', async(req, res, next) => {
     if (!req.body._id) {
         return res.json({
             error: true,
@@ -1749,11 +1765,12 @@ router.post('/user_order_list', async(req, res) => {
         }
 
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        error.isPublic = true;
+        next(error);
     }
 });
 
-router.post('/publicOrderList/v1', async(req, res) => {
+router.post('/publicOrderList/v1', async(req, res, next) => {
     const userId  = req.body.userId;
     if (!userId) {
         return res.json({
@@ -1821,12 +1838,13 @@ router.post('/publicOrderList/v1', async(req, res) => {
             return res.json({ error: true,status:503, message: 'Wrong User Id'})
         }
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 
 
-router.post('/publicOrderList/v2', async(req, res) => {
+router.post('/publicOrderList/v2', async(req, res, next) => {
     const userId  = req.body.userId;
     if (!userId) {
         return res.json({
@@ -1894,12 +1912,13 @@ router.post('/publicOrderList/v2', async(req, res) => {
             return res.json({ error: true,status:503, message: 'Wrong User Id'})
         }
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 
 //not used
-router.post('/getOrderCityCheck', async(req, res) => {
+router.post('/getOrderCityCheck', async(req, res, next) => {
     let finder ={ status: 1 };
     try {
         const city_served = await cityServedModel.find(finder);
@@ -1916,11 +1935,12 @@ router.post('/getOrderCityCheck', async(req, res) => {
         }
     }
     catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
+    error.isPublic = true;
+    next(error);
     }
 })
 
-router.post('/publicOrderList', async(req, res) => {
+router.post('/publicOrderList', async(req, res, next) => {
     let finder = { status: 1 };
     finder['toId'] = "";
     
@@ -1954,11 +1974,12 @@ router.post('/publicOrderList', async(req, res) => {
         }
         
     } catch (error) {
-        res.status(400).json({ message: error.message, error: true })
+    error.isPublic = true;
+    next(error);
     }
 })
 
-router.get('/getIngredientByOrder/:id', async (req, res) => {
+router.get('/getIngredientByOrder/:id', async (req, res, next) => {
     try {
         const order = await orderModel
             .find({ order_id: req.params.id })
@@ -2071,15 +2092,13 @@ router.get('/getIngredientByOrder/:id', async (req, res) => {
             });
         }
     } catch (error) {
-        return res.status(400).json({
-            message: error.message,
-            error: true
-        });
+        error.isPublic = true;
+        next(error);
     }
 });
 
 // Decoration Order Details
-router.get('/order_details_decoration/:id', async (req, res) => {
+router.get('/order_details_decoration/:id', async (req, res, next) => {
   try {
     const order = await orderModel
       .findOne({ order_id: req.params.id })
@@ -2114,11 +2133,12 @@ router.get('/order_details_decoration/:id', async (req, res) => {
 
   } catch (err) {
     console.error('Error fetching order + decorations:', err);
-    return res.status(500).json({ error: true, status: 500, message: err.message });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.get('/order_details_food_delivery/:id', async (req, res) => {
+router.get('/order_details_food_delivery/:id', async (req, res, next) => {
   try {
     const order = await orderModel
       .find({ order_id: req.params.id })
@@ -2207,11 +2227,12 @@ router.get('/order_details_food_delivery/:id', async (req, res) => {
     });
 
   } catch (error) {
-    return res.status(400).json({ message: error.message, error: true });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.get('/order_details_photography/:id', async (req, res) => {
+router.get('/order_details_photography/:id', async (req, res, next) => {
     try {
         const order = await orderModel.find({ order_id: req.params.id })
             .populate('addressId')
@@ -2258,15 +2279,13 @@ router.get('/order_details_photography/:id', async (req, res) => {
         }
 
     } catch (error) {
-        return res.status(400).json({
-            error: true,
-            message: error?.message || "Something went wrong"
-        });
+        error.isPublic = true;
+        next(error);
     }
 });
  
 // SAVE CALL CHECKLIST (POST API)
-router.post("/save-call-checklist", async (req, res) => {
+router.post("/save-call-checklist", async (req, res, next) => {
   try {
     const { orderId, call_checklist, eventName } = req.body;
 
@@ -2312,15 +2331,13 @@ router.post("/save-call-checklist", async (req, res) => {
 
   } catch (error) {
     console.error("Error saving checklist:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // EDIT CALL CHECKLIST (PUT API)
-router.put("/edit-call-checklist/:orderId", async (req, res) => {
+router.put("/edit-call-checklist/:orderId", async (req, res, next) => {
   try {
     const { orderId } = req.params;
     const { eventName, call_checklist } = req.body;
@@ -2399,12 +2416,13 @@ router.put("/edit-call-checklist/:orderId", async (req, res) => {
 
   } catch (error) {
     console.error("Error updating checklist:", error);
-    return res.status(500).json({ success: false, message: error.message });
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // DELETE TEH UPLOAD CALLCHECKLIST IMAGE 
-router.post("/delete-callchecklist-image", async (req, res) => {
+router.post("/delete-callchecklist-image", async (req, res, next) => {
   try {
     const { orderId, imageName, itemKey } = req.body;
 
@@ -2443,15 +2461,13 @@ router.post("/delete-callchecklist-image", async (req, res) => {
 
   } catch (err) {
     console.error("DELETE CALL CHECKLIST IMAGE ERROR", err);
-    return res.status(500).json({
-      message: "Error deleting image",
-      error: err.message
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // PUT /api/order/updateImageTags  (images on website, not on the website)
-router.put("/updateImageTags", async (req, res) => {
+router.put("/updateImageTags", async (req, res, next) => {
   try {
     const { orderId, images } = req.body;
 
@@ -2513,11 +2529,8 @@ router.put("/updateImageTags", async (req, res) => {
     });
 
   } catch (err) {
-    return res.status(500).json({
-      error: true,
-      status: 500,
-      message: err.message,
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
@@ -2642,15 +2655,12 @@ router.put("/add-rating-reviews", async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Rating Error:", error);
-    return res.status(500).json({
-      error: true,
-      message: "Internal server error",
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.post("/rating-notification", async (req, res) => {
+router.post("/rating-notification", async (req, res, next) => {
 
   try {
 
@@ -2673,16 +2683,9 @@ router.post("/rating-notification", async (req, res) => {
     });
 
   } catch (error) {
-
-    console.error(error);
-
-    return res.status(500).json({
-      error: true,
-      message: "Server error"
-    });
-
+    error.isPublic = true;
+    next(error);
   }
-
 });
 
 

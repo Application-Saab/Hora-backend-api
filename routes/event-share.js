@@ -37,7 +37,7 @@ function formateDateInDMDFormat(dateInput) {
 }
 
 // fetch shorten urls after sharing
-router.get("/:shortCode", async (req, res) => {
+router.get("/:shortCode", async (req, res, next) => {
   try {
     const { shortCode } = req.params;
 
@@ -148,13 +148,13 @@ router.get("/:shortCode", async (req, res) => {
 
     // Normal user direct redirection
     return res.redirect(shareUrl);
-  } catch (err) {
-    console.log(err);
-    return res.status(500).send("Internal Server Error");
+  } catch (error) {
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.post("/generate-share-code/:eventId", async (req, res) => {
+router.post("/generate-share-code/:eventId", async (req, res, next) => {
   try {
     const { eventId } = req.params;
     const { fromInternational } = req.body;
@@ -200,10 +200,9 @@ router.post("/generate-share-code/:eventId", async (req, res) => {
         shortUrl: `https://horaservices.com/smartinvite/share/${shortCode}`,
       },
     );
-  } catch (err) {
-    console.log(err);
-
-    return CustomResponse(res, 500, true, "Server error");
+  } catch (error) {
+    error.isPublic = true;
+    next(error);
   }
 });
 

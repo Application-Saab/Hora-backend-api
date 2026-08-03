@@ -24,7 +24,7 @@ const s3 = new AWS.S3({
 });
 
 // Create a folder (POST /api/folders)
-router.post("/CreateFolder", async (req, res) => {
+router.post("/CreateFolder", async (req, res, next) => {
   try {
     const { folderName, customerId, vendorId } = req.body;
 
@@ -53,12 +53,13 @@ router.post("/CreateFolder", async (req, res) => {
 
     res.status(201).json({ message: "Folder created successfully.", folder });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // Delete a folder (DELETE /api/photo/DeleteFolder)
-router.post("/DeleteFolder", async (req, res) => {
+router.post("/DeleteFolder", async (req, res, next) => {
   try {
     const { folderName } = req.body;
     const { customerId } = req.body; // assuming customerId is needed to validate the request
@@ -85,11 +86,12 @@ router.post("/DeleteFolder", async (req, res) => {
       .status(200)
       .json({ message: `Folder '${folderName}' deleted successfully.` });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.post("/DeleteFolder", async (req, res) => {
+router.post("/DeleteFolder", async (req, res, next) => {
   try {
     const { folderName, customerId, vendorId } = req.body;
 
@@ -146,12 +148,13 @@ router.post("/DeleteFolder", async (req, res) => {
       message: `Folder '${folderName}' deleted successfully from both database and S3.`,
     });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // Update folder name (PUT /api/folders/:folderName)
-router.post("/UpdateFolder", async (req, res) => {
+router.post("/UpdateFolder", async (req, res, next) => {
   try {
     const { folderName } = req.body; // Old folder name from the URL
     const { newFolderName, customerId } = req.body; // New folder name and customerId from request body
@@ -190,12 +193,13 @@ router.post("/UpdateFolder", async (req, res) => {
       .status(200)
       .json({ message: `Folder name updated successfully.`, folder });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // Get all folders by customerId (GET /api/folders/:customerId)
-router.get("/GetFoldersByCustomerId/:customerId", async (req, res) => {
+router.get("/GetFoldersByCustomerId/:customerId", async (req, res, next) => {
   try {
     const { customerId } = req.params;
 
@@ -217,11 +221,12 @@ router.get("/GetFoldersByCustomerId/:customerId", async (req, res) => {
       .status(200)
       .json({ message: "Folders retrieved successfully.", folders });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.post("/upload", upload.array("files", 300), async (req, res) => {
+router.post("/upload", upload.array("files", 300), async (req, res, next) => {
   try {
     const { folderName, customerId, vendorId, phoneNo } = req.body;
 
@@ -309,11 +314,12 @@ router.post("/upload", upload.array("files", 300), async (req, res) => {
     });
   } catch (error) {
     console.error("Upload error:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.get("/thumbnailsWithinProject", async (req, res) => {
+router.get("/thumbnailsWithinProject", async (req, res, next) => {
   try {
     const { folderName, customerId, subFolderId, page, limit } = req.query;
 
@@ -417,14 +423,12 @@ router.get("/thumbnailsWithinProject", async (req, res) => {
     res.status(200).json(responsePayload);
   } catch (error) {
     console.error("Error fetching thumbnails:", error);
-    res.status(500).json({
-      message: "Server error",
-      error: error.message,
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.get("/originalImage", async (req, res) => {
+router.get("/originalImage", async (req, res, next) => {
   try {
     const { thumbnailKey } = req.query;
 
@@ -461,13 +465,12 @@ router.get("/originalImage", async (req, res) => {
     return res.status(200).json({ originalImageUrl });
   } catch (error) {
     console.error("Error fetching original image:", error);
-    return res
-      .status(500)
-      .json({ message: "Server error", error: error.message });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.post("/deleteImage", async (req, res) => {
+router.post("/deleteImage", async (req, res, next) => {
   try {
     const { thumbnailKey } = req.body;
 
@@ -498,7 +501,8 @@ router.post("/deleteImage", async (req, res) => {
     });
   } catch (error) {
     console.error("Error deleting image pair:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    error.isPublic = true;
+    next(error);
   }
 });
 
@@ -573,7 +577,7 @@ router.post(
     { name: "previewImage", maxCount: 1 },
     { name: "bgImage", maxCount: 1 },
   ]),
-  async (req, res) => {
+  async (req, res, next) => {
     let previewFilePath = null;
     let webpPath = null;
     let bgFilePath = null;
@@ -668,10 +672,8 @@ router.post(
 
     } catch (error) {
       console.error("Upload template error:", error);
-      res.status(500).json({ 
-        message: "Server error", 
-        error: error.message 
-      });
+      error.isPublic = true;
+      next(error);
     }
   }
 );
@@ -683,7 +685,7 @@ router.put(
     { name: "previewImage", maxCount: 1 },
     { name: "bgImage", maxCount: 1 },
   ]),
-  async (req, res) => {
+  async (req, res, next) => {
     let previewFilePath = null;
     let webpPath = null;
     let bgFilePath = null;
@@ -871,17 +873,14 @@ router.put(
         template: updatedTemplate,
       });
     } catch (error) {
-      return res.status(500).json({
-        success: false,
-        message: "Server error",
-        error: error.message,
-      });
+    error.isPublic = true;
+    next(error);
     }
   }
 );
 
 // Get all templates (limited fields)
-router.get("/templates", async (req, res) => {
+router.get("/templates", async (req, res, next) => {
   try {
     const templates = await TemplateMaster.find(
       {},
@@ -890,12 +889,13 @@ router.get("/templates", async (req, res) => {
     res.status(200).json({ templates });
   } catch (error) {
     console.error("Error fetching templates:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // Get single template by ID (full data)
-router.get("/templates/:id", async (req, res) => {
+router.get("/templates/:id", async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -916,16 +916,13 @@ router.get("/templates/:id", async (req, res) => {
     return res.status(200).json({ success: true, template });
   } catch (error) {
     console.error("Error fetching template by ID:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Server error",
-      error: error.message,
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // Get templates by category
-router.get("/templates/category/:category", async (req, res) => {
+router.get("/templates/category/:category", async (req, res, next) => {
   const { category } = req.params;
   try {
     const templates = await TemplateMaster.find({ category }).sort({
@@ -934,12 +931,13 @@ router.get("/templates/category/:category", async (req, res) => {
     res.status(200).json({ templates });
   } catch (error) {
     console.error("Error fetching templates by category:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // Delete image from S3 by key
-router.post("/delete-image-by-key", async (req, res) => {
+router.post("/delete-image-by-key", async (req, res, next) => {
   try {
     const { key } = req.body;
 
@@ -957,11 +955,8 @@ router.post("/delete-image-by-key", async (req, res) => {
     });
   } catch (error) {
     console.error("Error deleting from S3:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to delete image",
-      error: error.message,
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 

@@ -5,7 +5,7 @@ const Dish = require("../models/dish");
 const { CustomResponse } = require("../store/commonFunction");
 
 // Create food package
-router.post("/createFoodPackage", async (req, res) => {
+router.post("/createFoodPackage", async (req, res, next) => {
   try {
     const { name, image, price, actualPrice, foodType, packageType } = req.body;
 
@@ -37,13 +37,13 @@ router.post("/createFoodPackage", async (req, res) => {
       newPackage,
     );
   } catch (error) {
-    console.error(error);
-    return CustomResponse(res, 500, true, "Server error");
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // Update food package
-router.patch("/updateFoodPackage/:id", async (req, res) => {
+router.patch("/updateFoodPackage/:id", async (req, res, next) => {
   try {
     const updatedPackage = await FoodPackage.findByIdAndUpdate(
       req.params.id,
@@ -59,12 +59,13 @@ router.patch("/updateFoodPackage/:id", async (req, res) => {
       updatedPackage,
     );
   } catch (error) {
-    return CustomResponse(res, 500, true, "Server error");
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // GET packages by packageType and packageStatus
-router.post("/admin_food_packages_list", async (req, res) => {
+router.post("/admin_food_packages_list", async (req, res, next) => {
   try {
     const { page, per_page, name, packageType, packageStatus } = req.body;
 
@@ -115,13 +116,13 @@ router.post("/admin_food_packages_list", async (req, res) => {
       paginate,
     });
   } catch (error) {
-    console.error(error);
-    return CustomResponse(res, 500, true, "Server error");
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // Add new dish to package
-router.post("/addDishToPackage", async (req, res) => {
+router.post("/addDishToPackage", async (req, res, next) => {
   try {
     const { packageId, dishIds } = req.body;
 
@@ -163,13 +164,13 @@ router.post("/addDishToPackage", async (req, res) => {
       packageUpdate,
     );
   } catch (error) {
-    console.error(error);
-    return CustomResponse(res, 500, true, "Server error");
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // Remove dish from package
-router.post("/removeDishFromPackage", async (req, res) => {
+router.post("/removeDishFromPackage", async (req, res, next) => {
   try {
     const { packageId, dishId } = req.body;
 
@@ -212,12 +213,12 @@ router.post("/removeDishFromPackage", async (req, res) => {
       packageUpdate,
     );
   } catch (error) {
-    console.error(error);
-    return CustomResponse(res, 500, true, "Server error");
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.get("/getAllFoodPackageList", async (req, res) => {
+router.get("/getAllFoodPackageList", async (req, res, next) => {
   try {
     const { packageType, foodType } = req.query;
 
@@ -245,8 +246,8 @@ router.get("/getAllFoodPackageList", async (req, res) => {
       packages,
     );
   } catch (error) {
-    console.error(error);
-    return CustomResponse(res, 500, true, "Server error");
+    error.isPublic = true;
+    next(error);
   }
 });
 

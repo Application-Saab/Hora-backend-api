@@ -73,7 +73,7 @@ const normalizeInclusion = (inclusion) => {
 router.post(
   "/decoration/add",
   upload.array("featured_images", 10),
-  async (req, res) => {
+  async (req, res, next) => {
     try {
       const files = req.files;
 
@@ -153,16 +153,13 @@ router.post(
         data: saved,
       });
     } catch (err) {
-      console.error(err);
-      return res.status(500).json({
-        error: true,
-        message: err.message,
-      });
+    error.isPublic = true;
+    next(error);
     }
   },
 );
 
-router.post("/add", async (req, res) => {
+router.post("/add", async (req, res, next) => {
   try {
     const cuisineId = req.body?.cuisineId?.[0];
 
@@ -266,14 +263,12 @@ router.post("/add", async (req, res) => {
       });
     }
   } catch (error) {
-    return res.status(400).json({
-      error: true,
-      message: error.message,
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.post("/edit", async (req, res) => {
+router.post("/edit", async (req, res, next) => {
   const id = req.body?._id;
   const updatedData = req.body;
   const options = { new: true };
@@ -315,14 +310,12 @@ router.post("/edit", async (req, res) => {
       data: result,
     });
   } catch (error) {
-    return res.status(400).json({
-      message: error.message,
-      error: true,
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.get("/details/:id", async (req, res) => {
+router.get("/details/:id", async (req, res, next) => {
   try {
     const id = req.params?.id;
 
@@ -335,14 +328,12 @@ router.get("/details/:id", async (req, res) => {
       data: data,
     });
   } catch (error) {
-    return res.status(400).json({
-      message: error.message,
-      error: true,
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.post("/update_dish_status", async (req, res) => {
+router.post("/update_dish_status", async (req, res, next) => {
   const { _id } = req.body;
 
   // Validation
@@ -377,14 +368,12 @@ router.post("/update_dish_status", async (req, res) => {
       message: "Status Update Successfully",
     });
   } catch (error) {
-    return res.status(400).json({
-      message: error.message,
-      error: true,
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.post("/user_dish_list", async (req, res) => {
+router.post("/user_dish_list", async (req, res, next) => {
   let finder = {
     status: 1,
   };
@@ -458,13 +447,14 @@ router.post("/user_dish_list", async (req, res) => {
       return res.json({ error: true, status: 503, message: "No Record Found" });
     }
   } catch (error) {
-    res.status(400).json({ message: error.message, error: true });
+    error.isPublic = true;
+    next(error);
   }
 });
 
 var ObjectId = require("mongoose").Types.ObjectId;
 
-router.post("/admin_dish_list", async (req, res) => {
+router.post("/admin_dish_list", async (req, res, next) => {
   try {
     let finder = {
       status: { $ne: 2 },
@@ -621,14 +611,12 @@ router.post("/admin_dish_list", async (req, res) => {
       });
     }
   } catch (error) {
-    return res.status(400).json({
-      message: error.message,
-      error: true,
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.get("/getRandomDishList", async (req, res) => {
+router.get("/getRandomDishList", async (req, res, next) => {
   let finder = {
     status: 1,
   };
@@ -667,11 +655,12 @@ router.get("/getRandomDishList", async (req, res) => {
       return res.json({ error: true, status: 503, message: "No Record Found" });
     }
   } catch (error) {
-    res.status(400).json({ message: error.message, error: true });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.get("/getAllDishesList", async (req, res) => {
+router.get("/getAllDishesList", async (req, res, next) => {
   try {
     const dishes = await dishModel
       .find({
@@ -686,8 +675,8 @@ router.get("/getAllDishesList", async (req, res) => {
       dishes,
     );
   } catch (err) {
-    console.error("Get All Dishes Error:", err);
-    return CustomResponse(res, 500, true, "Server error");
+    error.isPublic = true;
+    next(error);
   }
 });
 

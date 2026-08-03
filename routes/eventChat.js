@@ -12,7 +12,7 @@ const sendResponse = (res, status, error, message, data = null) =>
   res.status(status).json({ error, status, message, data });
 
 // Create direct chat room for one-to-one chat
-router.post("/create-direct-room", async (req, res) => {
+router.post("/create-direct-room", async (req, res, next) => {
   try {
     const { members, eventId } = req.body;
     const ioInstance = getIO();
@@ -145,17 +145,14 @@ router.post("/create-direct-room", async (req, res) => {
       });
     }
 
-    console.error("Create Direct Room Error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // Get all rooms joined by a user
 
-router.get("/chatrooms/user/:userId", async (req, res) => {
+router.get("/chatrooms/user/:userId", async (req, res, next) => {
   try {
     const { userId } = req.params;
 
@@ -209,18 +206,14 @@ router.get("/chatrooms/user/:userId", async (req, res) => {
     ]);
 
     return sendResponse(res, 200, false, "Rooms fetched successfully", rooms);
-  } catch (err) {
-    console.error("Fetch Rooms Error:", {
-      message: err.message,
-      stack: err.stack,
-      userId: req.params.userId,
-    });
-    return sendResponse(res, 500, true, "Server error");
+  } catch (error) {
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // Get chat messages for a room with pagination
-router.get("/messages/:groupId", async (req, res) => {
+router.get("/messages/:groupId", async (req, res, next) => {
   try {
     const { groupId } = req.params;
     const limit = parseInt(req.query.limit) || 10000;
@@ -245,17 +238,13 @@ router.get("/messages/:groupId", async (req, res) => {
       messages.reverse()
     );
   } catch (err) {
-    console.error("Fetch Messages Error:", {
-      message: err.message,
-      stack: err.stack,
-      groupId: req.params.groupId,
-    });
-    return sendResponse(res, 500, true, "Server error");
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // existing mark-read route
-router.post("/mark-read", async (req, res) => {
+router.post("/mark-read", async (req, res, next) => {
   try {
     const { groupId, userId } = req.body;
     if (
@@ -289,8 +278,8 @@ router.post("/mark-read", async (req, res) => {
       unreadCounts: allCounts,
     });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: true, message: "Server error" });
+    error.isPublic = true;
+    next(error);
   }
 });
 
@@ -304,7 +293,7 @@ router.get("/chatrooms/:userId/unread", async (req, res) => {
 });
 
 // subscribe for notification
-router.post("/subscribe", async (req, res) => {
+router.post("/subscribe", async (req, res, next) => {
   try {
     const { userId, groupId, subscription, fcmToken } = req.body;
     if (!userId)
@@ -342,14 +331,14 @@ router.post("/subscribe", async (req, res) => {
         .json({ error: true, message: "subscription or fcmToken required" });
     }
     return res.json({ error: false });
-  } catch (err) {
-    console.error("subscribe error", err);
-    return res.status(500).json({ error: true, message: "server error" });
+  } catch (error) {
+    error.isPublic = true;
+    next(error);
   }
 });
 
 //  unsubscribe for notification
-router.post("/unsubscribe", async (req, res) => {
+router.post("/unsubscribe", async (req, res, next) => {
   try {
     const { endpoint, fcmToken } = req.body;
     if (endpoint) {
@@ -360,9 +349,9 @@ router.post("/unsubscribe", async (req, res) => {
       return res.json({ error: false });
     }
     return res.status(400).json({ error: true });
-  } catch (err) {
-    console.error("unsubscribe", err);
-    return res.status(500).json({ error: true });
+  } catch (error) {
+    error.isPublic = true;
+    next(error);
   }
 });
 

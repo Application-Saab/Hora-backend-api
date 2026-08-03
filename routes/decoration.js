@@ -413,7 +413,7 @@ router.post("/update_decoration_status", async (req, res, next) => {
   }
 });
 
-router.get("/searchByName/:name", async (req, res) => {
+router.get("/searchByName/:name", async (req, res, next) => {
   const { name } = req.params;
 
   try {
@@ -436,14 +436,12 @@ router.get("/searchByName/:name", async (req, res) => {
       });
     }
   } catch (error) {
-    return res.status(400).json({
-      error: true,
-      message: error.message,
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.get("/searchByTag/:tag", async (req, res) => {
+router.get("/searchByTag/:tag", async (req, res, next) => {
   const { tag } = req.params;
   const cacheKey = `search_tag_${tag}`;
 
@@ -475,14 +473,12 @@ router.get("/searchByTag/:tag", async (req, res) => {
       return res.json(response);
     }
   } catch (error) {
-    return res.status(400).json({
-      error: true,
-      message: error.message,
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.get("/details/:id", async (req, res) => {
+router.get("/details/:id", async (req, res, next) => {
   try {
     const data = await decorationModel.findById(req.params.id).populate({
       path: "tag",
@@ -494,11 +490,12 @@ router.get("/details/:id", async (req, res) => {
       data: data,
     });
   } catch (error) {
-    res.status(400).json({ message: error.message, error: true });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.get("/searchByTag/v2/:tag", async (req, res) => {
+router.get("/searchByTag/v2/:tag", async (req, res, next) => {
   try {
     const { tag } = req.params;
     const limit = Math.min(parseInt(req.query.limit) || 10, 1000);
@@ -640,11 +637,8 @@ router.get("/searchByTag/v2/:tag", async (req, res) => {
 
     return res.json(response);
   } catch (error) {
-    console.error("=== SearchByTag v2 Error ===", error);
-    return res.status(500).json({
-      error: true,
-      message: "Server Error: " + error.message,
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
@@ -793,7 +787,7 @@ router.get("/searchByTag/v2/:tag", async (req, res) => {
 //   }
 // });
 
-router.get("/searchByTag/v3/:tag", async (req, res) => {
+router.get("/searchByTag/v3/:tag", async (req, res, next) => {
   try {
     const { tag } = req.params;
     const limit = Math.min(parseInt(req.query.limit) || 10, 1000);
@@ -950,18 +944,15 @@ router.get("/searchByTag/v3/:tag", async (req, res) => {
     cache.set(cacheKey, response);
     return res.json(response);
   } catch (error) {
-    console.error("=== SearchByTag v2 Error ===", error);
-    return res.status(500).json({
-      error: true,
-      message: "Server Error: " + error.message,
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
 
 
 
-router.get("/decorations/:name/orders", async (req, res) => {
+router.get("/decorations/:name/orders", async (req, res, next) => {
   try {
     const { name } = req.params;
 
@@ -1023,16 +1014,13 @@ router.get("/decorations/:name/orders", async (req, res) => {
       },
     });
   } catch (err) {
-    return res.status(500).json({
-      error: true,
-      status: 500,
-      message: err.message,
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // delete images by iamge name
-router.post("/delete-image", async (req, res) => {
+router.post("/delete-image", async (req, res, next) => {
   try {
     const { imageName } = req.body;
     if (!imageName) {
@@ -1061,11 +1049,8 @@ router.post("/delete-image", async (req, res) => {
       modifiedCount: (r1.modifiedCount || 0) + (r2.modifiedCount || 0),
     });
   } catch (err) {
-    console.error("DELETE IMAGE ERROR", err);
-    return res.status(500).json({
-      message: "Error deleting image",
-      error: err.message,
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 

@@ -16,8 +16,18 @@ const EventinvitesModel = require("../models/event-invite");
 const multer = require("multer");
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
+const { s3, S3_BUCKET } = require("../utils/awsConfigs");
 const { generateThumbnail } = require("../store/multerS3Config");
 
+
+async function deleteFromS3(key) {
+  if (!key) return;
+  const params = {
+    Bucket: S3_BUCKET,
+    Key: key,
+  };
+  await s3.deleteObject(params).promise();
+}
 
 router.put("/assign-to-subfolder", async (req, res) => {
   try {
@@ -1039,7 +1049,7 @@ async function generateAndUploadCapsuleBanner(folderId, leftImageInput, eventNam
   try {
     const scale = 4;
     const baseWidth = 393;
-    const baseHeight = 166;
+    const baseHeight = 195;
 
     const width = baseWidth * scale;
     const height = baseHeight * scale;
@@ -1053,8 +1063,8 @@ async function generateAndUploadCapsuleBanner(folderId, leftImageInput, eventNam
     ctx.fillStyle = "#FFFFFF";
     ctx.fillRect(0, 0, width, height);
 
-    const leftBoxWidth = 210 * scale;
-    const leftBoxHeight = 166 * scale;
+    const leftBoxWidth = 245 * scale;
+    const leftBoxHeight = 195 * scale;
 
     if (leftImageInput) {
       try {
@@ -1079,7 +1089,13 @@ async function generateAndUploadCapsuleBanner(folderId, leftImageInput, eventNam
             sy = (leftImg.height - sh) / 2;
           }
 
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(0, 0, leftBoxWidth, leftBoxHeight);
+          ctx.clip();
+
           ctx.drawImage(leftImg, sx, sy, sw, sh, 0, 0, leftBoxWidth, leftBoxHeight);
+          ctx.restore();
         }
       } catch (imgErr) {
         console.error("Warning: Left image render failed:", imgErr.message);
@@ -1089,7 +1105,7 @@ async function generateAndUploadCapsuleBanner(folderId, leftImageInput, eventNam
     const bgPath = path.resolve(__dirname, "./default-capsule-bg.webp");
     const rightBgImg = await loadImage(bgPath);
 
-    const rightX = 160 * scale;
+    const rightX = 179 * scale;
     const rightWidth = width - rightX;
 
     ctx.drawImage(rightBgImg, rightX, 0, rightWidth, height);
@@ -1109,13 +1125,13 @@ async function generateAndUploadCapsuleBanner(folderId, leftImageInput, eventNam
       }
 
       ctx.font = `700 ${fontSize * scale}px "CinzelDecorativeBold", serif`;
-      ctx.textAlign = "left";
+
+      ctx.textAlign = "center";
       ctx.textBaseline = "top";
 
-      const paddingLeft = 32 * scale;
-      const textStartX = (baseWidth * 0.48) * scale + paddingLeft;
+      const textCenterX = rightX + (rightWidth / 2);
 
-      const maxTextWidth = 145 * scale;
+      const maxTextWidth = 120 * scale; 
       const lineHeight = (fontSize * 1.35) * scale;
 
       const words = eventName.toUpperCase().split(" ");
@@ -1136,12 +1152,12 @@ async function generateAndUploadCapsuleBanner(folderId, leftImageInput, eventNam
       lines.push(currentLine);
 
       const totalTextHeight = lines.length * lineHeight;
-      const centerY = (baseHeight * 0.23) * scale;
+      const centerY = (baseHeight * 0.255) * scale;
       const centeredStartY = centerY - (totalTextHeight / 2);
 
       lines.forEach((line, index) => {
         const lineY = centeredStartY + (index * lineHeight);
-        ctx.fillText(line, textStartX, lineY);
+        ctx.fillText(line, textCenterX, lineY);
       });
 
       ctx.restore();
@@ -1177,6 +1193,7 @@ async function generateAndUploadCapsuleBanner(folderId, leftImageInput, eventNam
   }
 }
 
+
 async function handleFolderBannerCreation(req, res) {
   try {
     const { folderId } = req.body;
@@ -1189,6 +1206,7 @@ async function handleFolderBannerCreation(req, res) {
     }
 
     const folderDoc = await Folder.findById(folderId).lean();
+
     if (!folderDoc) {
       return res.status(404).json({
         success: false,
@@ -1196,26 +1214,38 @@ async function handleFolderBannerCreation(req, res) {
       });
     }
 
+    const oldBannerUrl = folderDoc.capsuleBannerImageUrl || null;
+
+    const rawOrderId = folderDoc.orderId;
+
+    const order = await Order.findOne({ order_id: rawOrderId }).lean();
+
     let eventName = ""; 
     let phoneNo = "";
 
     if (folderDoc.eventId) {
       const eventDoc = await EventinvitesModel.findById(folderDoc.eventId).lean();
       if (eventDoc && eventDoc.hostName) {
-        eventName = eventDoc.hostName; 
+        eventName = eventDoc.hostName;
       }
     }
-    if (folderDoc.orderId) {
-      const rawOrderId = folderDoc.orderId - 10800;
 
-      const order = await Order.findOne({ order_id: rawOrderId }).lean();
+    if (!eventName && order && order.eventName) {
+      eventName = order.eventName;
+    }
+
+
+    if (!eventName || !eventName.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Banner cannot be generated because event name is missing.",
+      });
+    }
+      
 
       if (order) {
         phoneNo = order.phone_no || order.online_phone_no || "";
       }
-    }
-
-    
 
     let leftImageInput = null;
     if (req.file && req.file.buffer) {
@@ -1240,6 +1270,20 @@ async function handleFolderBannerCreation(req, res) {
       },
       { new: true, strict: false }
     ).lean();
+
+
+    if (oldBannerUrl && oldBannerUrl !== s3BannerUrl) {
+      try {
+        // Extract S3 key from URL
+        const oldBannerKey = new URL(oldBannerUrl).pathname.substring(1);
+
+        await deleteFromS3(oldBannerKey);
+
+        console.log("Old capsule banner deleted from S3.");
+      } catch (err) {
+        console.error("Unable to delete old banner:", err);
+      }
+    }
 
     return res.status(200).json({
       success: true,

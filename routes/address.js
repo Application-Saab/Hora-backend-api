@@ -2,7 +2,7 @@ const express = require('express');
 const addressModel = require('../models/address');
 const router = express.Router();
 
-router.post('/add', async (req, res) => {
+router.post('/add', async (req, res, next) => {
     const data = new addressModel({
         title: req.body.title,
         address_type: req.body.address_type,
@@ -19,11 +19,11 @@ router.post('/add', async (req, res) => {
         return res.json({ error: false,status:200, message: 'Added Successfully', data:dataToSave})
     }
     catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
+        next(error);
     }
 })
 
-router.post('/edit', async (req, res) => {
+router.post('/edit', async (req, res, next) => {
     const id = req.body._id;
     const updatedData = req.body;
     const options = { new: true };
@@ -34,12 +34,12 @@ router.post('/edit', async (req, res) => {
         return res.json({ error: false,status:200, message: 'Address Updated Successfully', data:result})
     }
     catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
+        next(error);
     }
 })
 
 //blocker of this getMealDish api 
-router.post('/editByUserID', async (req, res) => {
+router.post('/editByUserID', async (req, res, next) => {
     try {
         const { userId } = req.body;
         const updatedData = req.body;
@@ -68,24 +68,21 @@ router.post('/editByUserID', async (req, res) => {
         });
 
     } catch (error) {
-        return res.status(400).json({
-            error: true,
-            message: error.message
-        });
+        next(error);
     }
 });
 
-router.get('/details/:id', async (req, res) => {
+router.get('/details/:id', async (req, res, next) => {
     try {
         const data = await addressModel.findById(req.params.id);
         return res.json({ error: false,status:200, message: 'Details Fetch Successfully', data:data})
     }
     catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
+        next(error);
     }
 })
 
-router.post('/update_address_status', async (req, res) => {
+router.post('/update_address_status', async (req, res, next) => {
     const { _id } = req.body;
     if (!_id) {
         return res.json({
@@ -109,11 +106,11 @@ router.post('/update_address_status', async (req, res) => {
         }
     }
     catch (error) {
-        res.status(400).json({ message: error.message,error: true })
+        next(error);
     }
 })
 
-router.post('/address_list', async (req, res) => {
+router.post('/address_list', async (req, res, next) => {
     let finder ={
         status: 1
     };
@@ -145,7 +142,7 @@ router.post('/address_list', async (req, res) => {
         }
     }
     catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
+        next(error);
     }
 })
 

@@ -5,7 +5,7 @@ const router = express.Router();
 const orderModel = require("../models/order");
 
 // Create payment link
-router.post("/payment", async (req, res) => {
+router.post("/payment", async (req, res, next) => {
   try {
     let { user_id, price, phone, name, merchantTransactionId } = req.body;
 
@@ -83,15 +83,13 @@ router.post("/payment", async (req, res) => {
       });
     }
   } catch (error) {
-    res.status(500).send({
-      message: error.message,
-      success: false,
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // Check payment status
-router.post("/status/:txnId", async (req, res) => {
+router.post("/status/:txnId", async (req, res, next) => {
   try {
     const merchantTransactionId = req.params["txnId"];
 
@@ -141,15 +139,13 @@ router.post("/status/:txnId", async (req, res) => {
       });
     }
   } catch (error) {
-    res.status(500).send({
-      message: error.message,
-      success: false,
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // ---------------- WEBHOOK ----------------
-router.post("/razorpay/webhook", async (req, res) => {
+router.post("/razorpay/webhook", async (req, res, next) => {
   try {
     const webhookSecret = "Sahaj@22";
     const receivedSignature = req.headers["x-razorpay-signature"];
@@ -203,12 +199,13 @@ router.post("/razorpay/webhook", async (req, res) => {
       return res.status(200).send({ success: true, message: "Event ignored" });
     }
   } catch (error) {
-    return res.status(500).send({ success: false, message: error.message });
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // ---------------- PAYMENT V2 (unchanged) ----------------
-router.post("/payment/v2", async (req, res) => {
+router.post("/payment/v2", async (req, res, next) => {
   try {
     const { user_id, price, phone, name, merchantTransactionId } = req.body;
 
@@ -238,10 +235,8 @@ router.post("/payment/v2", async (req, res) => {
       checksum: checksum,
     });
   } catch (error) {
-    res.status(500).send({
-      message: error.message,
-      success: false,
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 

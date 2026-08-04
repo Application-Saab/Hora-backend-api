@@ -5,7 +5,7 @@ const userVisit = require("../models/user-visit");
 /**
  * Track daily unique website visit
  */
-router.post("/track-daily-visit", async (req, res) => {
+router.post("/track-daily-visit", async (req, res, next) => {
   try {
     const { visitorId, device, os, browser, page } = req.body
 
@@ -59,18 +59,14 @@ router.post("/track-daily-visit", async (req, res) => {
       },
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: "Failed to save visit data",
-      error: error.message,
-    });
+      next(error);
   }
 });
 
 /**
  * Flexible range API
  */
-router.get("/visits/unique/range", async (req, res) => {
+router.get("/visits/unique/range", async (req, res, next) => {
   try {
     const { days, date, startDate, endDate } = req.query;
 
@@ -134,10 +130,7 @@ router.get("/visits/unique/range", async (req, res) => {
   }))
 });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+      next(error);
   }
 });
 

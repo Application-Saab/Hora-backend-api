@@ -7,7 +7,7 @@ const Photography = require('../models/photography');
 const fs = require("fs");
 const path = require("path");
 
-router.put("/edit/:id", async (req, res) => {
+router.put("/edit/:id", async (req, res, next) => {
   try {
     const { id } = req.params;
     const { title, price, image } = req.body;
@@ -40,16 +40,12 @@ router.put("/edit/:id", async (req, res) => {
       data: updatedAddOn,
     });
   } catch (error) {
-    console.error("Error updating AddOn:", error);
-    return res.status(500).json({
-      error: true,
-      message: error.message,
-    });
+    next(error);
   }
 });
 
 // ----------------- ADD ADDON -----------------
-router.post('/add', async (req, res) => {
+router.post('/add', async (req, res, next) => {
   try {
     const { title, price, description, image, productId, categoryType, productType, eventType } = req.body;
 
@@ -128,15 +124,11 @@ router.post('/add', async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Error adding AddOn:", error);
-    return res.status(500).json({
-      error: true,
-      message: error.message
-    });
+    next(error);
   }
 });
 
-router.get('/getAll', async (req, res) => {
+router.get('/getAll', async (req, res, next) => {
   try {
     const addons = await AddOn.find().sort({ createdAt: -1 });
     return res.status(200).json({
@@ -145,15 +137,11 @@ router.get('/getAll', async (req, res) => {
       data: addons
     });
   } catch (error) {
-    console.error("Error fetching all AddOns:", error);
-    return res.status(500).json({
-      error: true,
-      message: error.message
-    });
+    next(error);
   }
 });
 
-router.post("/delete/:id", async (req, res) => {
+router.post("/delete/:id", async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -185,16 +173,12 @@ router.post("/delete/:id", async (req, res) => {
     });
 
   } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      error: true,
-      message: error.message,
-    });
+    next(error);
   }
 });
 
 // ----------------- GET ADDON(S) -----------------
-router.get('/get', async (req, res) => {
+router.get('/get', async (req, res, next) => {
   try {
     let { ids } = req.query;
 
@@ -228,11 +212,7 @@ router.get('/get', async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Error fetching AddOn(s):", error);
-    return res.status(500).json({
-      error: true,
-      message: error.message
-    });
+    next(error);
   }
 });
 

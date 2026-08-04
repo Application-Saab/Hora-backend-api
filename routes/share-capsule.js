@@ -2,7 +2,7 @@ const express = require("express");
 const Folder = require("../models/folder");
 const router = express.Router();
 
-router.get("/:shortCode", async (req, res) => {
+router.get("/:shortCode", async (req, res, next) => {
     try {
         const { shortCode } = req.params;
 
@@ -14,7 +14,8 @@ router.get("/:shortCode", async (req, res) => {
 
     } catch (err) {
         console.error("Error in redirection:", err);
-        return res.status(500).send("Internal Server Error");
+        err.isPublic = true;
+        next(err);
     }
 });
 

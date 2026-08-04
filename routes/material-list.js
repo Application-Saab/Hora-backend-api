@@ -5,7 +5,7 @@ const { CustomResponse } = require("../store/commonFunction");
 const getPaginatedData = require("../utils/functions");
 
 // Create material
-router.post("/createMaterial", async (req, res) => {
+router.post("/createMaterial", async (req, res, next) => {
   try {
     if (!req.body.specs || !req.body.type || !req.body.materialName) {
       return CustomResponse(
@@ -30,13 +30,12 @@ router.post("/createMaterial", async (req, res) => {
       newMaterial,
     );
   } catch (error) {
-    console.error(error);
-    return CustomResponse(res, 500, true, "Server error");
+    next(error);
   }
 });
 
 // Update material
-router.patch("/updateMaterial/:id", async (req, res) => {
+router.patch("/updateMaterial/:id", async (req, res, next) => {
   try {
     const updatedMaterial = await MaterialList.findByIdAndUpdate(
       req.params.id,
@@ -56,13 +55,12 @@ router.patch("/updateMaterial/:id", async (req, res) => {
       updatedMaterial,
     );
   } catch (error) {
-    console.error(error);
-    return CustomResponse(res, 500, true, "Server error");
+    next(error);
   }
 });
 
 // Get all active materials
-router.get("/getAllMaterialList", async (req, res) => {
+router.get("/getAllMaterialList", async (req, res, next) => {
   try {
     const materials = await MaterialList.find({
       materialStatus: 1,
@@ -76,12 +74,11 @@ router.get("/getAllMaterialList", async (req, res) => {
       materials,
     );
   } catch (error) {
-    console.error(error);
-    return CustomResponse(res, 500, true, "Server error");
+    next(error);
   }
 });
 
-router.post("/admin_material_list", async (req, res) => {
+router.post("/admin_material_list", async (req, res, next) => {
   try {
     const {
       page,
@@ -132,14 +129,12 @@ router.post("/admin_material_list", async (req, res) => {
       materials: items,
       paginate,
     });
-
   } catch (error) {
-    console.error(error);
-    return CustomResponse(res, 500, true, "Server error");
+    next(error);
   }
 });
 
-router.get("/getMaterialFilterData", async (req, res) => {
+router.get("/getMaterialFilterData", async (req, res, next) => {
   try {
     const materials = await MaterialList.find(
       { materialStatus: 1 },
@@ -195,8 +190,7 @@ router.get("/getMaterialFilterData", async (req, res) => {
       },
     );
   } catch (error) {
-    console.error(error);
-    return CustomResponse(res, 500, true, "Server error");
+    next(error);
   }
 });
 

@@ -7,7 +7,7 @@ const mealCache = new NodeCache({ stdTTL: 300 });
 
 //...... working apis ......
 //used in the web
-router.get("/idByTag", async (req, res) => {
+router.get("/idByTag", async (req, res, next) => {
   try {
     const tag = req.query?.tag;
 
@@ -50,14 +50,12 @@ router.get("/idByTag", async (req, res) => {
       data,
     });
   } catch (error) {
-    return res.status(400).json({
-      message: error.message,
-      error: true,
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.post("/admin_meals_list", async (req, res) => {
+router.post("/admin_meals_list", async (req, res, next) => {
   try {
     // Build filter
     let finder = {
@@ -123,15 +121,13 @@ router.post("/admin_meals_list", async (req, res) => {
       });
     }
   } catch (error) {
-    return res.status(400).json({
-      message: error.message,
-      error: true,
-    });
+    error.isPublic = true;
+    next(error);
   }
 }); //post done
 
 // ....... not used ......
-router.post("/add", async (req, res) => {
+router.post("/add", async (req, res, next) => {
   const data = new mealModel({
     name: req.body.name,
     configurationId: req.body.configurationId,
@@ -154,11 +150,12 @@ router.post("/add", async (req, res) => {
       });
     }
   } catch (error) {
-    res.status(400).json({ message: error.message, error: true });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.post("/edit", async (req, res) => {
+router.post("/edit", async (req, res, next) => {
   const id = req.body._id;
   const updatedData = req.body;
   const options = { new: true };
@@ -171,11 +168,12 @@ router.post("/edit", async (req, res) => {
       data: result,
     });
   } catch (error) {
-    res.status(400).json({ message: error.message, error: true });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.get("/details/:id", async (req, res) => {
+router.get("/details/:id", async (req, res, next) => {
   try {
     const data = await mealModel.findById(req.params.id);
     return res.json({
@@ -185,7 +183,8 @@ router.get("/details/:id", async (req, res) => {
       data: data,
     });
   } catch (error) {
-    res.status(400).json({ message: error.message, error: true });
+    error.isPublic = true;
+    next(error);
   }
 });
 
@@ -210,7 +209,7 @@ router.get("/details/:id", async (req, res) => {
 //     }
 // });
 
-router.post("/update_meals_status", async (req, res) => {
+router.post("/update_meals_status", async (req, res, next) => {
   const { _id } = req.body;
   if (!_id) {
     return res.json({
@@ -241,7 +240,8 @@ router.post("/update_meals_status", async (req, res) => {
       });
     }
   } catch (error) {
-    res.status(400).json({ message: error.message, error: true });
+    error.isPublic = true;
+    next(error);
   }
 });
 

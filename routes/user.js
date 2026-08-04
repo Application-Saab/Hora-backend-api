@@ -24,7 +24,7 @@ const EventMessage = require("../models/eventMessage");
 const ChatRoom = require("../models/eventChatRoom");
 const OrderModel = require("../models/order")
 
-router.post("/otp_generate_backup", async (req, res) => {
+router.post("/otp_generate_backup", async (req, res, next) => {
   const { phone } = req.body;
   if (!phone) {
     return res.json({
@@ -80,11 +80,12 @@ router.post("/otp_generate_backup", async (req, res) => {
       });
     }
   } catch (error) {
-    res.status(400).json({ message: error.message, error: true });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.post("/otp_generate", async (req, res) => {
+router.post("/otp_generate", async (req, res, next) => {
   const {
     phone,
     fromCapsule = false,
@@ -192,14 +193,12 @@ router.post("/otp_generate", async (req, res) => {
       });
     }
   } catch (error) {
-    return res.status(400).json({
-      message: error.message,
-      error: true,
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.post("/otp_verify", async (req, res) => {
+router.post("/otp_verify", async (req, res, next) => {
   const { phone, otp, role } = req.body;
 
   if (!phone) {
@@ -362,14 +361,12 @@ router.post("/otp_verify", async (req, res) => {
       token: passportAuth.signToken(user),
     });
   } catch (error) {
-    return res.status(400).json({
-      message: error.message,
-      error: true,
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.get("/user_details/:id", async (req, res) => {
+router.get("/user_details/:id", async (req, res, next) => {
   try {
     let { id } = req.params;
     const totalPersonalField = 9;
@@ -437,7 +434,8 @@ router.get("/user_details/:id", async (req, res) => {
       });
     }, 1000);
   } catch (error) {
-    res.status(400).json({ message: error.message, error: true });
+    error.isPublic = true;
+    next(error);
   }
 });
 
@@ -446,7 +444,7 @@ const sendResponse = (res, status, error, message, data = null) =>
 
 //  Get user details by ID
 //  Get user details by phone
-router.get("/user-details-by-phone/:phone", async (req, res) => {
+router.get("/user-details-by-phone/:phone", async (req, res, next) => {
   try {
 
     const { phone } = req.params;
@@ -501,18 +499,13 @@ router.get("/user-details-by-phone/:phone", async (req, res) => {
   } catch (err) {
 
     console.error("Fetch user error:", err.message);
-
-    return sendResponse(
-      res,
-      500,
-      true,
-      "Server error"
-    );
+    err.isPublic = true;
+    next(err);
   }
 });
 
 // Updated
-router.get("/user-details/:id", async (req, res) => {
+router.get("/user-details/:id", async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -530,8 +523,8 @@ router.get("/user-details/:id", async (req, res) => {
 
     return sendResponse(res, 200, false, "User fetched successfully", user);
   } catch (err) {
-    console.error("Fetch user error:", err.message);
-    return sendResponse(res, 500, true, "Server error");
+    err.isPublic = true;
+    next(err);
   }
 });
 
@@ -617,7 +610,7 @@ function isS3Url(str) {
 }
 
 //  Update user details (Name) and also update name in guest models for RSVP
-router.put("/user-details/:id", async (req, res) => {
+router.put("/user-details/:id", async (req, res, next) => {
   const apiStart = Date.now();
 
   try {
@@ -679,8 +672,8 @@ router.put("/user-details/:id", async (req, res) => {
       stack: err.stack,
       userId: req.params.id,
     });
-
-    return sendResponse(res, 500, true, "Server error");
+    err.isPublic = true;
+    next(err);
   }
 });
 
@@ -816,12 +809,13 @@ router.put(
         stack: err.stack,
         userId: req.params.id,
       });
-      return sendResponse(res, 500, true, "Server error");
+      err.isPublic = true;
+      next(err);
     }
   },
 );
 
-router.post("/user_update/:id", async (req, res) => {
+router.post("/user_update/:id", async (req, res, next) => {
   const { id } = req.params;
   const updatedData = req.body;
   console.log("updatedData>>>>>>", updatedData);
@@ -835,11 +829,12 @@ router.post("/user_update/:id", async (req, res) => {
       data: result,
     });
   } catch (error) {
-    res.status(400).json({ message: error.message, error: true });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.post("/supplier_personal_details_update/:id", async (req, res) => {
+router.post("/supplier_personal_details_update/:id", async (req, res, next) => {
   let { id } = req.params;
 
   // Prepare updated data cleanly (only keys that exist in req.body)
@@ -874,14 +869,12 @@ router.post("/supplier_personal_details_update/:id", async (req, res) => {
       data: result,
     });
   } catch (error) {
-    return res.status(400).json({
-      message: error.message,
-      error: true,
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.post("/supplier_professional_details_update/:id", async (req, res) => {
+router.post("/supplier_professional_details_update/:id", async (req, res, next) => {
   let { id } = req.params;
   const updatedData = {};
   updatedData.userAppliance = req.body.userAppliance;
@@ -902,11 +895,12 @@ router.post("/supplier_professional_details_update/:id", async (req, res) => {
       data: result,
     });
   } catch (error) {
-    res.status(400).json({ message: error.message, error: true });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.get("/my_account/:id", async (req, res) => {
+router.get("/my_account/:id", async (req, res, next) => {
   let { id } = req.params;
   try {
     var responseObject = {
@@ -974,11 +968,12 @@ router.get("/my_account/:id", async (req, res) => {
       data: responseObject,
     });
   } catch (error) {
-    res.status(400).json({ message: error.message, error: true });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.post("/update_resume_profile", async (req, res) => {
+router.post("/update_resume_profile", async (req, res, next) => {
   try {
     const id = req.body._id;
 
@@ -1005,14 +1000,12 @@ router.post("/update_resume_profile", async (req, res) => {
       data: result,
     });
   } catch (error) {
-    return res.status(400).json({
-      error: true,
-      message: error.message,
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.post("/update_work_details/:id", async (req, res) => {
+router.post("/update_work_details/:id", async (req, res, next) => {
   const id = req.params.id;
   const updatedData = {};
   updatedData.job_type = req.body.job_type;
@@ -1027,11 +1020,12 @@ router.post("/update_work_details/:id", async (req, res) => {
       data: result,
     });
   } catch (error) {
-    res.status(400).json({ message: error.message, error: true });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.post("/update_cuisioness/:id", async (req, res) => {
+router.post("/update_cuisioness/:id", async (req, res, next) => {
   const id = req.params.id;
   const updatedData = {};
   updatedData.is_veg = req.body.is_veg;
@@ -1047,11 +1041,12 @@ router.post("/update_cuisioness/:id", async (req, res) => {
       data: result,
     });
   } catch (error) {
-    res.status(400).json({ message: error.message, error: true });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.post("/update_special_appliance/:id", async (req, res) => {
+router.post("/update_special_appliance/:id", async (req, res, next) => {
   const id = req.params.id;
   const updatedData = {};
   updatedData.userAppliance = req.body.userAppliance;
@@ -1065,11 +1060,12 @@ router.post("/update_special_appliance/:id", async (req, res) => {
       data: result,
     });
   } catch (error) {
-    res.status(400).json({ message: error.message, error: true });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.post("/getMealDish", async (req, res) => {
+router.post("/getMealDish", async (req, res, next) => {
   try {
     const { cuisineId = [], is_dish } = req.body;
 
@@ -1120,11 +1116,12 @@ router.post("/getMealDish", async (req, res) => {
       data: newArray,
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message, error: true });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.get("/getCityServedLocalityList", async (req, res) => {
+router.get("/getCityServedLocalityList", async (req, res, next) => {
   let finder = { status: 1 };
   let localityfinder = { status: 1 };
   try {
@@ -1163,11 +1160,12 @@ router.get("/getCityServedLocalityList", async (req, res) => {
       );
     });
   } catch (error) {
-    res.status(400).json({ message: error.message, error: true });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.get('/supplier-order-count-by-date', async (req, res) => {
+router.get('/supplier-order-count-by-date', async (req, res, next) => {
   try {
     const { supplierId, fulfillmentDate } = req.query; 
 
@@ -1201,7 +1199,8 @@ router.get('/supplier-order-count-by-date', async (req, res) => {
     });
 
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    error.isPublic = true;
+    next(error);
   }
 });
 

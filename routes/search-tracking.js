@@ -7,7 +7,7 @@ const UserCities = require("../models/user-cities");
 const { CustomResponse } = require("../store/commonFunction");
 
 // Save Search Analytics
-router.post("/", async (req, res) => {
+router.post("/", async (req, res, next) => {
   try {
     const {
       searchTerm,
@@ -66,12 +66,13 @@ router.post("/", async (req, res) => {
     );
   } catch (err) {
     console.error("Save Search Analytics Error:", err);
-    return CustomResponse(res, 500, true, "Server error");
+    err.isPublic = true;
+    next(err);
   }
 });
 
 // Get Search Tracking List for admin panel
-router.get("/tracking-list", async (req, res) => {
+router.get("/tracking-list", async (req, res, next) => {
   try {
     const {
       page = 1,
@@ -196,12 +197,13 @@ router.get("/tracking-list", async (req, res) => {
     );
   } catch (err) {
     console.error("Fetch Search Tracking Error:", err);
-    return CustomResponse(res, 500, true, "Server error");
+    err.isPublic = true;
+    next(err);
   }
 });
 
 // Get all stats for search tracking
-router.get("/stats", async (req, res) => {
+router.get("/stats", async (req, res, next) => {
   try {
     const { startDate, endDate } = req.query;
 
@@ -479,12 +481,13 @@ router.get("/stats", async (req, res) => {
     );
   } catch (err) {
     console.error("Search Stats Error:", err);
-    return CustomResponse(res, 500, true, "Server error");
+    err.isPublic = true;
+    next(err);
   }
 });
 
 // Link visitor history with logged-in user
-router.patch("/assign-user", async (req, res) => {
+router.patch("/assign-user", async (req, res, next) => {
   try {
     const { visitorId, userId } = req.body;
 
@@ -520,7 +523,8 @@ router.patch("/assign-user", async (req, res) => {
     );
   } catch (err) {
     console.error("Assign User Error:", err);
-    return CustomResponse(res, 500, true, "Server error");
+    err.isPublic = true;
+    next(err);
   }
 });
 

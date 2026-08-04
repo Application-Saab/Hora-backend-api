@@ -16,45 +16,34 @@ const notificationFunction = require("../store/notifications");
 const cityServedModel = require("../models/city-served");
 const cityServedLocalityModel = require("../models/city-served-locality");
 
-router.post("/admin_signup", async (req, res, next) => {
-  const data = new UserModel({
-    email: req.body.email,
-    name: req.body.name,
-    role: "admin",
-    password: req.body.password,
-    phone: "",
-    os: "web",
-    address: "",
-  });
-  try {
-    bcrypt.hash(data.password, 10, async (err, hash) => {
-      if (hash) {
-        const user = await UserModel.find({
-          email: req.body.email,
-          role: "admin",
+router.post('/admin_signup', async (req, res, next) => {
+    const data = new UserModel({
+        email: req.body.email,
+        name: req.body.name,
+        role: 'admin',
+        password: req.body.password,
+        phone: '',
+        os: 'web',
+        address: ''
+    })
+    try {
+        bcrypt.hash(data.password, 10,async (err, hash) => {
+            if (hash) {
+                const user = await UserModel.find({ email: req.body.email, role: 'admin' });
+                if(user.length>0){
+                    return res.json({ error: false,status:503, message: 'Admin Already Added' })
+                }else{
+                    data.hashpassword = hash;
+                    const dataToSave = await data.save();
+                    return res.json({ error: false,status:200, message: 'Admin Registered Successfully', dataToSave })
+                }
+            }
         });
-        if (user.length > 0) {
-          return res.json({
-            error: false,
-            status: 503,
-            message: "Admin Already Added",
-          });
-        } else {
-          data.hashpassword = hash;
-          const dataToSave = await data.save();
-          return res.json({
-            error: false,
-            status: 200,
-            message: "Admin Registered Successfully",
-            dataToSave,
-          });
-        }
-      }
-    });
-  } catch (error) {
-    next(error);
-  }
-});
+    }
+    catch (error) {
+      next(error);
+    }
+})
 
 router.post("/admin_signin", async (req, res, next) => {
   try {
@@ -90,7 +79,7 @@ router.post("/admin_signin", async (req, res, next) => {
       token,
     });
   } catch (error) {
-    next(error);
+      next(error);
   }
 });
 
@@ -171,7 +160,7 @@ router.post("/admin_user_list", async (req, res, next) => {
       });
     }
   } catch (error) {
-    next(error);
+      next(error);
   }
 });
 
@@ -222,69 +211,70 @@ router.post("/update_user_status", async (req, res, next) => {
       });
     }
   } catch (error) {
-    next(error);
+      next(error);
   }
 });
 
-router.post("/admin_user_update", async (req, res, next) => {
-  const id = req.body._id;
-  const updatedData = req.body;
-  const options = { new: true };
-  try {
-    const result = await UserModel.findByIdAndUpdate(id, updatedData, options);
-    return res.json({
-      error: false,
-      status: 200,
-      message: "Updated Successfully",
-      data: result,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
+router.post('/admin_user_update', async (req, res, next) => {
+    const id = req.body._id;
+    const updatedData = req.body;
+    const options = { new: true };
+    try {
+        const result = await UserModel.findByIdAndUpdate(
+            id, updatedData, options
+        )
+        return res.json({ error: false,status:200, message: 'Updated Successfully', data:result})
+    }
+    catch (error) {
+        next(error);
+    }
+})
 
-router.get("/admin_user_details/:id", async (req, res, next) => {
-  try {
-    const data = await UserModel.findById(req.params.id)
-      .populate("userAppliance", "_id name image")
-      .populate("userCuisioness", "_id name image")
-      .populate("userDishArray", "_id name image")
-      .populate("userServedLocalities", "_id name ");
-    return res.json({
-      error: false,
-      status: 200,
-      message: "Details Fetch Successfully",
-      data: data,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
+router.get('/admin_user_details/:id', async (req, res, next) => {
+    try {
+     const data = await UserModel.findById(req.params.id).populate('userAppliance','_id name image').populate('userCuisioness','_id name image').populate('userDishArray','_id name image').populate('userServedLocalities','_id name ')
+     return res.json({ error: false,status:200, message: 'Details Fetch Successfully', data:data})
+    }
+    catch (error) {
+      next(error);
+     }
+})
 
-router.post("/user_signup", async (req, res, next) => {
-  try {
-    const {
-      email,
-      name,
-      role,
-      avatar,
-      phone,
-      os,
-      address,
-      otp,
-      age,
-      city,
-      aadhar_no,
-      aadhar_front_img,
-      aadhar_back_img,
-      experience,
-      userAppliance,
-      userServedLocalities,
-      job_type,
-      resume,
-      userCuisioness,
-      is_veg,
-    } = req.body;
+router.post('/user_signup', async (req, res, next) => {
+    try {
+        const {
+            email,
+            name,
+            role,
+            avatar,
+            phone,
+            os,
+            address,
+            otp,
+            age,
+            city,
+            aadhar_no,
+            aadhar_front_img,
+            aadhar_back_img,
+            experience,
+            userAppliance,
+            userServedLocalities,
+            job_type,
+            resume,
+            userCuisioness,
+            is_veg
+        } = req.body;
+
+        // Check if user already exists
+        const existingUser = await UserModel.find({ phone, role });
+
+        if (existingUser.length > 0) {
+            return res.json({
+                error: true,
+                status: 503,
+                message: `${commonFunction.capitalizeFirstLetter(role)} Already Added`
+            });
+        }
 
     // Check if user already exists
     const existingUser = await UserModel.find({ phone, role });
@@ -324,142 +314,48 @@ router.post("/user_signup", async (req, res, next) => {
 
     const savedUser = await newUser.save();
 
-    return res.json({
-      error: false,
-      status: 200,
-      message: `${commonFunction.capitalizeFirstLetter(role)} Registered Successfully`,
-      dataToSave: savedUser,
-      token: passportAuth.signToken(savedUser),
-    });
-  } catch (error) {
-    next(error);
-  }
+    } catch (error) {
+      next(error);
+    }
 });
 
-router.post("/admin_user_address_list", async (req, res, next) => {
-  let finder = {
-    status: { $ne: 2 },
-  };
-  if (!req.body.page) {
-    req.body.page = 1;
-  }
-  if (!req.body.per_page) {
-    req.body.per_page = 100;
-  }
-  finder["userId"] = req.body._id;
-  console.log("finder", finder);
-  try {
-    const address = await addressModel.find(finder);
-    let OverallResult = address;
-    const totaladdress = await addressModel.count(finder);
-    let paginate = {
-      total_item: totaladdress,
-      showing: OverallResult.length,
-      first_page: 1,
-      previous_page: req.body.per_page,
-      current_page: req.body.page,
-      next_page: parseInt(req.body.page) + 1,
-      last_page: parseInt(totaladdress / parseInt(req.body.per_page)),
+router.post('/admin_user_address_list', async (req, res, next) => {
+    let finder ={
+        status: { $ne: 2 }
     };
-    if (address.length > 0) {
-      return res.json({
-        error: false,
-        status: 200,
-        message: "Fetch Data Successfully",
-        data: { address: OverallResult, paginate },
-      });
-    } else {
-      return res.json({ error: true, status: 503, message: "No Record Found" });
+    if (!req.body.page) {
+        req.body.page = 1;
+    }
+    if (!req.body.per_page) {
+        req.body.per_page = 100;
+    }
+    finder['userId']= req.body._id; 
+    console.log("finder",finder)
+    try {
+        const address = await addressModel.find(finder);
+        let OverallResult = address;
+        const totaladdress = await addressModel.count(finder);
+        let paginate = {
+            "total_item": totaladdress,
+            "showing": OverallResult.length,
+            "first_page": 1,
+            "previous_page": req.body.per_page,
+            "current_page": req.body.page,
+            "next_page": (parseInt(req.body.page) + 1),
+            "last_page": parseInt((totaladdress) / parseInt(req.body.per_page))
+        }
+        if(address.length>0){
+            return res.json({ error: false,status:200, message: 'Fetch Data Successfully', data: { address: OverallResult, paginate }})
+        }else{
+            return res.json({ error: true,status:503, message: 'No Record Found'})
+        }
+    }
+    catch (error) {
+      next(error);
     }
   } catch (error) {
     next(error);
   }
-});
-
-router.get("/getDashboardCount", async (req, res) => {
-  async.parallel(
-    {
-      total_customer: function (callback) {
-        let query = { role: "customer", status: "1" };
-        UserModel.count(query, function (err, count) {
-          callback(err, count);
-        });
-      },
-      total_supplier: function (callback) {
-        let query = { role: "supplier", status: "1" };
-        UserModel.count(query, function (err, count) {
-          callback(err, count);
-        });
-      },
-      total_cousine: function (callback) {
-        let query = { type: "cuisine", status: "1" };
-        ConfigurationModel.count(query, function (err, count) {
-          callback(err, count);
-        });
-      },
-      total_appliance: function (callback) {
-        let query = { type: "appliance", status: "1" };
-        ConfigurationModel.count(query, function (err, count) {
-          callback(err, count);
-        });
-      },
-      total_meal: function (callback) {
-        let query = { status: "1" };
-        mealModel.count(query, function (err, count) {
-          callback(err, count);
-        });
-      },
-      total_ingredient: function (callback) {
-        let query = { status: "1" };
-        ingredientModel.count(query, function (err, count) {
-          callback(err, count);
-        });
-      },
-      total_dish: function (callback) {
-        let query = { status: "1" };
-        dishModel.count(query, function (err, count) {
-          callback(err, count);
-        });
-      },
-      total_city: function (callback) {
-        let query = { status: "1" };
-        cityServedModel.count(query, function (err, count) {
-          callback(err, count);
-        });
-      },
-      total_city_locality: function (callback) {
-        let query = { status: "1" };
-        cityServedLocalityModel.count(query, function (err, count) {
-          callback(err, count);
-        });
-      },
-      total_order: function (callback) {
-        let query = { status: "1" };
-        orderModel.count(query, function (err, count) {
-          callback(err, count);
-        });
-      },
-    },
-    function (err, results) {
-      return res.json({
-        error: false,
-        status: 200,
-        message: "Fetch Data Successfully",
-        data: {
-          total_customer: results.total_customer,
-          total_supplier: results.total_supplier,
-          total_cousine: results.total_cousine,
-          total_appliance: results.total_appliance,
-          total_meal: results.total_meal,
-          total_ingredient: results.total_ingredient,
-          total_dish: results.total_dish,
-          total_city: results.total_city,
-          total_city_locality: results.total_city_locality,
-          total_order: results.total_order,
-        },
-      });
-    },
-  );
 });
 
 router.post("/adminOrderList", async (req, res, next) => {
@@ -612,7 +508,7 @@ router.post("/adminOrderList", async (req, res, next) => {
       return res.json({ error: true, status: 503, message: "No Record Found" });
     }
   } catch (error) {
-    next(error);
+      next(error);
   }
 });
 
@@ -938,7 +834,7 @@ router.post("/downloadOrderReport", async (req, res, next) => {
       data: orders,
     });
   } catch (error) {
-    next(error);
+      next(error);
   }
 });
 
@@ -955,7 +851,7 @@ router.get("/getUserDetails/:id", async (req, res, next) => {
       data: data,
     });
   } catch (error) {
-    next(error);
+      next(error);
   }
 });
 

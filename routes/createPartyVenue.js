@@ -21,7 +21,7 @@ const sendResponse = (res, status, error, message, data = null) =>
 // GET ALL VENUES (Party Hall List)
 // Supports pagination + search For Admin
 // =============================================
-router.get("/venues-list", async (req, res) => {
+router.get("/venues-list", async (req, res, next) => {
   try {
     const { page = 1, limit = 10, search = "", venueType = "" } = req.query;
 
@@ -64,13 +64,13 @@ router.get("/venues-list", async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("Fetch venues error:", err);
-    res.status(500).json({ message: "Server error" });
+    err.isPublic = true;
+    next(err);
   }
 });
 
 // Public Venue Listing API with filters
-router.get("/venues-public-list", async (req, res) => {
+router.get("/venues-public-list", async (req, res, next) => {
   try {
     const { city, eventType, venueType, guestCapacity } = req.query;
 
@@ -130,11 +130,7 @@ router.get("/venues-public-list", async (req, res) => {
       data: venues,
     });
   } catch (err) {
-    console.error("Public venues fetch error:", err);
-    return res.status(500).json({
-      message: "Server error",
-      error: true,
-    });
+    next(err);
   }
 });
 
@@ -154,7 +150,7 @@ router.post(
     });
   },
 
-  async (req, res) => {
+  async (req, res, next) => {
     try {
       let {
         userId,
@@ -262,14 +258,13 @@ router.post(
 
       return sendResponse(res, 201, false, "Venue created successfully", venue);
     } catch (err) {
-      console.log(err);
-      return sendResponse(res, 500, true, "Server error");
+      next(err);
     }
   },
 );
 
 // Update venue Status
-router.patch("/venue-status/:id", async (req, res) => {
+router.patch("/venue-status/:id", async (req, res, next) => {
   try {
     const { id } = req.params;
     const { venueStatus } = req.body;
@@ -319,12 +314,7 @@ router.patch("/venue-status/:id", async (req, res) => {
       data: venue,
     });
   } catch (err) {
-    console.error("Venue status update error:", err);
-
-    return res.status(500).json({
-      message: "Server error",
-      error: true,
-    });
+    next(err);
   }
 });
 
@@ -333,7 +323,7 @@ router.patch("/venue-status/:id", async (req, res) => {
 // Fetches a single venue by ID
 // Returns basic venue info
 // =============================================
-router.get("/venue-details/:id", async (req, res) => {
+router.get("/venue-details/:id", async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -365,20 +355,11 @@ router.get("/venue-details/:id", async (req, res) => {
       data: venue,
     });
   } catch (err) {
-    console.error("Fetch Venue Error:", {
-      message: err.message,
-      stack: err.stack,
-      venueId: req.params.id,
-    });
-
-    return res.status(500).json({
-      message: "Server error",
-      error: true,
-    });
+    next(err);
   }
 });
 
-router.put("/update-terms/:id", async (req, res) => {
+router.put("/update-terms/:id", async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -402,12 +383,7 @@ router.put("/update-terms/:id", async (req, res) => {
       message: "Terms updated successfully",
     });
   } catch (err) {
-    console.log(err);
-
-    return res.status(500).json({
-      error: true,
-      message: "Server Error",
-    });
+    next(err);
   }
 });
 
@@ -423,7 +399,7 @@ router.put(
       next();
     });
   },
-  async (req, res) => {
+  async (req, res, next) => {
     try {
       const { venueId } = req.params;
 
@@ -495,9 +471,7 @@ router.put(
         venue,
       );
     } catch (err) {
-      console.log(err);
-
-      return sendResponse(res, 500, true, "Server error");
+      next(err)
     }
   },
 );
@@ -507,7 +481,7 @@ router.put(
 // Logs that a user visited a venue
 // Prevents duplicate entries (same user + venue)
 // =============================================
-router.post("/venue-visitor", async (req, res) => {
+router.post("/venue-visitor", async (req, res, next) => {
   try {
     const { userId, venueId } = req.body;
 
@@ -549,16 +523,7 @@ router.post("/venue-visitor", async (req, res) => {
       data: savedVisitor,
     });
   } catch (err) {
-    console.error("Create Venue Visitor Error:", {
-      message: err.message,
-      stack: err.stack,
-      requestBody: req.body,
-    });
-
-    return res.status(500).json({
-      message: "Server error",
-      error: true,
-    });
+    next(err)
   }
 });
 
@@ -567,7 +532,7 @@ router.post("/venue-visitor", async (req, res) => {
 // Returns list of users who visited a venue
 // Includes user details via aggregation
 // =============================================
-router.get("/venue-visitors/all/:venueId", async (req, res) => {
+router.get("/venue-visitors/all/:venueId", async (req, res, next) => {
   try {
     const { venueId } = req.params;
 
@@ -618,8 +583,7 @@ router.get("/venue-visitors/all/:venueId", async (req, res) => {
       visitors || [],
     );
   } catch (err) {
-    console.error("Fetch Venue Visitors Error:", err);
-    return sendResponse(res, 500, true, "Server error");
+    next(err);
   }
 });
 
@@ -706,7 +670,7 @@ router.put(
     });
   },
 
-  async (req, res) => {
+  async (req, res, next) => {
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -826,12 +790,7 @@ router.put(
         data: updated,
       });
     } catch (err) {
-      console.error("Update Venue Error:", err);
-
-      return res.status(500).json({
-        message: "Server error",
-        error: true,
-      });
+      next(err);
     }
   },
 );
@@ -840,7 +799,7 @@ router.put(
 // Returns all images (no folder filtering)
 // Used for "All" tab
 // =============================================
-router.get("/venue-images/:venueId", async (req, res) => {
+router.get("/venue-images/:venueId", async (req, res, next) => {
   try {
     const { venueId } = req.params;
 
@@ -851,7 +810,7 @@ router.get("/venue-images/:venueId", async (req, res) => {
       data: data || [],
     });
   } catch (err) {
-    res.status(500).json({ message: "Server error" });
+    next(err);
   }
 });
 
@@ -859,7 +818,7 @@ router.get("/venue-images/:venueId", async (req, res) => {
 // DELETE VENUE IMAGE / VIDEO
 // Deletes original + webp/preview from S3
 // =============================================
-router.post("/venue-image/:imageId", async (req, res) => {
+router.post("/venue-image/:imageId", async (req, res, next) => {
   try {
     const { imageId } = req.params;
 
@@ -902,12 +861,7 @@ router.post("/venue-image/:imageId", async (req, res) => {
       error: false,
     });
   } catch (err) {
-    console.error("Delete venue media error:", err);
-
-    return res.status(500).json({
-      message: "Server error",
-      error: true,
-    });
+    next(err);
   }
 });
 
@@ -922,7 +876,7 @@ const upload = multer({ storage, limits: { fileSize: 100 * 1024 * 1024 } });
 router.post(
   "/venue/create-subfolder/:venueId",
   upload.single("image"),
-  async (req, res) => {
+  async (req, res, next) => {
     try {
       const { venueId } = req.params;
       const { folderName, userId } = req.body;
@@ -1029,13 +983,12 @@ router.post(
         savedSubFolder,
       );
     } catch (error) {
-      console.error("Venue Subfolder Error:", error);
-      return sendResponse(res, 500, true, "Server error");
+      next(err);
     }
   },
 );
 
-router.put("/venue/assign-subfolder", async (req, res) => {
+router.put("/venue/assign-subfolder", async (req, res, next) => {
   try {
     const { subFolderId, addImageIds = [], removeImageIds = [] } = req.body;
 
@@ -1067,10 +1020,7 @@ router.put("/venue/assign-subfolder", async (req, res) => {
       removed: removeImageIds.length,
     });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({
-      message: "Server error",
-    });
+    next(error);
   }
 });
 
@@ -1081,7 +1031,7 @@ router.put("/venue/assign-subfolder", async (req, res) => {
 // Returns latest images first
 // =============================================
 // fetch images of a folder
-router.get("/venue-images/:venueId/folder/:folderId", async (req, res) => {
+router.get("/venue-images/:venueId/folder/:folderId", async (req, res, next) => {
   try {
     const { venueId, folderId } = req.params;
 
@@ -1118,13 +1068,12 @@ router.get("/venue-images/:venueId/folder/:folderId", async (req, res) => {
       images: sorted,
     });
   } catch (err) {
-    console.error("Fetch folder images error:", err);
-    return res.status(500).json({ message: "Server error" });
+    next(err);
   }
 });
 
 // Rename FOlder
-router.put("/venue-folder/rename/:venueId/:folderId", async (req, res) => {
+router.put("/venue-folder/rename/:venueId/:folderId", async (req, res, next) => {
   try {
     const { venueId, folderId } = req.params;
     const { folderName } = req.body;
@@ -1143,7 +1092,7 @@ router.put("/venue-folder/rename/:venueId/:folderId", async (req, res) => {
 
     res.json({ message: "Folder renamed", folders: venue.subFolders });
   } catch (err) {
-    res.status(500).json({ message: "Server error" });
+    next(err);
   }
 });
 

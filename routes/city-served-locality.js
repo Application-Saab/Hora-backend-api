@@ -3,7 +3,7 @@ const cityServedLocalityModel = require('../models/city-served-locality');
 const router = express.Router();
 var ObjectId = require('mongoose').Types.ObjectId; 
 
-router.post('/add', async (req, res) => {
+router.post('/add', async (req, res, next) => {
     const data = new cityServedLocalityModel({
         name: req.body.name,
         cityId: req.body.cityId,
@@ -16,11 +16,11 @@ router.post('/add', async (req, res) => {
         return res.json({ error: false,status:200, message: 'Added Successfully', data:dataToSave})
     }
     catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
+        next(error);
     }
 })
 
-router.post('/edit', async (req, res) => {
+router.post('/edit', async (req, res, next) => {
     const id = req.body._id;
     const updatedData = req.body;
     const options = { new: true };
@@ -31,21 +31,21 @@ router.post('/edit', async (req, res) => {
         return res.json({ error: false,status:200, message: 'Updated Successfully', data:result})
     }
     catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
+        next(error);
     }
 })
 
-router.get('/details/:id', async (req, res) => {
+router.get('/details/:id', async (req, res, next) => {
     try {
         const data = await cityServedLocalityModel.findById(req.params.id);
         return res.json({ error: false,status:200, message: 'Details Fetch Successfully', data:data})
     }
     catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
+        next(error);
     }
 })
 
-router.post('/update_city_served_locality_status', async (req, res) => {
+router.post('/update_city_served_locality_status', async (req, res, next) => {
     const { _id } = req.body;
     if (!_id) {
         return res.json({
@@ -69,11 +69,11 @@ router.post('/update_city_served_locality_status', async (req, res) => {
         }
     }
     catch (error) {
-        res.status(400).json({ message: error.message,error: true })
+        next(error);
     }
 })
 
-router.post('/admin_city_served_locality_list', async (req, res) => {
+router.post('/admin_city_served_locality_list', async (req, res, next) => {
     let finder ={
         status: { $ne: 2 }
     };
@@ -120,11 +120,11 @@ router.post('/admin_city_served_locality_list', async (req, res) => {
         }
     }
     catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
+        next(error);
     }
 })
 
-router.post('/user_city_served_locality_list', async (req, res) => {
+router.post('/user_city_served_locality_list', async (req, res, next) => {
     let finder ={
         status: 1
     };
@@ -141,7 +141,7 @@ router.post('/user_city_served_locality_list', async (req, res) => {
         }
     }
     catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
+        next(error)
     }
 })
 module.exports = router;

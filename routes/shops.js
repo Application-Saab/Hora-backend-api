@@ -2,7 +2,7 @@ const express = require('express');
 const cityServedModel = require('../models/city-served');
 const router = express.Router();
 
-router.get('/search', async (req, res) => {
+router.get('/search', async (req, res, next) => {
     // const options={
     //     'location.coordinates':{
     //         $geoWithin:{
@@ -33,9 +33,10 @@ router.get('/search', async (req, res) => {
     cityServedModel.find({
         $geoWithin: {$centerSphere: {type: "Point", coordinates:[-0.127748, 51.507333]}}
      }, "street", function(err, response) {
-        if (err) return err;
-        console.log(err)
-        console.log(response)
+        if (err) {
+            err.isPublic = true;
+            next(err);
+        }
         return res.json({ error: false,status:200, message: 'Fetch Data Successfully', data: 'data'})
     });
     //  console.log(data)

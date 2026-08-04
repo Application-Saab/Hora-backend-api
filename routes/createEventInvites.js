@@ -66,7 +66,7 @@ const sendResponse = (res, status, error, message, data = null) =>
 
 // Combined route: Create event + register host as guest + create new room
 
-router.post("/create-event-invite", async (req, res) => {
+router.post("/create-event-invite", async (req, res, next) => {
   let room = null;
 
   try {
@@ -224,7 +224,8 @@ router.post("/create-event-invite", async (req, res) => {
           : Promise.resolve(),
       ]);
 
-      throw innerErr;
+      innerErr.isPublic = true;
+      next(innerErr);
     }
     
     if (orderId) {
@@ -249,14 +250,13 @@ router.post("/create-event-invite", async (req, res) => {
 
     return sendResponse(res, 201, false, "Event created successfully", event);
   } catch (err) {
-    console.error("Create Event Error:", err);
-
-    return sendResponse(res, 500, true, "Server error");
+    err.isPublic = true;
+    next(err);
   }
 });
 
 // Fetch event details by eventId(_id)
-router.get("/event-invites/:id", async (req, res) => {
+router.get("/event-invites/:id", async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -282,16 +282,12 @@ router.get("/event-invites/:id", async (req, res) => {
       invite,
     );
   } catch (err) {
-    console.error("Fetch Invite Error:", {
-      message: err.message,
-      stack: err.stack,
-      eventId: req.params.id,
-    });
-    return sendResponse(res, 500, true, "Server error");
+    err.isPublic = true;
+    next(err);
   }
 });
 // Fetch all event invites for a user as a guest or host
-router.get("/event-invites/all/:userId", async (req, res) => {
+router.get("/event-invites/all/:userId", async (req, res, next) => {
   try {
     const { userId } = req.params;
 
@@ -374,13 +370,13 @@ router.get("/event-invites/all/:userId", async (req, res) => {
 
     return sendResponse(res, 200, false, "Events fetched successfully", events);
   } catch (err) {
-    console.error("Fetch Events Error:", err);
-    return sendResponse(res, 500, true, "Server error");
+    err.isPublic = true;
+    next(err);
   }
 });
 
 // Update event invite
-router.put("/event-invites/:id", async (req, res) => {
+router.put("/event-invites/:id", async (req, res, next) => {
   const { id } = req.params;
 
   if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -509,19 +505,13 @@ router.put("/event-invites/:id", async (req, res) => {
       updated,
     );
   } catch (err) {
-    console.error("Update Invite Error:", {
-      message: err.message,
-      stack: err.stack,
-      requestBody: req.body,
-      eventId: id,
-    });
-
-    return sendResponse(res, 500, true, "Server error");
+    err.isPublic = true;
+    next(err);
   }
 });
 
 // Create A guest for an event by userId and eventId
-router.post("/event-guest", async (req, res) => {
+router.post("/event-guest", async (req, res, next) => {
   try {
     const { error, value } = eventGuestSchema.validate(req.body, {
       abortEarly: false,
@@ -557,18 +547,13 @@ router.post("/event-guest", async (req, res) => {
     const savedGuest = await eventGuest.save();
     return sendResponse(res, 201, false, "Event guest created", savedGuest);
   } catch (err) {
-    console.error("Create Guest Error:", {
-      message: err.message,
-      stack: err.stack,
-      requestBody: req.body,
-    });
-
-    return sendResponse(res, 500, true, "Server error");
+    err.isPublic = true;
+    next(err);
   }
 });
 
 //  Get all Guest details by event and user id for a particular event
-router.get("/event-guest/:eventId/user/:userId", async (req, res) => {
+router.get("/event-guest/:eventId/user/:userId", async (req, res, next) => {
   try {
     const { eventId, userId } = req.params;
 
@@ -611,13 +596,13 @@ router.get("/event-guest/:eventId/user/:userId", async (req, res) => {
       guest,
     );
   } catch (err) {
-    console.error("Fetch Event Guest Error:", err.message);
-    return sendResponse(res, 500, true, "Server error");
+    err.isPublic = true;
+    next(err);
   }
 });
 
 // Get all guests details for an event by eventId
-router.get("/event-guests/all/:eventId", async (req, res) => {
+router.get("/event-guests/all/:eventId", async (req, res, next) => {
   try {
     const { eventId } = req.params;
 
@@ -647,12 +632,12 @@ router.get("/event-guests/all/:eventId", async (req, res) => {
       guests || [],
     );
   } catch (err) {
-    console.error("Fetch Guests Error:", err.message);
-    return sendResponse(res, 500, true, "Server error");
+    err.isPublic = true;
+    next(err);
   }
 });
 // Update guest details for an event
-router.put("/event-guest", async (req, res) => {
+router.put("/event-guest", async (req, res, next) => {
   try {
     const { eventId, userId, name, rsvpStatus } = req.body;
 
@@ -773,12 +758,8 @@ router.put("/event-guest", async (req, res) => {
       groupId: groupRoom ? groupRoom._id : null,
     });
   } catch (err) {
-    console.error("Update Guest Error:", {
-      message: err.message,
-      stack: err.stack,
-      requestBody: req.body,
-    });
-    return sendResponse(res, 500, true, "Server error");
+    err.isPublic = true;
+    next(err);
   }
 });
 
@@ -818,7 +799,7 @@ const uploadImageToS3 = async (
   return data;
 };
 
-router.get("/event-posts/:eventId", async (req, res) => {
+router.get("/event-posts/:eventId", async (req, res, next) => {
   try {
     const { eventId } = req.params;
 
@@ -836,12 +817,12 @@ router.get("/event-posts/:eventId", async (req, res) => {
       totalPosts: posts.length,
     });
   } catch (err) {
-    console.error("Get Posts Error:", err);
-    return sendResponse(res, 500, true, "Server error");
+    err.isPublic = true;
+    next(err);
   }
 });
 
-router.post("/delete-post/:postId", async (req, res) => {
+router.post("/delete-post/:postId", async (req, res, next) => {
   const { postId } = req.params;
 
   try {
@@ -872,8 +853,8 @@ router.post("/delete-post/:postId", async (req, res) => {
 
     res.json({ message: "Image deleted successfully" });
   } catch (err) {
-    console.error("Delete failed:", err);
-    res.status(500).json({ message: "Server error", error: err.message });
+    err.isPublic = true;
+    next(err);
   }
 });
 
@@ -881,7 +862,7 @@ router.post("/delete-post/:postId", async (req, res) => {
 router.post(
   "/create-event-subfolder/:eventId",
   uploadSingle2.single("file"),
-  async (req, res) => {
+  async (req, res, next) => {
     try {
       const { eventId } = req.params;
 
@@ -1015,14 +996,13 @@ router.post(
         savedSubFolder,
       );
     } catch (error) {
-      console.error("Create Event Subfolder Error:", error);
-
-      return sendResponse(res, 500, true, "Server error");
+      error.isPublic = true;
+      next(error);
     }
   },
 );
 
-router.put("/assign-to-subfolder", async (req, res) => {
+router.put("/assign-to-subfolder", async (req, res, next) => {
   try {
     const { subFolderId, addImageIds = [], removeImageIds = [] } = req.body;
 
@@ -1050,12 +1030,12 @@ router.put("/assign-to-subfolder", async (req, res) => {
       removed: removeImageIds.length,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error" });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.post("/:postId/like", async (req, res) => {
+router.post("/:postId/like", async (req, res, next) => {
   try {
     const { postId } = req.params;
     const { likedById, likedByName } = req.body;
@@ -1115,15 +1095,12 @@ router.post("/:postId/like", async (req, res) => {
       like: newLike,
     });
   } catch (error) {
-    console.error("Error toggling like:", error);
-
-    res.status(500).json({
-      error: "Server error",
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.post("/:postId/comment", async (req, res) => {
+router.post("/:postId/comment", async (req, res, next) => {
   try {
     const { postId } = req.params;
     const { commentedById, commentedByName, commentTitle } = req.body;
@@ -1158,12 +1135,12 @@ router.post("/:postId/comment", async (req, res) => {
       commentCounts: post.commentCounts,
     });
   } catch (error) {
-    console.error("Error adding comment:", error);
-    res.status(500).json({ error: "Server error" });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.get("/liked-posts/:eventId/:userId", async (req, res) => {
+router.get("/liked-posts/:eventId/:userId", async (req, res, next) => {
   try {
     const { eventId, userId } = req.params;
 
@@ -1209,10 +1186,8 @@ router.get("/liked-posts/:eventId/:userId", async (req, res) => {
       posts,
     });
   } catch (error) {
-    console.error("Get liked posts error:", error);
-    return res.status(500).json({
-      message: "Server error",
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
@@ -1247,7 +1222,7 @@ router.put(
       next();
     });
   },
-  async (req, res) => {
+  async (req, res, next) => {
     try {
       const { eventId } = req.params;
       if (!mongoose.Types.ObjectId.isValid(eventId)) {
@@ -1357,13 +1332,13 @@ router.put(
         updated,
       );
     } catch (err) {
-      console.error("External Template Update Error:", err);
-      return sendResponse(res, 500, true, "Server error");
+      err.isPublic = true;
+      next(err);
     }
   },
 );
 
-router.get("/all-tracking", async (req, res) => {
+router.get("/all-tracking", async (req, res, next) => {
   try {
     const [totalEvents, hostUsers, guestUsersRaw, totalPosts, wonderlandUsers] =
       await Promise.all([
@@ -1415,11 +1390,8 @@ router.get("/all-tracking", async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("Dashboard Stats Error:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
+    err.isPublic = true;
+    next(err);
   }
 });
 
@@ -1438,7 +1410,7 @@ const getDateFilter = (dateFilter) => {
   }
 };
 
-router.post("/admin_all_details", async (req, res) => {
+router.post("/admin_all_details", async (req, res, next) => {
   try {
     const { type, page, per_page, search, dateFilter } = req.body;
 
@@ -1735,8 +1707,8 @@ router.post("/admin_all_details", async (req, res) => {
       paginate,
     });
   } catch (error) {
-    console.error(error);
-    return CustomResponse(res, 500, true, "Server error");
+    error.isPublic = true;
+    next(error);
   }
 });
 

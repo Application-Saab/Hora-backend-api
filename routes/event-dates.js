@@ -8,7 +8,7 @@ const SearchTrackings = require("../models/search-tracking");
 const { CustomResponse } = require("../store/commonFunction");
 
 // Create new entry of event dates for a user or visitor
-router.post("/", async (req, res) => {
+router.post("/", async (req, res, next) => {
   try {
     const { userId, visitorId, pincode, date, eventTitle } = req.body;
 
@@ -82,12 +82,13 @@ router.post("/", async (req, res) => {
     );
   } catch (err) {
     console.error("Create Event Dates Error:", err);
-    return CustomResponse(res, 500, true, "Server error");
+    err.isPublic = true;
+    next(err);
   }
 });
 
 // Add New Event Date to Existing Entry
-router.patch("/add-date", async (req, res) => {
+router.patch("/add-date", async (req, res, next) => {
   try {
     const { userId, visitorId, date, eventTitle } = req.body;
 
@@ -172,12 +173,13 @@ router.patch("/add-date", async (req, res) => {
     );
   } catch (err) {
     console.error("Add Event Date Error:", err);
-    return CustomResponse(res, 500, true, "Server error");
+    err.isPublic = true;
+    next(err);
   }
 });
 
 // Get Event Dates, and city by userId or visitorId
-router.get("/my-events", async (req, res) => {
+router.get("/my-events", async (req, res, next) => {
   try {
     const { userId, visitorId } = req.query;
 
@@ -217,13 +219,13 @@ router.get("/my-events", async (req, res) => {
       events,
     );
   } catch (err) {
-    console.error("Fetch My Events Error:", err);
-    return CustomResponse(res, 500, true, "Server error");
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // Admin - Get All Event Dates with Pagination & Search
-router.get("/list", async (req, res) => {
+router.get("/list", async (req, res, next) => {
   try {
     const {
       page = 1,
@@ -378,14 +380,13 @@ router.get("/list", async (req, res) => {
       },
     );
   } catch (err) {
-    console.error("Fetch Event Dates List Error:", err);
-
-    return CustomResponse(res, 500, true, "Server error");
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // Create / Update User City
-router.post("/user-city", async (req, res) => {
+router.post("/user-city", async (req, res, next) => {
   try {
     const { userId, visitorId, cityName } = req.body;
 
@@ -446,18 +447,13 @@ router.post("/user-city", async (req, res) => {
       data: city,
     });
   } catch (error) {
-    console.error(error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Something went wrong",
-      error: error.message,
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // Link visitor history with logged-in user for event date
-router.patch("/assign-user-event-date", async (req, res) => {
+router.patch("/assign-user-event-date", async (req, res, next) => {
   try {
     const { visitorId, userId } = req.body;
 
@@ -491,14 +487,14 @@ router.patch("/assign-user-event-date", async (req, res) => {
         modifiedCount: result.modifiedCount,
       },
     );
-  } catch (err) {
-    console.error("Assign User Error:", err);
-    return CustomResponse(res, 500, true, "Server error");
+  } catch (error) {
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // Link visitor history with logged-in user for user city
-router.patch("/assign-user-city", async (req, res) => {
+router.patch("/assign-user-city", async (req, res, next) => {
   try {
     const { visitorId, userId } = req.body;
 
@@ -532,13 +528,13 @@ router.patch("/assign-user-city", async (req, res) => {
         modifiedCount: result.modifiedCount,
       },
     );
-  } catch (err) {
-    console.error("Assign User Error:", err);
-    return CustomResponse(res, 500, true, "Server error");
+  } catch (error) {
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.get("/city-tracking-list", async (req, res) => {
+router.get("/city-tracking-list", async (req, res, next) => {
   try {
     const {
       page = 1,
@@ -938,15 +934,14 @@ router.get("/city-tracking-list", async (req, res) => {
         },
       },
     );
-  } catch (err) {
-    console.error("Fetch City Tracking Error:", err);
-
-    return CustomResponse(res, 500, true, "Server error");
+  } catch (error) {
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // Track whatsapp click counts from website
-router.patch("/user-city/click-count", async (req, res) => {
+router.patch("/user-city/click-count", async (req, res, next) => {
   try {
     const { userId, visitorId, type } = req.body;
 
@@ -1011,18 +1006,13 @@ router.patch("/user-city/click-count", async (req, res) => {
       data: {},
     });
   } catch (error) {
-    console.error(error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Something went wrong",
-      error: error.message,
-    });
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // Assing user to city, event date, and search tracking
-router.patch("/assign-user-history", async (req, res) => {
+router.patch("/assign-user-history", async (req, res, next) => {
   try {
     const { visitorId, userId } = req.body;
 
@@ -1072,9 +1062,9 @@ router.patch("/assign-user-history", async (req, res) => {
         },
       },
     );
-  } catch (err) {
-    console.error("Assign User History Error:", err);
-    return CustomResponse(res, 500, true, "Server error");
+  } catch (error) {
+    error.isPublic = true;
+    next(error);
   }
 });
 

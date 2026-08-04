@@ -1,22 +1,22 @@
-const express = require('express');
-const UserModel = require('../models/user');
-const passportAuth= require('../store/passportAuth');
-const commonFunction= require('../store/commonFunction');
-const addressModel = require('../models/address');
-let bcrypt = require('bcryptjs');
+const express = require("express");
+const UserModel = require("../models/user");
+const passportAuth = require("../store/passportAuth");
+const commonFunction = require("../store/commonFunction");
+const addressModel = require("../models/address");
+let bcrypt = require("bcryptjs");
 const router = express.Router();
-let async = require('async');
-const ConfigurationModel = require('../models/configuration');
-const mealModel = require('../models/meal');
-const ingredientModel = require('../models/ingredient');
-const dishModel = require('../models/dish');
-const orderModel = require('../models/order');
-var ObjectId = require('mongoose').Types.ObjectId; 
+let async = require("async");
+const ConfigurationModel = require("../models/configuration");
+const mealModel = require("../models/meal");
+const ingredientModel = require("../models/ingredient");
+const dishModel = require("../models/dish");
+const orderModel = require("../models/order");
+var ObjectId = require("mongoose").Types.ObjectId;
 const notificationFunction = require("../store/notifications");
 const cityServedModel = require("../models/city-served");
 const cityServedLocalityModel = require("../models/city-served-locality");
 
-router.post('/admin_signup', async (req, res) => {
+router.post('/admin_signup', async (req, res, next) => {
     const data = new UserModel({
         email: req.body.email,
         name: req.body.name,
@@ -41,11 +41,11 @@ router.post('/admin_signup', async (req, res) => {
         });
     }
     catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
+      next(error);
     }
 })
 
-router.post("/admin_signin", async (req, res) => {
+router.post("/admin_signin", async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
@@ -63,8 +63,11 @@ router.post("/admin_signin", async (req, res) => {
     const user = await UserModel.findOne({ email, role: "admin", password });
 
     if (!user) {
-      return res
-        .json({ error: true, status: 503, message: "Admin Not Registered" });
+      return res.json({
+        error: true,
+        status: 503,
+        message: "Admin Not Registered",
+      });
     }
 
     const token = passportAuth.signToken(user);
@@ -76,13 +79,23 @@ router.post("/admin_signin", async (req, res) => {
       token,
     });
   } catch (error) {
-    return res.status(400).json({ message: error.message, error: true });
+      next(error);
   }
 });
 
-router.post("/admin_user_list", async (req, res) => {
+router.post("/admin_user_list", async (req, res, next) => {
   try {
-    let { role, email, phone, _id, page, per_page, city, job_profile, performanceBadge } = req.body;
+    let {
+      role,
+      email,
+      phone,
+      _id,
+      page,
+      per_page,
+      city,
+      job_profile,
+      performanceBadge,
+    } = req.body;
 
     // Ensure page and per_page are valid numbers
     page = Number(page);
@@ -97,7 +110,7 @@ router.post("/admin_user_list", async (req, res) => {
     if (role) finder.role = role;
     if (city) finder.city = city;
     if (job_profile && job_profile !== "all") finder.job_profile = job_profile;
-    if(performanceBadge) finder.performanceBadge = performanceBadge;
+    if (performanceBadge) finder.performanceBadge = performanceBadge;
 
     if (email) {
       finder.email = new RegExp(email.trim(), "i");
@@ -147,14 +160,11 @@ router.post("/admin_user_list", async (req, res) => {
       });
     }
   } catch (error) {
-    res.status(400).json({
-      error: true,
-      message: error.message,
-    });
+      next(error);
   }
 });
 
-router.post("/update_user_status", async (req, res) => {
+router.post("/update_user_status", async (req, res, next) => {
   const { _id } = req.body;
 
   if (!_id) {
@@ -174,7 +184,6 @@ router.post("/update_user_status", async (req, res) => {
       };
 
       if (user.device_token !== "") {
-
         if (req.body.status == 2) {
           notificationFunction.sendNotifications(
             user.device_token,
@@ -182,7 +191,7 @@ router.post("/update_user_status", async (req, res) => {
             "Account Deleted",
             "Please reach out to below contact +91 888-422-1287",
             req.body.status,
-            1
+            1,
           );
         }
       }
@@ -202,14 +211,11 @@ router.post("/update_user_status", async (req, res) => {
       });
     }
   } catch (error) {
-    return res.status(400).json({
-      message: error.message,
-      error: true,
-    });
+      next(error);
   }
 });
 
-router.post('/admin_user_update', async (req, res) => {
+router.post('/admin_user_update', async (req, res, next) => {
     const id = req.body._id;
     const updatedData = req.body;
     const options = { new: true };
@@ -220,21 +226,21 @@ router.post('/admin_user_update', async (req, res) => {
         return res.json({ error: false,status:200, message: 'Updated Successfully', data:result})
     }
     catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
+        next(error);
     }
 })
 
-router.get('/admin_user_details/:id', async (req, res) => {
+router.get('/admin_user_details/:id', async (req, res, next) => {
     try {
      const data = await UserModel.findById(req.params.id).populate('userAppliance','_id name image').populate('userCuisioness','_id name image').populate('userDishArray','_id name image').populate('userServedLocalities','_id name ')
      return res.json({ error: false,status:200, message: 'Details Fetch Successfully', data:data})
     }
     catch (error) {
-     res.status(400).json({ message: error.message ,error: true})
+      next(error);
      }
 })
 
-router.post('/user_signup', async (req, res) => {
+router.post('/user_signup', async (req, res, next) => {
     try {
         const {
             email,
@@ -270,50 +276,50 @@ router.post('/user_signup', async (req, res) => {
             });
         }
 
-        // Create new user
-        const newUser = new UserModel({
-            email,
-            name,
-            role,
-            avatar,
-            password: '',
-            phone,
-            os,
-            address,
-            otp,
-            age,
-            city,
-            aadhar_no,
-            aadhar_front_img,
-            aadhar_back_img,
-            experience,
-            userAppliance,
-            userServedLocalities,
-            job_type,
-            resume,
-            userCuisioness,
-            is_veg
-        });
+    // Check if user already exists
+    const existingUser = await UserModel.find({ phone, role });
 
-        const savedUser = await newUser.save();
+    if (existingUser.length > 0) {
+      return res.json({
+        error: true,
+        status: 503,
+        message: `${commonFunction.capitalizeFirstLetter(role)} Already Added`,
+      });
+    }
 
-        return res.json({
-            error: false,
-            status: 200,
-            message: `${commonFunction.capitalizeFirstLetter(role)} Registered Successfully`,
-            dataToSave: savedUser,   
-            token: passportAuth.signToken(savedUser)
-        });
+    // Create new user
+    const newUser = new UserModel({
+      email,
+      name,
+      role,
+      avatar,
+      password: "",
+      phone,
+      os,
+      address,
+      otp,
+      age,
+      city,
+      aadhar_no,
+      aadhar_front_img,
+      aadhar_back_img,
+      experience,
+      userAppliance,
+      userServedLocalities,
+      job_type,
+      resume,
+      userCuisioness,
+      is_veg,
+    });
+
+    const savedUser = await newUser.save();
 
     } catch (error) {
-        return res.status(400).json({
-            error: true,
-            message: error.message
-        });
+      next(error);
     }
 });
 
-router.post('/admin_user_address_list', async (req, res) => {
+router.post('/admin_user_address_list', async (req, res, next) => {
     let finder ={
         status: { $ne: 2 }
     };
@@ -345,82 +351,14 @@ router.post('/admin_user_address_list', async (req, res) => {
         }
     }
     catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
+      next(error);
     }
-})
+  } catch (error) {
+    next(error);
+  }
+});
 
-router.get('/getDashboardCount', async (req, res) => {
-    async.parallel({
-        total_customer: function(callback) {
-            let query = { 'role': 'customer','status':'1' };
-            UserModel.count(query, function(err, count) {
-                callback(err, count);
-            })
-        },total_supplier: function(callback) {
-            let query = { 'role': 'supplier','status':'1' };
-            UserModel.count(query, function(err, count) {
-                callback(err, count);
-            })
-        },total_cousine: function(callback) {
-            let query = { 'type': 'cuisine','status':'1' };
-            ConfigurationModel.count(query, function(err, count) {
-                callback(err, count);
-            })
-        },total_appliance: function(callback) {
-            let query = { 'type': 'appliance','status':'1' };
-            ConfigurationModel.count(query, function(err, count) {
-                callback(err, count);
-            })
-        },total_meal: function(callback) {
-            let query = { 'status':'1' };
-            mealModel.count(query, function(err, count) {
-                callback(err, count);
-            })
-        },total_ingredient: function(callback) {
-            let query = { 'status':'1' };
-            ingredientModel.count(query, function(err, count) {
-                callback(err, count);
-            })
-        },total_dish: function(callback) {
-            let query = { 'status':'1' };
-            dishModel.count(query, function(err, count) {
-                callback(err, count);
-            })
-        },total_city: function(callback) {
-            let query = { 'status':'1' };
-            cityServedModel.count(query, function(err, count) {
-                callback(err, count);
-            })
-        },total_city_locality: function(callback) {
-            let query = { 'status':'1' };
-            cityServedLocalityModel.count(query, function(err, count) {
-                callback(err, count);
-            })
-        },total_order: function(callback) {
-            let query = { 'status':'1' };
-            orderModel.count(query, function(err, count) {
-                callback(err, count);
-            })
-        }
-    }, function(err, results) {
-        return res.json({ 
-            error: false, status:200, message: 'Fetch Data Successfully', data:{
-                total_customer: results.total_customer,
-                total_supplier: results.total_supplier,
-                total_cousine: results.total_cousine,
-                total_appliance: results.total_appliance,
-                total_meal: results.total_meal,
-                total_ingredient: results.total_ingredient,
-                total_dish: results.total_dish,
-                total_city: results.total_city,
-                total_city_locality: results.total_city_locality,
-                total_order: results.total_order,
-            } 
-        })
-    });
-})
-
-router.post("/adminOrderList", async (req, res) => {
+router.post("/adminOrderList", async (req, res, next) => {
   try {
     const {
       page = 1,
@@ -495,26 +433,50 @@ router.post("/adminOrderList", async (req, res) => {
           as: "addressId",
         },
       },
+      {
+        $lookup: {
+          from: "eventinvites", // correct collection name
+          let: { orderId: "$order_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $eq: ["$orderId", "$$orderId"],
+                },
+              },
+            },
+            {
+              $project: {
+                _id: 1,
+                orderId: 1,
+                hostName: 1,
+                eventType: 1,
+              },
+            },
+          ],
+          as: "eventData",
+        },
+      },
       //add this field for get the designType from decoration model
       {
-  $lookup: {
-    from: "decorations",
-    let: { itemIds: "$items" },
-    pipeline: [
-      {
-        $match: {
-          $expr: { $in: [{ $toString: "$_id" }, "$$itemIds"] }
-        }
-      },
-      {
-        $project: {
-          _id: 1,
-          designType: 1,
-        }
-      }
-    ],
-    as: "decorationsData"
-  }
+        $lookup: {
+          from: "decorations",
+          let: { itemIds: "$items" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $in: [{ $toString: "$_id" }, "$$itemIds"] },
+              },
+            },
+            {
+              $project: {
+                _id: 1,
+                designType: 1,
+              },
+            },
+          ],
+          as: "decorationsData",
+        },
       },
       { $sort: { order_id: -1 } },
       { $match: { _id: { $nin: [] } } },
@@ -546,11 +508,11 @@ router.post("/adminOrderList", async (req, res) => {
       return res.json({ error: true, status: 503, message: "No Record Found" });
     }
   } catch (error) {
-    return res.status(400).json({ message: error.message, error: true });
+      next(error);
   }
 });
 
-router.post("/downloadOrderReport", async (req, res) => {
+router.post("/downloadOrderReport", async (req, res, next) => {
   try {
     const {
       order_id,
@@ -758,10 +720,7 @@ router.post("/downloadOrderReport", async (req, res) => {
       {
         $addFields: {
           allProducts: {
-            $concatArrays: [
-              "$decorationProducts",
-              "$photographyProducts",
-            ],
+            $concatArrays: ["$decorationProducts", "$photographyProducts"],
           },
         },
       },
@@ -795,11 +754,7 @@ router.post("/downloadOrderReport", async (req, res) => {
           order_pincode: 1,
 
           status: {
-            $cond: [
-              { $eq: ["$status", 1] },
-              "Active",
-              "Inactive",
-            ],
+            $cond: [{ $eq: ["$status", 1] }, "Active", "Inactive"],
           },
 
           order_status: 1,
@@ -815,14 +770,10 @@ router.post("/downloadOrderReport", async (req, res) => {
           product_id: "$allProducts._id",
           product_name: "$allProducts.name",
           product_price: "$allProducts.price",
-          product_collection:
-            "$allProducts.collectionType",
+          product_collection: "$allProducts.collectionType",
 
           rating_range: {
-            $arrayElemAt: [
-              "$userReviewRatingArray",
-              0,
-            ],
+            $arrayElemAt: ["$userReviewRatingArray", 0],
           },
 
           rating: {
@@ -832,10 +783,7 @@ router.post("/downloadOrderReport", async (req, res) => {
                   case: {
                     $eq: [
                       {
-                        $arrayElemAt: [
-                          "$userReviewRatingArray",
-                          0,
-                        ],
+                        $arrayElemAt: ["$userReviewRatingArray", 0],
                       },
                       "1-6",
                     ],
@@ -846,10 +794,7 @@ router.post("/downloadOrderReport", async (req, res) => {
                   case: {
                     $eq: [
                       {
-                        $arrayElemAt: [
-                          "$userReviewRatingArray",
-                          0,
-                        ],
+                        $arrayElemAt: ["$userReviewRatingArray", 0],
                       },
                       "7-8",
                     ],
@@ -860,10 +805,7 @@ router.post("/downloadOrderReport", async (req, res) => {
                   case: {
                     $eq: [
                       {
-                        $arrayElemAt: [
-                          "$userReviewRatingArray",
-                          0,
-                        ],
+                        $arrayElemAt: ["$userReviewRatingArray", 0],
                       },
                       "9-10",
                     ],
@@ -892,17 +834,11 @@ router.post("/downloadOrderReport", async (req, res) => {
       data: orders,
     });
   } catch (error) {
-    console.error(error);
-
-    return res.status(500).json({
-      error: true,
-      status: 500,
-      message: error.message,
-    });
+      next(error);
   }
 });
 
-router.get("/getUserDetails/:id", async (req, res) => {
+router.get("/getUserDetails/:id", async (req, res, next) => {
   try {
     const id = new ObjectId(req.params.id);
 
@@ -915,10 +851,7 @@ router.get("/getUserDetails/:id", async (req, res) => {
       data: data,
     });
   } catch (error) {
-    return res.status(400).json({
-      message: error.message,
-      error: true,
-    });
+      next(error);
   }
 });
 

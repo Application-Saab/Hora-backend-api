@@ -4,7 +4,7 @@ const CelebrationBooster = require("../models/celebration-booster");
 const { CustomResponse } = require("../store/commonFunction");
 const getPaginatedData = require("../utils/functions");
 
-router.post("/createCelebrationBooster", async (req, res) => {
+router.post("/createCelebrationBooster", async (req, res, next) => {
   try {
     const data = req.body;
 
@@ -20,12 +20,11 @@ router.post("/createCelebrationBooster", async (req, res) => {
       booster,
     );
   } catch (error) {
-    console.error(error);
-    return CustomResponse(res, 500, true, "Server error");
+      next(error);
   }
 });
 
-router.get("/celebrationBoostersList", async (req, res) => {
+router.get("/celebrationBoostersList", async (req, res, next) => {
   try {
     const boosters = await CelebrationBooster.find({
       status: 1,
@@ -41,12 +40,11 @@ router.get("/celebrationBoostersList", async (req, res) => {
       boosters,
     );
   } catch (error) {
-    console.error(error);
-    return CustomResponse(res, 500, true, "Server error");
+    next(error);
   }
 });
 
-router.put("/updateCelebrationBooster/:id", async (req, res) => {
+router.put("/updateCelebrationBooster/:id", async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -66,12 +64,11 @@ router.put("/updateCelebrationBooster/:id", async (req, res) => {
       updated,
     );
   } catch (error) {
-    console.error(error);
-    return CustomResponse(res, 500, true, "Server error");
+    next(error);
   }
 });
 
-router.post("/adminCelebrationBoosterList", async (req, res) => {
+router.post("/adminCelebrationBoosterList", async (req, res, next) => {
   try {
     const { page, per_page, name, status, type, tag } = req.body;
 
@@ -94,13 +91,12 @@ router.post("/adminCelebrationBoosterList", async (req, res) => {
       paginate,
     });
   } catch (error) {
-    console.error(error);
-    return CustomResponse(res, 500, true, "Server error");
+    next(error);
   }
 });
 
 // Path parameters use kar rahe hain hum yahan (:name)
-router.get("/getCelebrationBoosterByName/:name", async (req, res) => {
+router.get("/getCelebrationBoosterByName/:name", async (req, res, next) => {
   try {
     // GET request me data req.params se nikalte hain
     const { name } = req.params;
@@ -126,8 +122,7 @@ router.get("/getCelebrationBoosterByName/:name", async (req, res) => {
       booster,
     );
   } catch (error) {
-    console.error("Error fetching booster:", error);
-    return CustomResponse(res, 500, true, "Server error");
+    next(error);
   }
 });
 

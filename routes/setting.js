@@ -3,7 +3,7 @@ const settingModel = require('../models/setting');
 const dishsettingModel = require('../models/dish-setting');
 const router = express.Router();
 
-router.post('/update', async (req, res) => {
+router.post('/update', async (req, res, next) => {
     try {
         const id = "63f053d1cb94c0eb0b66f8a6";
         const updatedData = req.body;
@@ -14,22 +14,24 @@ router.post('/update', async (req, res) => {
         return res.json({ error: false,status:200, message: 'Settings Updated Successfully', data:result})
     }
     catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 
-router.get('/details', async (req, res) => {
+router.get('/details', async (req, res, next) => {
     try {
         const id = "63f053d1cb94c0eb0b66f8a6";
         const data = await settingModel.findById(id);
         return res.json({ error: false,status:200, message: 'Details Fetch Successfully', data:data})
     }
     catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 
-router.post('/add', async (req, res) => {
+router.post('/add', async (req, res, next) => {
     const data = new dishsettingModel({
         dish_allowed_per_order: req.body.dish_allowed_per_order,
         dish_allowed_with_1_burner: req.body.dish_allowed_with_1_burner,
@@ -56,11 +58,12 @@ router.post('/add', async (req, res) => {
         return res.json({ error: false,status:200, message: 'Dish Setting Added Successfully', data:dataToSave})
     }
     catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 
-router.post('/updateDishSetting', async (req, res) => {
+router.post('/updateDishSetting', async (req, res, next) => {
     try {
         const id = "641fdee8fd26244f7ad65aff";
         const updatedData = req.body;
@@ -71,18 +74,20 @@ router.post('/updateDishSetting', async (req, res) => {
         return res.json({ error: false,status:200, message: 'Settings Updated Successfully', data:result})
     }
     catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 
-router.get('/dishSettingDetails', async (req, res) => {
+router.get('/dishSettingDetails', async (req, res, next) => {
     try {
         const id = "641fdee8fd26244f7ad65aff";
         const data = await dishsettingModel.findById(id);
         return res.json({ error: false,status:200, message: 'Details Fetch Successfully', data:data})
     }
     catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 

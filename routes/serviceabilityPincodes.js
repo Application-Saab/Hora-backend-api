@@ -18,7 +18,7 @@ const auth = new google.auth.JWT({
 const SPREADSHEET_ID = "1cvhx5hWUn-Fr68_OEpx-uhqwPy6jsYU6t2ady1SdzS4";
 const RANGE = "Pincode List!B:D";
 
-router.post("/sync", async (req, res) => {
+router.post("/sync", async (req, res, next) => {
     try {
         await auth.authorize();
 
@@ -73,17 +73,13 @@ router.post("/sync", async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Sync Error:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Failed to sync sheet data.",
-            error: error.message,
-        });
+        error.isPublic = true;
+        next(error);
     }
 });
 
 
-router.get("/serviceability", async (req, res) => {
+router.get("/serviceability", async (req, res, next) => {
     try {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
@@ -137,15 +133,12 @@ router.get("/serviceability", async (req, res) => {
         });
     } catch (error) {
         console.error("Fetch Error:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Failed to fetch data.",
-            error: error.message,
-        });
+        error.isPublic = true;
+        next(error);
     }
 });
 
-router.put("/update/:id", async (req, res) => {
+router.put("/update/:id", async (req, res, next) => {
     try {
         const { id } = req.params;
         const { status, category } = req.body;
@@ -172,7 +165,8 @@ router.put("/update/:id", async (req, res) => {
         });
     } catch (error) {
         console.error("Update error:", error);
-        return res.status(500).json({ success: false, message: "Server error" });
+        error.isPublic = true;
+        next(error);
     }
 });
 

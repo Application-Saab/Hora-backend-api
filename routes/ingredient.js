@@ -3,7 +3,7 @@ const { default: mongoose } = require('mongoose');
 const ingredientModel = require('../models/ingredient');
 const router = express.Router();
 
-router.post('/add', async (req, res) => {
+router.post('/add', async (req, res, next) => {
     const data = new ingredientModel({
         name: req.body.name,
         image: req.body.image,
@@ -19,11 +19,12 @@ router.post('/add', async (req, res) => {
         }
     }
     catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 
-router.post('/edit', async (req, res) => {
+router.post('/edit', async (req, res, next) => {
     const id = req.body._id;
     const updatedData = req.body;
     const options = { new: true };
@@ -34,21 +35,23 @@ router.post('/edit', async (req, res) => {
         return res.json({ error: false,status:200, message: 'Updated Successfully', data:result})
     }
     catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 
-router.get('/details/:id', async (req, res) => {
+router.get('/details/:id', async (req, res, next) => {
     try {
         const data = await ingredientModel.findById(req.params.id).populate("ingredientTypeId");
         return res.json({ error: false,status:200, message: 'Details Fetch Successfully', data:data})
     }
     catch (error) {
-        res.status(400).json({ message: error.message ,error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 
-router.post('/update_ingredient_status', async (req, res) => {
+router.post('/update_ingredient_status', async (req, res, next) => {
     const { _id } = req.body;
     if (!_id) {
         return res.json({
@@ -72,11 +75,12 @@ router.post('/update_ingredient_status', async (req, res) => {
         }
     }
     catch (error) {
-        res.status(400).json({ message: error.message,error: true })
+        error.isPublic = true;
+        next(error);
     }
 })
 // used in admin  fixed
-router.post('/admin_ingredient_list', async (req, res) => {
+router.post('/admin_ingredient_list', async (req, res, next) => {
     try {
         // Filter
         let finder = {
@@ -138,10 +142,8 @@ router.post('/admin_ingredient_list', async (req, res) => {
         }
 
     } catch (error) {
-        return res.status(400).json({
-            message: error.message,
-            error: true
-        });
+    error.isPublic = true;
+    next(error);
     }
 });
 

@@ -198,7 +198,7 @@ async function handleDriveFolderUpload(folderUrl, vendorId) {
 }
 
 // =================== Route ===================
-router.post("/import-drive-folder", async (req, res) => {
+router.post("/import-drive-folder", async (req, res, next) => {
   try {
     const { folderUrl, vendorId } = req.body;
 
@@ -301,12 +301,13 @@ router.post("/import-drive-folder", async (req, res) => {
   } catch (error) {
     console.error("Drive Upload error:", error);
     if (!res.headersSent) {
-      res.status(500).json({ message: error.message });
+      error.isPublic = true;
+      next(error);
     }
   }
 });
 
-router.post("/add-order-drive-link", async (req, res) => {
+router.post("/add-order-drive-link", async (req, res, next) => {
   try {
     const { folderUrl, order_id, allDriveLinks = [], isRetry = false } = req.body;
     const order = await OrderModel.findOne({ order_id });
@@ -508,11 +509,12 @@ router.post("/add-order-drive-link", async (req, res) => {
 
   } catch (error) {
     console.error("add-order-drive-link error:", error.message);
-    res.status(500).json({ error: error.message });
+    error.isPublic = true;
+    next(error);
   }
 });
 
-router.post("/update-google-sheet", async (req, res) => {
+router.post("/update-google-sheet", async (req, res, next) => {
   try {
     let updatedPhoneNumber = req.body.phone;
     if (!updatedPhoneNumber.startsWith("+91")) {
@@ -533,7 +535,8 @@ router.post("/update-google-sheet", async (req, res) => {
     res.json(googleResp.data); // axios se data direct milega
   } catch (err) {
     console.error("Google Sheet update error:", err.message);
-    res.status(500).json({ error: "Failed to update Google Sheet" });
+    error.isPublic = true;
+    next(error);
   }
 });
 

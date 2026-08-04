@@ -1163,7 +1163,6 @@ async function generateAndUploadCapsuleBanner(folderId, leftImageInput, eventNam
       ctx.restore();
     }
 
-    // 5. Save & Upload
     const canvasBuffer = canvas.toBuffer("image/png");
     await fsPromises.writeFile(tempPngPath, canvasBuffer);
 

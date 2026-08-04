@@ -36,7 +36,7 @@ const updateBadgeSchema = Joi.object({
 });
 
 // Create Badge
-router.post("/", async (req, res) => {
+router.post("/", async (req, res, next) => {
   try {
     const { error, value } = createBadgeSchema.validate(req.body, {
       abortEarly: false,
@@ -70,25 +70,25 @@ router.post("/", async (req, res) => {
       "Badge created successfully",
       savedBadge
     );
-  } catch (err) {
-    console.error("Create Badge Error:", err);
-    return sendResponse(res, 500, true, "Server error");
+  } catch (error) {
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // Get All Badges
-router.get("/", async (req, res) => {
+router.get("/", async (req, res, next) => {
   try {
     const badges = await EventBadge.find({ isDisabled: { $ne: true } }).lean();
     return sendResponse(res, 200, false, "Badges fetched successfully", badges);
-  } catch (err) {
-    console.error("Get All Badges Error:", err);
-    return sendResponse(res, 500, true, "Server error");
+  } catch (error) {
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // Get Badge By EventId
-router.get("/event/:eventId", async (req, res) => {
+router.get("/event/:eventId", async (req, res, next) => {
   try {
     const { eventId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(eventId)) {
@@ -101,14 +101,14 @@ router.get("/event/:eventId", async (req, res) => {
     }).lean();
 
     return sendResponse(res, 200, false, "Badges fetched successfully", badges);
-  } catch (err) {
-    console.error("Get Badges By Event Error:", err);
-    return sendResponse(res, 500, true, "Server error");
+  } catch (error) {
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // Update Badge
-router.put("/:id", async (req, res) => {
+router.put("/:id", async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -144,14 +144,14 @@ router.put("/:id", async (req, res) => {
       "Badge updated successfully",
       updatedBadge
     );
-  } catch (err) {
-    console.error("Update Badge Error:", err);
-    return sendResponse(res, 500, true, "Server error");
+  } catch (error) {
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // Soft Delete Badge (Disable)
-router.post("/disable/:id", async (req, res) => {
+router.post("/disable/:id", async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -166,14 +166,14 @@ router.post("/disable/:id", async (req, res) => {
     await badge.save();
 
     return sendResponse(res, 200, false, "Badge disabled successfully", badge);
-  } catch (err) {
-    console.error("Disable Badge Error:", err);
-    return sendResponse(res, 500, true, "Server error");
+  } catch (error) {
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // Create Report for Badge
-router.post("/report/:id", async (req, res) => {
+router.post("/report/:id", async (req, res, next) => {
   try {
     const { id } = req.params;
     const { userId, reason } = req.body;
@@ -201,14 +201,14 @@ router.post("/report/:id", async (req, res) => {
     await badge.save();
 
     return sendResponse(res, 200, false, "Badge reported successfully", badge);
-  } catch (err) {
-    console.error("Report Badge Error:", err);
-    return sendResponse(res, 500, true, "Server error");
+  } catch (error) {
+    error.isPublic = true;
+    next(error);
   }
 });
 
 // Get All Reports for a Badge
-router.get("/badges/reports/:id", async (req, res) => {
+router.get("/badges/reports/:id", async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -227,9 +227,9 @@ router.get("/badges/reports/:id", async (req, res) => {
       "Badge reports fetched successfully",
       reports
     );
-  } catch (err) {
-    console.error("Get Badge Reports Error:", err);
-    return sendResponse(res, 500, true, "Server error");
+  } catch (error) {
+    error.isPublic = true;
+    next(error);
   }
 });
 

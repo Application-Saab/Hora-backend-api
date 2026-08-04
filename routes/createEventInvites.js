@@ -4,11 +4,13 @@ const mongoose = require("mongoose");
 const Joi = require("joi");
 const EventInvite = require("../models/event-invite");
 const EventGuest = require("../models/event-guest");
+const Folders = require("../models/folder");
 const TicketCounter = require("../models/ticket-counter-luckydraw");
 const EventMessage = require("../models/eventMessage");
 const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
+const axios = require("axios");
 
 const {
   generateTemplateThumbnail,
@@ -224,6 +226,26 @@ router.post("/create-event-invite", async (req, res, next) => {
 
       innerErr.isPublic = true;
       next(innerErr);
+    }
+    
+    if (orderId) {
+      try {
+        const folder = await Folders.findOne({ orderId });
+
+        if (!folder) {
+          console.warn(`Folder not found for orderId: ${orderId}`);
+        } else {
+          await axios.post(
+            `https://horaservices.com/face-api/api/test/generate-banner/${folder._id}`,
+            {},
+          );
+        }
+      } catch (err) {
+        console.error(
+          `Generate banner failed for orderId ${orderId}:`,
+          err.message,
+        );
+      }
     }
 
     return sendResponse(res, 201, false, "Event created successfully", event);

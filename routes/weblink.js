@@ -16,6 +16,7 @@ const EventinvitesModel = require("../models/event-invite");
 const multer = require("multer");
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
+const { generateThumbnail } = require("../store/multerS3Config");
 
 
 router.put("/assign-to-subfolder", async (req, res) => {
@@ -1031,7 +1032,9 @@ if (fs.existsSync(fontPath)) {
 }
 
 async function generateAndUploadCapsuleBanner(folderId, leftImageInput, eventName, phoneNo = "9876543210") {
-  const tempOriginalPath = path.join("/tmp", `temp-banner-${folderId}-${Date.now()}.png`);
+  const timestamp = Date.now();
+  const tempPngPath = path.join("/tmp", `temp-banner-${folderId}-${timestamp}.png`);
+  const tempWebpPath = path.join("/tmp", `temp-banner-${folderId}-${timestamp}.webp`);
 
   try {
     const scale = 4;
@@ -1144,15 +1147,17 @@ async function generateAndUploadCapsuleBanner(folderId, leftImageInput, eventNam
       ctx.restore();
     }
 
-    const canvasBuffer = await canvas.toBuffer("image/png");
-    await fsPromises.writeFile(tempOriginalPath, canvasBuffer);
+    const canvasBuffer = canvas.toBuffer("image/png");
+    await fsPromises.writeFile(tempPngPath, canvasBuffer);
 
-    const fileName = `banner-${folderId}-${Date.now()}.png`;
+    await generateThumbnail(tempPngPath, tempWebpPath);
+
+    const fileName = `banner-${folderId}-${timestamp}.webp`;
     const folderPath = "capsule-banners";
-    const contentType = "image/png";
+    const contentType = "image/webp";
 
     const s3Result = await uploadFileToS3(
-      tempOriginalPath,
+      tempWebpPath,
       fileName,
       folderPath,
       phoneNo,
@@ -1165,7 +1170,10 @@ async function generateAndUploadCapsuleBanner(folderId, leftImageInput, eventNam
     console.error("Backend Banner Generation Error:", error);
     throw error;
   } finally {
-    await fsPromises.unlink(tempOriginalPath).catch(() => { });
+    await Promise.all([
+      fsPromises.unlink(tempPngPath).catch(() => { }),
+      fsPromises.unlink(tempWebpPath).catch(() => { })
+    ]);
   }
 }
 

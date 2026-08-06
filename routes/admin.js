@@ -276,17 +276,6 @@ router.post('/user_signup', async (req, res, next) => {
             });
         }
 
-    // Check if user already exists
-    const existingUser = await UserModel.find({ phone, role });
-
-    if (existingUser.length > 0) {
-      return res.json({
-        error: true,
-        status: 503,
-        message: `${commonFunction.capitalizeFirstLetter(role)} Already Added`,
-      });
-    }
-
     // Create new user
     const newUser = new UserModel({
       email,
@@ -353,9 +342,6 @@ router.post('/admin_user_address_list', async (req, res, next) => {
     catch (error) {
       next(error);
     }
-  } catch (error) {
-    next(error);
-  }
 });
 
 router.post("/adminOrderList", async (req, res, next) => {

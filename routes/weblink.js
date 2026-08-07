@@ -1310,4 +1310,106 @@ router.post(
   handleFolderBannerCreation
 );
 
+
+const deletePersonFolders = async (req, res) => {
+  try {
+    const { folderName } = req.body;
+
+    if (!folderName) {
+      return res.status(400).json({
+        success: false,
+        message: "folderName is required",
+      });
+    }
+
+    const folder = await Folder.findOne({ folderName });
+
+    if (!folder) {
+      return res.status(404).json({
+        success: false,
+        message: "Folder not found",
+      });
+    }
+
+    const personFolders = folder.subFolders.filter(
+      (sf) => sf.isPersonFolder
+    );
+
+    for (const subFolder of personFolders) {
+      if (subFolder.folderDp?.s3Key) {
+        try {
+          await deleteFromS3(subFolder.folderDp.s3Key);
+        } catch (err) {
+          console.error("DP delete error:", err);
+        }
+      }
+
+      if (subFolder.folderDp?.thumbnailKey) {
+        try {
+          await deleteFromS3(subFolder.folderDp.thumbnailKey);
+        } catch (err) {
+          console.error("Thumbnail delete error:", err);
+        }
+      }
+    }
+
+    folder.subFolders = folder.subFolders.filter(
+      (sf) => !sf.isPersonFolder
+    );
+
+    await folder.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `${personFolders.length } , Person folders deleted successfully`,
+    });
+} catch (err) {
+  console.error("Delete person folders error:", err);
+  return res.status(500).json({
+    success: false,
+    message: err.message,
+  });
+}
+};
+
+router.post("/delete-person-folders", deletePersonFolders);
+
+router.post("/delete-s3-image", async (req, res) => {
+  try {
+    const { s3Key } = req.body;
+
+    if (!s3Key) {
+      return res.status(400).json({
+        success: false,
+        message: "s3Key is required",
+      });
+    }
+
+    let key = s3Key;
+
+    // Agar full S3 URL aaya hai to usse key nikal lo
+    if (key.startsWith("http://") || key.startsWith("https://")) {
+      const url = new URL(key);
+      key = decodeURIComponent(url.pathname.substring(1));
+    }
+
+    console.log("Deleting S3 Key:", key);
+
+    await deleteFromS3(key);
+
+    return res.status(200).json({
+      success: true,
+      message: "Image deleted successfully.",
+      deletedKey: key,
+    });
+  } catch (err) {
+    console.error("S3 Delete Error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+});
+
 module.exports = router;

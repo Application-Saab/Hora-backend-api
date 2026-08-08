@@ -111,12 +111,11 @@ router.put("/toggle-like", async (req, res) => {
 
 router.get("/capsule-tracking", async (req, res) => {
   try {
-
     const page = Number(req.query.page) || 1;
     const limit = Number(req.query.limit) || 10;
     const skip = (page - 1) * limit;
     const search = req.query.search;
-    const date = req.query.date; 
+    const date = req.query.date;
 
     const matchQuery = {
       type: 8,
@@ -132,7 +131,6 @@ router.get("/capsule-tracking", async (req, res) => {
 
     if (date) {
       const startOfDay = new Date(`${date}T00:00:00.000+05:30`);
-
       const endOfDay = new Date(`${date}T23:59:59.999+05:30`);
 
       matchQuery["imageUploadCounts.driveProvidedAt"] = {
@@ -142,20 +140,51 @@ router.get("/capsule-tracking", async (req, res) => {
     }
 
     const [orders, totalOrders] = await Promise.all([
-
       Order.aggregate([
-
         {
           $match: matchQuery
         },
 
+        // Calculate latest date with multi-level fallbacks for missing updatedAt
+        {
+          $addFields: {
+            latestDriveLinkDate: {
+              $max: [
+                {
+                  $max: {
+                    $map: {
+                      input: { $ifNull: ["$allDriveLinks", []] },
+                      as: "link",
+                      in: {
+                        $ifNull: [
+                          "$$link.updatedAt",
+                          {
+                            $ifNull: [
+                              "$$link.submittedAt",
+                              { $ifNull: ["$imageUploadCounts.driveProvidedAt", "$createdAt"] }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                "$imageUploadCounts.driveProvidedAt",
+                "$createdAt"
+              ]
+            }
+          }
+        },
+
+        // 1. Sort by latest updated link first
         {
           $sort: {
-            "imageUploadCounts.driveProvidedAt": -1,
+            latestDriveLinkDate: -1,
             createdAt: -1
           }
         },
 
+        // 2. Pagination stages
         {
           $skip: skip
         },
@@ -183,12 +212,17 @@ router.get("/capsule-tracking", async (req, res) => {
                   $expr: {
                     $or: [
                       { $eq: ["$orderId", "$$searchId"] },
-                      { $eq: ["$orderId", { $toString: { $add: [{ $toInt: "$$searchId" }, 10800] } }] }
+                      {
+                        $eq: [
+                          "$orderId",
+                          { $toString: { $add: [{ $toInt: "$$searchId" }, 10800] } }
+                        ]
+                      }
                     ]
                   }
                 }
               },
-              { $limit: 1 } 
+              { $limit: 1 }
             ],
             as: "folder"
           }
@@ -202,30 +236,29 @@ router.get("/capsule-tracking", async (req, res) => {
         },
 
         {
-  $addFields: {
-    lockerSubFolderId: {
-      $arrayElemAt: [
-        {
-          $map: {
-            input: {
-              $filter: {
-                input: { $ifNull: ["$folder.subFolders", []] },
-                as: "sf",
-                cond: {
-                  $eq: ["$$sf.isLocker", true]
-                }
-              }
-            },
-            as: "locker",
-            in: "$$locker._id"
+          $addFields: {
+            lockerSubFolderId: {
+              $arrayElemAt: [
+                {
+                  $map: {
+                    input: {
+                      $filter: {
+                        input: { $ifNull: ["$folder.subFolders", []] },
+                        as: "sf",
+                        cond: {
+                          $eq: ["$$sf.isLocker", true]
+                        }
+                      }
+                    },
+                    as: "locker",
+                    in: "$$locker._id"
+                  }
+                },
+                0
+              ]
+            }
           }
         },
-        0
-      ]
-    }
-  }
-},
-
 
         {
           $addFields: {
@@ -267,44 +300,43 @@ router.get("/capsule-tracking", async (req, res) => {
           }
         },
 
-{
-  $addFields: {
-
-    imageCount: {
-      $size: {
-        $filter: {
-          input: "$media",
-          as: "m",
-          cond: {
-            $eq: ["$$m.type", "image"]
-          }
-        }
-      }
-    },
-
-    lockerImageCount: {
-      $size: {
-        $filter: {
-          input: "$media",
-          as: "m",
-          cond: {
-            $and: [
-              {
-                $eq: ["$$m.type", "image"]
-              },
-              {
-                $in: [
-                  "$lockerSubFolderId",
-                  { $ifNull: ["$$m.folderIds", []] }
-                ]
+        {
+          $addFields: {
+            imageCount: {
+              $size: {
+                $filter: {
+                  input: "$media",
+                  as: "m",
+                  cond: {
+                    $eq: ["$$m.type", "image"]
+                  }
+                }
               }
-            ]
-          }
-        }
-      }
-    },
+            },
 
-    videoCount: {
+            lockerImageCount: {
+              $size: {
+                $filter: {
+                  input: "$media",
+                  as: "m",
+                  cond: {
+                    $and: [
+                      {
+                        $eq: ["$$m.type", "image"]
+                      },
+                      {
+                        $in: [
+                          "$lockerSubFolderId",
+                          { $ifNull: ["$$m.folderIds", []] }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+
+            videoCount: {
               $size: {
                 $filter: {
                   input: "$media",
@@ -395,8 +427,8 @@ router.get("/capsule-tracking", async (req, res) => {
             },
 
             shareCapsuleClicks: {
-              $ifNull: ["$folder.shareCapsuleCount", 0],
-            },
+              $ifNull: ["$folder.shareCapsuleCount", 0]
+            }
           }
         },
 
@@ -408,6 +440,7 @@ router.get("/capsule-tracking", async (req, res) => {
             allDriveLinks: 1,
             imageUploadCounts: 1,
 
+            folderStatus: { $ifNull: ["$folder.status", "pending"] },
             mainFolderId: "$folder._id",
 
             counts: {
@@ -429,15 +462,13 @@ router.get("/capsule-tracking", async (req, res) => {
               secondDeviceType: "$secondDeviceType",
 
               totalPersonCount: "$totalPersonCount",
-              shareCapsuleClicks: "$shareCapsuleClicks",
+              shareCapsuleClicks: "$shareCapsuleClicks"
             }
           }
         }
-
       ]),
 
       Order.countDocuments(matchQuery)
-
     ]);
 
     return res.status(200).json({
@@ -453,16 +484,13 @@ router.get("/capsule-tracking", async (req, res) => {
 
       data: orders
     });
-
   } catch (error) {
-
     console.error(error);
 
     return res.status(500).json({
       success: false,
       message: "Server error"
     });
-
   }
 });
 

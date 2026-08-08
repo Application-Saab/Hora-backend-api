@@ -77,6 +77,11 @@ const FolderSchema = new mongoose.Schema(
       sparse: true,
       index: true,
     },
+    status: {
+      type: String,
+      enum: ["processing", "done", "failed"],
+      default: "processing"
+    },
     subFolders: [
       {
         _id: {

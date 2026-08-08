@@ -236,8 +236,15 @@ router.post("/import-drive-folder", async (req, res, next) => {
         folderName,
         customerId,
         orderId: vendorId,
+        status: "processing",
       });
       await folder.save();
+    }
+    else {
+      await FolderModel.updateOne(
+        { _id: folder._id },
+        { $set: { status: "processing" } }
+      );
     }
 
     const mainFolderId = folder._id;
@@ -252,12 +259,14 @@ router.post("/import-drive-folder", async (req, res, next) => {
     };
 
     if (order.allDriveLinks && order.allDriveLinks.length > 0) {
+      const now = new Date();
       updateFields.allDriveLinks = order.allDriveLinks.map((item) => {
         if (item.linkType === "Raw Photos" || !item.linkType) {
           return {
             ...item,
             link: folderUrl,
             submittedAt: item.submittedAt || new Date(),
+            updatedAt: now,
           };
         }
         return item;
@@ -369,8 +378,14 @@ router.post("/add-order-drive-link", async (req, res, next) => {
     let folder = await FolderModel.findOne({ folderName, customerId });
 
     if (!folder) {
-      folder = new FolderModel({ folderName, customerId, orderId, eventId });
+      folder = new FolderModel({ folderName, customerId, orderId, eventId, status: "processing" });
       await folder.save();
+    }
+    else {
+      await FolderModel.updateOne(
+        { _id: folder._id },
+        { $set: { status: "processing" } }
+      );
     }
     let webLink = order.orderWebLink;
     let updateFields = {};
@@ -379,16 +394,19 @@ router.post("/add-order-drive-link", async (req, res, next) => {
 
     if (allDriveLinks.length > 0) {
       const existingLinks = order.allDriveLinks || [];
+      const now = new Date();
 
       updateFields.allDriveLinks = allDriveLinks.map(item => {
         const existingItem = existingLinks.find(el => el.linkType === item.linkType);
 
         if (!existingItem || existingItem.link !== item.link) {
           isAnySubLinkChangedOrNew = true;
-          return { ...item, submittedAt: new Date() };
+          return {
+            ...item, submittedAt: now,
+            updatedAt: now, };
         }
 
-        return { ...item, submittedAt: existingItem.submittedAt || new Date() };
+        return { ...item, submittedAt: existingItem.submittedAt || new Date(), updatedAt: now, };
       });
     }
 

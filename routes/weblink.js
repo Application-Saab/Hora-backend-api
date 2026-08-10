@@ -1091,6 +1091,7 @@ async function generateAndUploadCapsuleBanner(folderId, leftImageInput, eventNam
     ctx.fillStyle = "#FFFFFF";
     ctx.fillRect(0, 0, width, height);
 
+    // 1. LEFT USER IMAGE RENDER
     const leftBoxWidth = 245 * scale;
     const leftBoxHeight = 195 * scale;
 
@@ -1130,6 +1131,7 @@ async function generateAndUploadCapsuleBanner(folderId, leftImageInput, eventNam
       }
     }
 
+    // 2. RIGHT BACKGROUND IMAGE (Torn Edge Card)
     const bgPath = path.resolve(__dirname, "./default-capsule-bg.webp");
     const rightBgImg = await loadImage(bgPath);
 
@@ -1137,59 +1139,87 @@ async function generateAndUploadCapsuleBanner(folderId, leftImageInput, eventNam
     const rightWidth = width - rightX;
 
     ctx.drawImage(rightBgImg, rightX, 0, rightWidth, height);
+
+    // 3. EVENT NAME TEXT RENDER
     if (eventName) {
       ctx.save();
       ctx.fillStyle = "#8462ae";
 
+      // Text position
+      const textX = 230 * scale;
+
+      // Right side se thoda gap maintain karne ke liye
+      const maxTextWidth = 160 * scale;
+
+      const startY = 22 * scale;
+
       const textLength = eventName.trim().length;
-      let fontSize = 13.5;
+
+      // Dynamic Font Scaling
+      let fontSize = 12;
 
       if (textLength > 45) {
-        fontSize = 8.5;
-      } else if (textLength > 30) {
+        fontSize = 11;
+      } else if (textLength > 32) {
+        fontSize = 13;
+      } else if (textLength > 22) {
         fontSize = 10.5;
       } else {
-        fontSize = 13.5;
+        fontSize = 12;
       }
 
       ctx.font = `700 ${fontSize * scale}px "CinzelDecorativeBold", serif`;
 
-      ctx.textAlign = "center";
+      ctx.textAlign = "left";
       ctx.textBaseline = "top";
 
-      const textCenterX = rightX + (rightWidth / 2);
+      const lineHeight = fontSize * 1.40 * scale;
 
-      const maxTextWidth = 120 * scale; 
-      const lineHeight = (fontSize * 1.35) * scale;
+      const letterSpacing = 0.8 * scale;
 
       const words = eventName.toUpperCase().split(" ");
+
       let lines = [];
       let currentLine = "";
 
       for (let i = 0; i < words.length; i++) {
-        const testLine = currentLine ? `${currentLine} ${words[i]}` : words[i];
-        const metrics = ctx.measureText(testLine);
+        const testLine = currentLine
+          ? `${currentLine} ${words[i]}`
+          : words[i];
 
-        if (metrics.width > maxTextWidth && i > 0) {
+        const characterCount = testLine.length;
+
+        const textWidth =
+          ctx.measureText(testLine).width +
+          (characterCount > 1
+            ? (characterCount - 1) * letterSpacing
+            : 0);
+
+        if (textWidth > maxTextWidth && i > 0) {
           lines.push(currentLine);
           currentLine = words[i];
         } else {
           currentLine = testLine;
         }
       }
-      lines.push(currentLine);
 
-      const totalTextHeight = lines.length * lineHeight;
-      const centerY = (baseHeight * 0.255) * scale;
-      const centeredStartY = centerY - (totalTextHeight / 2);
+      if (currentLine) {
+        lines.push(currentLine);
+      }
 
       lines.forEach((line, index) => {
-        const lineY = centeredStartY + (index * lineHeight);
-        ctx.fillText(line, textCenterX, lineY);
+        const lineY = startY + index * lineHeight;
+        let currentX = textX;
+
+        for (const char of line) {
+          ctx.fillText(char, currentX, lineY);
+          currentX += ctx.measureText(char).width + letterSpacing;
+        }
       });
 
       ctx.restore();
     }
+
 
     const canvasBuffer = canvas.toBuffer("image/png");
     await fsPromises.writeFile(tempPngPath, canvasBuffer);

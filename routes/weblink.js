@@ -1145,13 +1145,9 @@ async function generateAndUploadCapsuleBanner(folderId, leftImageInput, eventNam
       ctx.save();
       ctx.fillStyle = "#8462ae";
 
-      // Text position
-      const textX = 230 * scale;
-
-      // Right side se thoda gap maintain karne ke liye
+      // Text position variables
+      const originalTextX = 230 * scale;
       const maxTextWidth = 160 * scale;
-
-      const startY = 22 * scale;
 
       const textLength = eventName.trim().length;
 
@@ -1174,7 +1170,6 @@ async function generateAndUploadCapsuleBanner(folderId, leftImageInput, eventNam
       ctx.textBaseline = "top";
 
       const lineHeight = fontSize * 1.40 * scale;
-
       const letterSpacing = 0.8 * scale;
 
       const words = eventName.toUpperCase().split(" ");
@@ -1207,9 +1202,29 @@ async function generateAndUploadCapsuleBanner(folderId, leftImageInput, eventNam
         lines.push(currentLine);
       }
 
+      const isSingleLine = lines.length === 1;
+
+      const sectionCenterY = 50 * scale; 
+      const totalTextHeight = lines.length * lineHeight;
+
+      const startY = isSingleLine
+        ? sectionCenterY - (totalTextHeight / 2) 
+        : 22 * scale;                 
+
       lines.forEach((line, index) => {
         const lineY = startY + index * lineHeight;
-        let currentX = textX;
+
+        const lineCharCount = line.length;
+        const linePixelWidth =
+          ctx.measureText(line).width +
+          (lineCharCount > 1 ? (lineCharCount - 1) * letterSpacing : 0);
+
+        let currentX;
+        if (isSingleLine) {
+          currentX = originalTextX + (maxTextWidth - linePixelWidth) / 2;
+        } else {
+          currentX = originalTextX;
+        }
 
         for (const char of line) {
           ctx.fillText(char, currentX, lineY);
@@ -1219,7 +1234,6 @@ async function generateAndUploadCapsuleBanner(folderId, leftImageInput, eventNam
 
       ctx.restore();
     }
-
 
     const canvasBuffer = canvas.toBuffer("image/png");
     await fsPromises.writeFile(tempPngPath, canvasBuffer);

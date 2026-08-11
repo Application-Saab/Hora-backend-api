@@ -316,6 +316,50 @@ router.post("/import-drive-folder", async (req, res, next) => {
   }
 });
 
+// Function to extract File/Folder ID from any Drive URL
+function getDriveIdFromUrl(url) {
+  if (!url) return null;
+
+  // Folder patterns: /folders/ID or ?id=ID
+  const folderMatch = url.match(/\/folders\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (folderMatch) return { id: folderMatch[1], type: 'folder' };
+
+  // File patterns: /file/d/ID or uc?id=ID or open?id=ID
+  const fileMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (fileMatch) return { id: fileMatch[1], type: 'file' };
+
+  // Fallback direct ID check (agar raw ID ho)
+  if (/^[a-zA-Z0-9_-]{25,}$/.test(url.trim())) {
+    return { id: url.trim(), type: 'unknown' };
+  }
+
+  return null;
+}
+
+// Function to check if File OR Folder is Publicly Accessible
+async function isDriveResourcePubliclyAccessible(resourceId, apiKey) {
+  try {
+    // Drive API v3 - File/Folder GET Endpoint
+    const url = `https://www.googleapis.com/drive/v3/files/${resourceId}?key=${apiKey}&fields=id,name,permissions`;
+    const response = await axios.get(url);
+
+    // Agar permissions array mil gaya to check karo 'anyone' access hai ya nahi
+    const permissions = response.data.permissions || [];
+    const isPublic = permissions.some(
+      (p) => p.type === 'anyone' || p.role === 'reader'
+    );
+
+    // Direct metadata fetch ho raha hai API Key se without 403/401 -> Object Publicly Accessible hai
+    return true;
+  } catch (error) {
+    if (error.response && (error.response.status === 403 || error.response.status === 404)) {
+      return false; // Not public or doesn't exist
+    }
+    console.error("Drive accessibility check error:", error.message);
+    return false;
+  }
+}
+
 router.post("/add-order-drive-link", async (req, res, next) => {
   try {
     const { folderUrl, order_id, allDriveLinks = [], isRetry = false } = req.body;
@@ -331,20 +375,20 @@ router.post("/add-order-drive-link", async (req, res, next) => {
     const isRawLinkNewOrChanged = !order.orderDriveLink || order.orderDriveLink !== folderUrl;
 
     if (folderUrl?.trim()) {
-      const folderId = getFolderIdFromUrl(folderUrl);
+      const driveInfo = getDriveIdFromUrl(folderUrl);
 
-      if (!folderId) {
+      if (!driveInfo) {
         return res.status(400).json({
-          message: "Invalid Google Drive folder URL",
+          message: "Invalid Google Drive folder or file URL",
         });
       }
 
-      const isPublic = await isFolderPubliclyAccessible(folderId, apiKey);
+      const isPublic = await isDriveResourcePubliclyAccessible(driveInfo.id, apiKey);
 
       if (!isPublic) {
         return res.status(400).json({
           message:
-            "The Google Drive folder is not publicly accessible. Please change its permission to 'Anyone with the link'.",
+            "The Google Drive link is not publicly accessible. Please change its permission to 'Anyone with the link'.",
         });
       }
     }
@@ -357,17 +401,17 @@ router.post("/add-order-drive-link", async (req, res, next) => {
           });
         }
 
-        const folderId = getFolderIdFromUrl(item.link);
-        if (!folderId) {
+        const driveInfo = getDriveIdFromUrl(item.link);
+        if (!driveInfo) {
           return res.status(400).json({
-            message: `Invalid Google Drive folder URL: ${item.link}`
+            message: `Invalid Google Drive URL for '${item.linkType || 'link'}': ${item.link}`
           });
         }
 
-        const isPublic = await isFolderPubliclyAccessible(folderId, apiKey);
+        const isPublic = await isDriveResourcePubliclyAccessible(driveInfo.id, apiKey);
         if (!isPublic) {
           return res.status(400).json({
-            message: `The Google Drive folder for '${item.linkType}' is not publicly accessible. Please change its permission to 'Anyone with the link'.`,
+            message: `The Google Drive link for '${item.linkType}' is not publicly accessible. Please change its permission to 'Anyone with the link'.`,
           });
         }
       }

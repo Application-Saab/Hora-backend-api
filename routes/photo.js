@@ -359,7 +359,13 @@ router.get("/thumbnailsWithinProject", async (req, res, next) => {
     });
 
     const enrichedFolders = folders.map(folder => ({
-      ...folder,
+      _id: folder._id,
+      customerId: folder.customerId,
+      eventId: folder.eventId,
+      orderId: folder.orderId,
+      shareCapsuleCount: folder.shareCapsuleCount,
+      viewedBy: folder.viewedBy || [],
+
       guestDetails: (folder.viewedBy || []).map(item => {
         const userId = item.userId ? String(item.userId) : String(item);
 
@@ -397,11 +403,28 @@ router.get("/thumbnailsWithinProject", async (req, res, next) => {
       imagesQuery = imagesQuery.skip(skip).limit(limitNumber);
     }
 
-    const images = await imagesQuery.lean();
+    const images = await imagesQuery
+      .find({ status: "done" })
+      .lean();
 
-    const thumbnails = images.map((img) => ({
-      ...img,
-    }));
+    const thumbnails = images.map((img) => {
+      const {
+        downloadCount,
+        duration,
+        imageUrl1080,
+        imageUrl2160,
+        imageUrl2880,
+        imageUrl3384,
+        imageUrl4320,
+        originalKey,
+        retryCount,
+        shareCount,
+        status,
+        ...thumbnail
+      } = img;
+
+      return thumbnail;
+    });
 
     /* =========================
            Final Response

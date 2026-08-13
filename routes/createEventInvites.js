@@ -235,6 +235,8 @@ router.post("/create-event-invite", async (req, res, next) => {
         if (!folder) {
           console.warn(`Folder not found for orderId: ${orderId}`);
         } else {
+          folder.eventId = event._id;
+          await folder.save();
           await axios.post(
             `https://horaservices.com/face-api/api/test/generate-banner/${folder._id}`,
             {},

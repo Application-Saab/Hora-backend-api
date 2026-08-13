@@ -111,12 +111,11 @@ router.put("/toggle-like", async (req, res) => {
 
 router.get("/capsule-tracking", async (req, res) => {
   try {
-
     const page = Number(req.query.page) || 1;
     const limit = Number(req.query.limit) || 10;
     const skip = (page - 1) * limit;
     const search = req.query.search;
-    const date = req.query.date; 
+    const date = req.query.date;
 
     const matchQuery = {
       type: 8,
@@ -132,7 +131,6 @@ router.get("/capsule-tracking", async (req, res) => {
 
     if (date) {
       const startOfDay = new Date(`${date}T00:00:00.000+05:30`);
-
       const endOfDay = new Date(`${date}T23:59:59.999+05:30`);
 
       matchQuery["imageUploadCounts.driveProvidedAt"] = {
@@ -142,20 +140,51 @@ router.get("/capsule-tracking", async (req, res) => {
     }
 
     const [orders, totalOrders] = await Promise.all([
-
       Order.aggregate([
-
         {
           $match: matchQuery
         },
 
+        // Calculate latest date with multi-level fallbacks for missing updatedAt
+        {
+          $addFields: {
+            latestDriveLinkDate: {
+              $max: [
+                {
+                  $max: {
+                    $map: {
+                      input: { $ifNull: ["$allDriveLinks", []] },
+                      as: "link",
+                      in: {
+                        $ifNull: [
+                          "$$link.updatedAt",
+                          {
+                            $ifNull: [
+                              "$$link.submittedAt",
+                              { $ifNull: ["$imageUploadCounts.driveProvidedAt", "$createdAt"] }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                "$imageUploadCounts.driveProvidedAt",
+                "$createdAt"
+              ]
+            }
+          }
+        },
+
+        // 1. Sort by latest updated link first
         {
           $sort: {
-            "imageUploadCounts.driveProvidedAt": -1,
+            latestDriveLinkDate: -1,
             createdAt: -1
           }
         },
 
+        // 2. Pagination stages
         {
           $skip: skip
         },
@@ -183,12 +212,17 @@ router.get("/capsule-tracking", async (req, res) => {
                   $expr: {
                     $or: [
                       { $eq: ["$orderId", "$$searchId"] },
-                      { $eq: ["$orderId", { $toString: { $add: [{ $toInt: "$$searchId" }, 10800] } }] }
+                      {
+                        $eq: [
+                          "$orderId",
+                          { $toString: { $add: [{ $toInt: "$$searchId" }, 10800] } }
+                        ]
+                      }
                     ]
                   }
                 }
               },
-              { $limit: 1 } 
+              { $limit: 1 }
             ],
             as: "folder"
           }
@@ -202,30 +236,29 @@ router.get("/capsule-tracking", async (req, res) => {
         },
 
         {
-  $addFields: {
-    lockerSubFolderId: {
-      $arrayElemAt: [
-        {
-          $map: {
-            input: {
-              $filter: {
-                input: { $ifNull: ["$folder.subFolders", []] },
-                as: "sf",
-                cond: {
-                  $eq: ["$$sf.isLocker", true]
-                }
-              }
-            },
-            as: "locker",
-            in: "$$locker._id"
+          $addFields: {
+            lockerSubFolderId: {
+              $arrayElemAt: [
+                {
+                  $map: {
+                    input: {
+                      $filter: {
+                        input: { $ifNull: ["$folder.subFolders", []] },
+                        as: "sf",
+                        cond: {
+                          $eq: ["$$sf.isLocker", true]
+                        }
+                      }
+                    },
+                    as: "locker",
+                    in: "$$locker._id"
+                  }
+                },
+                0
+              ]
+            }
           }
         },
-        0
-      ]
-    }
-  }
-},
-
 
         {
           $addFields: {
@@ -267,44 +300,43 @@ router.get("/capsule-tracking", async (req, res) => {
           }
         },
 
-{
-  $addFields: {
-
-    imageCount: {
-      $size: {
-        $filter: {
-          input: "$media",
-          as: "m",
-          cond: {
-            $eq: ["$$m.type", "image"]
-          }
-        }
-      }
-    },
-
-    lockerImageCount: {
-      $size: {
-        $filter: {
-          input: "$media",
-          as: "m",
-          cond: {
-            $and: [
-              {
-                $eq: ["$$m.type", "image"]
-              },
-              {
-                $in: [
-                  "$lockerSubFolderId",
-                  { $ifNull: ["$$m.folderIds", []] }
-                ]
+        {
+          $addFields: {
+            imageCount: {
+              $size: {
+                $filter: {
+                  input: "$media",
+                  as: "m",
+                  cond: {
+                    $eq: ["$$m.type", "image"]
+                  }
+                }
               }
-            ]
-          }
-        }
-      }
-    },
+            },
 
-    videoCount: {
+            lockerImageCount: {
+              $size: {
+                $filter: {
+                  input: "$media",
+                  as: "m",
+                  cond: {
+                    $and: [
+                      {
+                        $eq: ["$$m.type", "image"]
+                      },
+                      {
+                        $in: [
+                          "$lockerSubFolderId",
+                          { $ifNull: ["$$m.folderIds", []] }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+
+            videoCount: {
               $size: {
                 $filter: {
                   input: "$media",
@@ -395,8 +427,8 @@ router.get("/capsule-tracking", async (req, res) => {
             },
 
             shareCapsuleClicks: {
-              $ifNull: ["$folder.shareCapsuleCount", 0],
-            },
+              $ifNull: ["$folder.shareCapsuleCount", 0]
+            }
           }
         },
 
@@ -408,6 +440,7 @@ router.get("/capsule-tracking", async (req, res) => {
             allDriveLinks: 1,
             imageUploadCounts: 1,
 
+            folderStatus: { $ifNull: ["$folder.status", "pending"] },
             mainFolderId: "$folder._id",
 
             counts: {
@@ -429,15 +462,13 @@ router.get("/capsule-tracking", async (req, res) => {
               secondDeviceType: "$secondDeviceType",
 
               totalPersonCount: "$totalPersonCount",
-              shareCapsuleClicks: "$shareCapsuleClicks",
+              shareCapsuleClicks: "$shareCapsuleClicks"
             }
           }
         }
-
       ]),
 
       Order.countDocuments(matchQuery)
-
     ]);
 
     return res.status(200).json({
@@ -453,16 +484,13 @@ router.get("/capsule-tracking", async (req, res) => {
 
       data: orders
     });
-
   } catch (error) {
-
     console.error(error);
 
     return res.status(500).json({
       success: false,
       message: "Server error"
     });
-
   }
 });
 
@@ -1063,6 +1091,7 @@ async function generateAndUploadCapsuleBanner(folderId, leftImageInput, eventNam
     ctx.fillStyle = "#FFFFFF";
     ctx.fillRect(0, 0, width, height);
 
+    // 1. LEFT USER IMAGE RENDER
     const leftBoxWidth = 245 * scale;
     const leftBoxHeight = 195 * scale;
 
@@ -1102,6 +1131,7 @@ async function generateAndUploadCapsuleBanner(folderId, leftImageInput, eventNam
       }
     }
 
+    // 2. RIGHT BACKGROUND IMAGE (Torn Edge Card)
     const bgPath = path.resolve(__dirname, "./default-capsule-bg.webp");
     const rightBgImg = await loadImage(bgPath);
 
@@ -1109,55 +1139,97 @@ async function generateAndUploadCapsuleBanner(folderId, leftImageInput, eventNam
     const rightWidth = width - rightX;
 
     ctx.drawImage(rightBgImg, rightX, 0, rightWidth, height);
+
+    // 3. EVENT NAME TEXT RENDER
     if (eventName) {
       ctx.save();
       ctx.fillStyle = "#8462ae";
 
+      // Text position variables
+      const originalTextX = 230 * scale;
+      const maxTextWidth = 160 * scale;
+
       const textLength = eventName.trim().length;
-      let fontSize = 13.5;
+
+      // Dynamic Font Scaling
+      let fontSize = 12;
 
       if (textLength > 45) {
-        fontSize = 8.5;
-      } else if (textLength > 30) {
+        fontSize = 11;
+      } else if (textLength > 32) {
+        fontSize = 13;
+      } else if (textLength > 22) {
         fontSize = 10.5;
       } else {
-        fontSize = 13.5;
+        fontSize = 12;
       }
 
       ctx.font = `700 ${fontSize * scale}px "CinzelDecorativeBold", serif`;
 
-      ctx.textAlign = "center";
+      ctx.textAlign = "left";
       ctx.textBaseline = "top";
 
-      const textCenterX = rightX + (rightWidth / 2);
-
-      const maxTextWidth = 120 * scale; 
-      const lineHeight = (fontSize * 1.35) * scale;
+      const lineHeight = fontSize * 1.40 * scale;
+      const letterSpacing = 0.8 * scale;
 
       const words = eventName.toUpperCase().split(" ");
+
       let lines = [];
       let currentLine = "";
 
       for (let i = 0; i < words.length; i++) {
-        const testLine = currentLine ? `${currentLine} ${words[i]}` : words[i];
-        const metrics = ctx.measureText(testLine);
+        const testLine = currentLine
+          ? `${currentLine} ${words[i]}`
+          : words[i];
 
-        if (metrics.width > maxTextWidth && i > 0) {
+        const characterCount = testLine.length;
+
+        const textWidth =
+          ctx.measureText(testLine).width +
+          (characterCount > 1
+            ? (characterCount - 1) * letterSpacing
+            : 0);
+
+        if (textWidth > maxTextWidth && i > 0) {
           lines.push(currentLine);
           currentLine = words[i];
         } else {
           currentLine = testLine;
         }
       }
-      lines.push(currentLine);
 
+      if (currentLine) {
+        lines.push(currentLine);
+      }
+
+      const isSingleLine = lines.length === 1;
+
+      const sectionCenterY = 50 * scale; 
       const totalTextHeight = lines.length * lineHeight;
-      const centerY = (baseHeight * 0.255) * scale;
-      const centeredStartY = centerY - (totalTextHeight / 2);
+
+      const startY = isSingleLine
+        ? sectionCenterY - (totalTextHeight / 2) 
+        : 22 * scale;                 
 
       lines.forEach((line, index) => {
-        const lineY = centeredStartY + (index * lineHeight);
-        ctx.fillText(line, textCenterX, lineY);
+        const lineY = startY + index * lineHeight;
+
+        const lineCharCount = line.length;
+        const linePixelWidth =
+          ctx.measureText(line).width +
+          (lineCharCount > 1 ? (lineCharCount - 1) * letterSpacing : 0);
+
+        let currentX;
+        if (isSingleLine) {
+          currentX = originalTextX + (maxTextWidth - linePixelWidth) / 2;
+        } else {
+          currentX = originalTextX;
+        }
+
+        for (const char of line) {
+          ctx.fillText(char, currentX, lineY);
+          currentX += ctx.measureText(char).width + letterSpacing;
+        }
       });
 
       ctx.restore();

@@ -42,6 +42,7 @@ const orderSchema = new mongoose.Schema({
     order_pincode: { type: String, default: '' },
     decoration_comments: { type: String, default: '' },
     add_on: {type: Array,default: []},
+    themes:{type: Array, default:[]},
     phone_no: { type: String, default: '' },
     online_phone_no: { type: String, default: '' },
     advance_amount: { type: String, default: '' },

@@ -393,6 +393,7 @@ router.post('/add', async(req, res, next) => {
         decoration_comments:req.body.decoration_comments,
 	    status:req.body.status,
 	    add_on:req.body.add_on,
+        themes:req.body.themes,
 	    advance_amount:req.body.advance_amount,
 	    balance_amount:req.body.balance_amount,
         vendor_amount:req.body.vendor_amount,

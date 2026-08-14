@@ -120,10 +120,20 @@ router.post(
         });
       }
 
+      const tags = req.body.mealId
+        ? JSON.parse(req.body.mealId)
+        : [];
 
-          const addonIds = await AddOn.find({
-            eventId: { $in: req.body.mealId ? JSON.parse(req.body.mealId) : [], }
-          }).distinct("_id");;
+      const addonIds = await AddOn.find({
+        $or: [
+          {
+            eventId: { $in: tags }
+          },
+          {
+            categoryType: "Decoration"
+          }
+        ]
+      }).distinct("_id");
 
       const data = new decorationModel({
         name: req.body.name,

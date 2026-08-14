@@ -35,12 +35,26 @@ router.post('/add', async (req, res, next) => {
     } = req.body;
 
     const addonIds = await AddOn.find({
-        eventId: { $in: tag }
-    }).distinct("_id");;
+        $or: [
+            {
+                eventId: { $in: tag }
+            },
+            {
+                categoryType: { $in: ["Photography"] }
+            }
+        ]
+    }).distinct("_id");
 
     const themeIds = await photographyTheme.find({
-        eventId:{ $in: tag }
-    }).distinct("_id");;
+        $or: [
+            {
+                eventId: { $in: tag }
+            },
+            {
+                categoryType: { $in: ["Photography"] }
+            }
+        ]
+    }).distinct("_id");
 
     const data = new photographyModel({
         name,

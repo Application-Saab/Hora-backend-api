@@ -36,11 +36,11 @@ router.post('/add', async (req, res, next) => {
 
     const addonIds = await AddOn.find({
         eventId: { $in: tag }
-    });
+    }).distinct("_id");;
 
     const themeIds = await photographyTheme.find({
         eventId:{ $in: tag }
-    });
+    }).distinct("_id");;
 
     const data = new photographyModel({
         name,

@@ -122,8 +122,8 @@ router.post(
 
 
           const addonIds = await AddOn.find({
-              eventId: { $in: tag }
-          });
+            eventId: { $in: req.body.mealId ? JSON.parse(req.body.mealId) : [], }
+          }).distinct("_id");;
 
       const data = new decorationModel({
         name: req.body.name,
@@ -160,8 +160,8 @@ router.post(
         data: saved,
       });
     } catch (err) {
-    error.isPublic = true;
-    next(error);
+    err.isPublic = true;
+    next(err);
     }
   },
 );

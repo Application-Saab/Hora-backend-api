@@ -9,6 +9,8 @@ var ObjectId = require('mongoose').Types.ObjectId;
 var _ = require('lodash');
 const AddressModel = require('../models/address');
 const photographyModel = require('../models/photography');
+const AddOn = require("../models/addon");
+const photographyTheme = require("../models/photography-theme")
 
 //........... used api ...........
 
@@ -32,6 +34,14 @@ router.post('/add', async (req, res, next) => {
         advance_amount
     } = req.body;
 
+    const addonIds = await AddOn.find({
+        eventId: { $in: tag }
+    });
+
+    const themeIds = await photographyTheme.find({
+        eventId:{ $in: tag }
+    });
+
     const data = new photographyModel({
         name,
         short_link,
@@ -48,7 +58,9 @@ router.post('/add', async (req, res, next) => {
         inclusion,
         tag,
         duration,
-        advance_amount
+        advance_amount,
+        addons: addonIds,
+        ThemesId: themeIds,
     });
 
     try {
@@ -81,6 +93,30 @@ router.post('/edit', async (req, res, next) => {
     const id = req.body._id;
     const updatedData = req.body;
     const options = { new: true }; // return updated doc
+
+
+    const updatedTags = req?.body?.tag
+        ? typeof req?.body?.tag === "string"
+            ? JSON.parse(req?.body?.tag)
+            : req?.body?.tag
+        : [];
+
+    const addonIds = (
+        await AddOn.find({
+            eventId: { $in: updatedTags }
+        }).distinct("_id")
+    ).map(id => id.toString());
+
+    const themeIds = (
+        await photographyTheme.find({
+            eventId: { $in: updatedTags }
+        }).distinct("_id")
+    ).map(id => id.toString());
+
+    if (updatedData) {
+        updatedData.addons = addonIds;
+        updatedData.ThemesId = themeIds;
+    }
 
     try {
         const result = await photographyModel.findByIdAndUpdate(id, updatedData, options);

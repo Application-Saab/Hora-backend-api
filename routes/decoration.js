@@ -8,6 +8,7 @@ const cache = new NodeCache({ stdTTL: 60 * 10 }); // Cache TTL: 10 minutes
 const path = require("path");
 const fs = require("fs");
 const mongoose = require("mongoose");
+const AddOn = require("../models/addon")
 
 const multer = require("multer");
 
@@ -163,6 +164,36 @@ router.post("/edit", upload.array("featured_images", 10), async (req, res, next)
 
     const inclusion = normalizeInclusion(req.body.inclusion);
 
+
+    const updatedTags = req.body.tag
+      ? typeof req.body.tag === "string"
+        ? JSON.parse(req.body.tag)
+        : req.body.tag
+      : [];
+
+
+    const eventAddonIds = (
+      await AddOn.find({
+        eventId: { $in: updatedTags }
+      }).distinct("_id")
+    ).map(id => id.toString());
+
+    const existingAddonDocs = await AddOn.find({
+      _id: { $in: existing.addons || [] }
+    }).select("_id eventId");
+
+    // sirf wo addons rakho jo event based nahi hain
+    const manualAddonIds = existingAddonDocs
+      .filter(addon => !addon.eventId)
+      .map(addon => addon._id.toString());
+
+    const addonIds = [
+      ...new Set([
+        ...manualAddonIds,
+        ...eventAddonIds
+      ])
+    ];
+
     // -----------------------------
     // UPDATE DB
     // -----------------------------
@@ -188,6 +219,8 @@ router.post("/edit", upload.array("featured_images", 10), async (req, res, next)
             : req.body.inclusionVariables,
 
         featured_images: [...existingImages, ...newImages],
+        addons: addonIds,
+
       },
       { new: true },
     );

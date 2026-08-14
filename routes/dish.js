@@ -10,6 +10,7 @@ const path = require("path");
 const fs = require("fs");
 const multer = require("multer");
 const sharp = require("sharp");
+const AddOn = require("../models/addon");
 
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
@@ -119,9 +120,15 @@ router.post(
         });
       }
 
+
+          const addonIds = await AddOn.find({
+              eventId: { $in: tag }
+          });
+
       const data = new decorationModel({
         name: req.body.name,
         short_link: "",
+        addons: addonIds,
         featured_images: images, // 👈 MAIN CHANGE
         caption: req.body.description || "",
         badge: null,

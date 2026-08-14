@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-const addOnSchema = new mongoose.Schema(
+const themeSchema = new mongoose.Schema(
   {
     title: {
       type: String,
@@ -31,4 +31,4 @@ const addOnSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = mongoose.model("photographyTheme", addOnSchema);
+module.exports = mongoose.model("photographyTheme", themeSchema);

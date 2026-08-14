@@ -182,7 +182,6 @@ router.post("/edit", upload.array("featured_images", 10), async (req, res, next)
       _id: { $in: existing.addons || [] }
     }).select("_id eventId");
 
-    // sirf wo addons rakho jo event based nahi hain
     const manualAddonIds = existingAddonDocs
       .filter(addon => !addon.eventId)
       .map(addon => addon._id.toString());

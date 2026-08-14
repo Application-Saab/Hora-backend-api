@@ -71,7 +71,8 @@ router.post('/add', async (req, res, next) => {
       price,
       description,
       image,
-      categoryType
+      categoryType,
+      eventId: eventType,
     });
 
     const savedTheme = await newTheme.save();

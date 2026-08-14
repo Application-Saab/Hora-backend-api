@@ -23,6 +23,10 @@ const addOnSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    eventId: {
+      type: [],
+      default: [],
+    },
   },
   { timestamps: true }
 );

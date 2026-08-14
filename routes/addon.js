@@ -72,7 +72,8 @@ router.post('/add', async (req, res, next) => {
       price,
       description,
       image,
-      categoryType
+      categoryType,
+      eventId: eventType,
     });
 
     const savedAddOn = await newAddOn.save();

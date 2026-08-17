@@ -5,7 +5,6 @@ const venuePackageItemsSchema = new mongoose.Schema(
     title: { type: String, trim: true, required: true },
     foodType: {
       type: String,
-      enum: ["veg", "non-veg", "mixed"],
       default: "",
     },
     categoryIds: {

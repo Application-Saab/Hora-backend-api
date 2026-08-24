@@ -45,26 +45,39 @@ router.put("/edit/:id", async (req, res, next) => {
 });
 
 // ----------------- ADD ADDON -----------------
-router.post('/add', async (req, res, next) => {
+router.post("/add", async (req, res, next) => {
   try {
-    const { title, price, description, image, productId, categoryType, productType, eventType } = req.body;
+    const {
+      title,
+      price,
+      description,
+      image,
+      productId,
+      categoryType,
+      eventType,
+    } = req.body;
 
     // ---------------- VALIDATION ----------------
     if (!title || !price || !image) {
       return res.status(400).json({
         error: true,
-        message: "title, price, and image are required"
+        message: "title, price, and image are required",
       });
     }
 
-    if (!productId && !categoryType && !eventType) {
+    const hasProducts =
+      Array.isArray(productId) && productId.length > 0;
+
+    const hasEvents =
+      Array.isArray(eventType) && eventType.length > 0;
+
+    if (!hasProducts && !hasEvents && !categoryType) {
       return res.status(400).json({
         error: true,
-        message: "At least one of productId, categoryType, or eventType must be provided"
+        message:
+          "At least one of productId, categoryType, or eventType must be provided",
       });
     }
-
-
 
     // ---------------- CREATE ADDON ----------------
     const newAddOn = new AddOn({
@@ -72,48 +85,97 @@ router.post('/add', async (req, res, next) => {
       price,
       description,
       image,
+      productId,
       categoryType,
-      eventId: eventType,
+
+      ...(hasProducts
+        ? {}
+        : hasEvents
+          ? { eventId: eventType }
+          : {}),
     });
 
     const savedAddOn = await newAddOn.save();
 
-    // ---------------- LINK ADDON ----------------
-    if (productId) {
-      // Single product update
-      if (productType === "Decoration") {
-        await Decoration.updateOne(
-          { _id: productId },
-          { $addToSet: { addons: savedAddOn._id } }
+    // =====================================================
+    // 1. PRODUCT SELECTED
+    // =====================================================
+    if (hasProducts) {
+      if (categoryType === "Photography") {
+        await Photography.updateMany(
+          {
+            _id: { $in: productId },
+          },
+          {
+            $addToSet: {
+              addons: savedAddOn._id,
+            },
+          }
         );
-      } else if (productType === "Photography") {
-        await Photography.updateOne(
-          { _id: productId },
-          { $addToSet: { addons: savedAddOn._id } }
+      } else if (categoryType === "Decoration") {
+        await Decoration.updateMany(
+          {
+            _id: { $in: productId },
+          },
+          {
+            $addToSet: {
+              addons: savedAddOn._id,
+            },
+          }
         );
       }
-    } else if (eventType) {
+    }
+
+    // =====================================================
+    // 2. EVENT SELECTED
+    // =====================================================
+    else if (hasEvents) {
       if (categoryType === "Decoration") {
         await Decoration.updateMany(
-          { tag: eventType },
-          { $addToSet: { addons: savedAddOn._id } }
+          {
+            tag: { $in: eventType },
+          },
+          {
+            $addToSet: {
+              addons: savedAddOn._id,
+            },
+          }
         );
       } else if (categoryType === "Photography") {
         await Photography.updateMany(
-          { tag: eventType },
-          { $addToSet: { addons: savedAddOn._id } }
+          {
+            tag: { $in: eventType },
+          },
+          {
+            $addToSet: {
+              addons: savedAddOn._id,
+            },
+          }
         );
       }
-    } else if (categoryType) {
+    }
+
+    // =====================================================
+    // 3. ALL PRODUCTS OF CATEGORY
+    // =====================================================
+    else if (categoryType) {
       if (categoryType === "Decoration") {
         await Decoration.updateMany(
-          {}, // all decorations
-          { $addToSet: { addons: savedAddOn._id } }
+          {},
+          {
+            $addToSet: {
+              addons: savedAddOn._id,
+            },
+          }
         );
       } else if (categoryType === "Photography") {
         await Photography.updateMany(
-          {}, // all photography
-          { $addToSet: { addons: savedAddOn._id } }
+          {},
+          {
+            $addToSet: {
+              addons: savedAddOn._id,
+            },
+          }
         );
       }
     }
@@ -121,9 +183,8 @@ router.post('/add', async (req, res, next) => {
     return res.status(201).json({
       error: false,
       message: "AddOn added successfully and linked to products",
-      data: savedAddOn
+      data: savedAddOn,
     });
-
   } catch (error) {
     next(error);
   }

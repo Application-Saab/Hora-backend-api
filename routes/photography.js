@@ -35,23 +35,27 @@ router.post('/add', async (req, res, next) => {
     } = req.body;
 
     const addonIds = await AddOn.find({
+        categoryType: "Photography",
         $or: [
             {
                 eventId: { $in: tag }
             },
             {
-                categoryType: { $in: ["Photography"] }
+                eventId: { $size: 0 },
+                productId: { $size: 0 }
             }
         ]
     }).distinct("_id");
 
     const themeIds = await photographyTheme.find({
+        categoryType: "Photography",
         $or: [
             {
                 eventId: { $in: tag }
             },
             {
-                categoryType: { $in: ["Photography"] }
+                eventId: { $size: 0 },
+                productId: { $size: 0 }
             }
         ]
     }).distinct("_id");
@@ -106,34 +110,135 @@ router.post('/add', async (req, res, next) => {
 router.post('/edit', async (req, res, next) => {
     const id = req.body._id;
     const updatedData = req.body;
-    const options = { new: true }; // return updated doc
-
-
-    const updatedTags = req?.body?.tag
-        ? typeof req?.body?.tag === "string"
-            ? JSON.parse(req?.body?.tag)
-            : req?.body?.tag
-        : [];
-
-    const addonIds = (
-        await AddOn.find({
-            eventId: { $in: updatedTags }
-        }).distinct("_id")
-    ).map(id => id.toString());
-
-    const themeIds = (
-        await photographyTheme.find({
-            eventId: { $in: updatedTags }
-        }).distinct("_id")
-    ).map(id => id.toString());
-
-    if (updatedData) {
-        updatedData.addons = addonIds;
-        updatedData.ThemesId = themeIds;
-    }
+    const options = { new: true };
 
     try {
-        const result = await photographyModel.findByIdAndUpdate(id, updatedData, options);
+        const updatedTags = req?.body?.tag
+            ? typeof req?.body?.tag === "string"
+                ? JSON.parse(req?.body?.tag)
+                : req?.body?.tag
+            : [];
+
+        const existingProduct = await photographyModel
+            .findById(id)
+            .select("addons ThemesId");
+
+        if (!existingProduct) {
+            return res.json({
+                error: true,
+                status: 404,
+                message: "Photograph not found."
+            });
+        }
+
+        // =====================================================
+        // ADDONS
+        // =====================================================
+
+        const existingAddonIds = existingProduct.addons || [];
+
+        const existingAddons = await AddOn.find({
+            _id: { $in: existingAddonIds }
+        }).select("_id eventId productId");
+
+        // Existing product-specific addons preserve honge
+        const productSpecificAddonIds = existingAddons
+            .filter(addon =>
+                Array.isArray(addon.productId) &&
+                addon.productId.length > 0
+            )
+            .map(addon => addon._id.toString());
+
+        // Existing generic addons preserve honge
+        // eventId = [] AND productId = []
+        const genericAddonIds = existingAddons
+            .filter(addon =>
+                Array.isArray(addon.eventId) &&
+                addon.eventId.length === 0 &&
+                Array.isArray(addon.productId) &&
+                addon.productId.length === 0
+            )
+            .map(addon => addon._id.toString());
+
+        // Updated events ke matching addons
+        const eventAddonIds = (
+            await AddOn.find({
+                categoryType: "Photography",
+                eventId: { $in: updatedTags }
+            }).distinct("_id")
+        ).map(id => id.toString());
+
+        // Final addons
+        const addonIds = [
+            ...new Set([
+                ...productSpecificAddonIds,
+                ...genericAddonIds,
+                ...eventAddonIds
+            ])
+        ];
+
+
+        // =====================================================
+        // THEMES
+        // =====================================================
+
+        const existingThemeIds = existingProduct.ThemesId || [];
+
+        const existingThemes = await photographyTheme.find({
+            _id: { $in: existingThemeIds }
+        }).select("_id eventId productId");
+
+        // Existing product-specific themes preserve honge
+        const productSpecificThemeIds = existingThemes
+            .filter(theme =>
+                Array.isArray(theme.productId) &&
+                theme.productId.length > 0
+            )
+            .map(theme => theme._id.toString());
+
+        // Existing generic themes preserve honge
+        // eventId = [] AND productId = []
+        const genericThemeIds = existingThemes
+            .filter(theme =>
+                Array.isArray(theme.eventId) &&
+                theme.eventId.length === 0 &&
+                Array.isArray(theme.productId) &&
+                theme.productId.length === 0
+            )
+            .map(theme => theme._id.toString());
+
+        // Updated events ke matching themes
+        const eventThemeIds = (
+            await photographyTheme.find({
+                categoryType: "Photography",
+                eventId: { $in: updatedTags }
+            }).distinct("_id")
+        ).map(id => id.toString());
+
+        // Final themes
+        const themeIds = [
+            ...new Set([
+                ...productSpecificThemeIds,
+                ...genericThemeIds,
+                ...eventThemeIds
+            ])
+        ];
+
+
+        // =====================================================
+        // UPDATE DATA
+        // =====================================================
+
+        if (updatedData) {
+            updatedData.addons = addonIds;
+            updatedData.ThemesId = themeIds;
+        }
+
+        const result = await photographyModel.findByIdAndUpdate(
+            id,
+            updatedData,
+            options
+        );
 
         if (result) {
             return res.json({
@@ -142,13 +247,13 @@ router.post('/edit', async (req, res, next) => {
                 message: 'Updated Successfully',
                 data: result
             });
-        } else {
-            return res.json({
-                error: true,
-                status: 404,
-                message: 'Photograph not found.'
-            });
         }
+
+        return res.json({
+            error: true,
+            status: 404,
+            message: 'Photograph not found.'
+        });
 
     } catch (error) {
         error.isPublic = true;
@@ -269,6 +374,46 @@ router.get('/searchByTag/:tag', async (req, res, next) => {
                 error: true,
                 status: 404,
                 message: 'No matching photograph found.'
+            });
+        }
+    } catch (error) {
+        error.isPublic = true;
+        next(error);
+    }
+});
+router.post("/searchByTags", async (req, res, next) => {
+    try {
+        const { tags } = req.body;
+
+        if (!Array.isArray(tags) || tags.length === 0) {
+            return res.status(400).json({
+                error: true,
+                status: 400,
+                message: "tags must be a non-empty array",
+            });
+        }
+
+        const photograph = await photographyModel
+            .find({
+                tag: {
+                    $in: tags,
+                },
+            })
+            .lean();
+
+        if (photograph.length > 0) {
+            return res.json({
+                error: false,
+                status: 200,
+                message: "Search Successful",
+                data: photograph,
+            });
+        } else {
+            return res.json({
+                error: true,
+                status: 404,
+                message: "No matching photographs found.",
+                data: [],
             });
         }
     } catch (error) {

@@ -124,16 +124,18 @@ router.post(
         ? JSON.parse(req.body.mealId)
         : [];
 
-      const addonIds = await AddOn.find({
+    const addonIds = await AddOn.find({
+        categoryType: "Decoration",
         $or: [
-          {
-            eventId: { $in: tags }
-          },
-          {
-            categoryType: "Decoration"
-          }
+            {
+                eventId: { $in: tags }
+            },
+            {
+                eventId: { $size: 0 },
+                productId: { $size: 0 }
+            }
         ]
-      }).distinct("_id");
+    }).distinct("_id");
 
       const data = new decorationModel({
         name: req.body.name,

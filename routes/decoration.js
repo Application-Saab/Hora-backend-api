@@ -174,21 +174,37 @@ router.post("/edit", upload.array("featured_images", 10), async (req, res, next)
 
     const eventAddonIds = (
       await AddOn.find({
+        categoryType: "Decoration",
         eventId: { $in: updatedTags }
       }).distinct("_id")
     ).map(id => id.toString());
 
     const existingAddonDocs = await AddOn.find({
       _id: { $in: existing.addons || [] }
-    }).select("_id eventId");
+    }).select("_id eventId productId");
 
-    const manualAddonIds = existingAddonDocs
-      .filter(addon => !addon.eventId)
-      .map(addon => addon._id.toString());
+    const productAddonIds = existingAddonDocs
+      .filter(
+        (addon) =>
+          Array.isArray(addon.productId) &&
+          addon.productId.length > 0
+      )
+      .map((addon) => addon._id.toString());
+
+    const genericAddonIds = existingAddonDocs
+      .filter(
+        (addon) =>
+          Array.isArray(addon.eventId) &&
+          addon.eventId.length === 0 &&
+          Array.isArray(addon.productId) &&
+          addon.productId.length === 0
+      )
+      .map((addon) => addon._id.toString());
 
     const addonIds = [
       ...new Set([
-        ...manualAddonIds,
+        ...productAddonIds,
+        ...genericAddonIds,
         ...eventAddonIds
       ])
     ];
@@ -504,6 +520,54 @@ router.get("/searchByTag/:tag", async (req, res, next) => {
       cache.set(cacheKey, response);
       return res.json(response);
     }
+  } catch (error) {
+    error.isPublic = true;
+    next(error);
+  }
+});
+
+router.post("/searchByTags", async (req, res, next) => {
+  try {
+    const { tags } = req.body;
+
+    if (!Array.isArray(tags) || tags.length === 0) {
+      return res.status(400).json({
+        error: true,
+        status: 400,
+        message: "tags must be a non-empty array",
+      });
+    }
+
+    const cacheKey = `search_tags_${tags.sort().join("_")}`;
+
+    const cached = cache.get(cacheKey);
+
+    if (cached) {
+      return res.json({
+        ...cached,
+        cached: true,
+      });
+    }
+
+    const decorations = await decorationModel
+      .find({
+        tag: {
+          $in: tags,
+        },
+      })
+      .lean();
+
+    const response = {
+      error: false,
+      status: 200,
+      message: "Search Successful",
+      data: decorations,
+    };
+
+    cache.set(cacheKey, response);
+
+    return res.json(response);
+
   } catch (error) {
     error.isPublic = true;
     next(error);

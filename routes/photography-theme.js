@@ -44,26 +44,39 @@ router.put("/edit/:id", async (req, res, next) => {
 });
 
 // ----------------- ADD Theme -----------------
-router.post('/add', async (req, res, next) => {
+router.post("/add", async (req, res, next) => {
   try {
-    const { title, price, description, image, productId, categoryType, productType, eventType } = req.body;
+    const {
+      title,
+      price,
+      description,
+      image,
+      productId,
+      categoryType,
+      eventType,
+    } = req.body;
 
     // ---------------- VALIDATION ----------------
     if (!title || !price || !image) {
       return res.status(400).json({
         error: true,
-        message: "title, price, and image are required"
+        message: "title, price, and image are required",
       });
     }
 
-    if (!productId && !categoryType && !eventType) {
+    const hasProducts =
+      Array.isArray(productId) && productId.length > 0;
+
+    const hasEvents =
+      Array.isArray(eventType) && eventType.length > 0;
+
+    if (!hasProducts && !hasEvents && !categoryType) {
       return res.status(400).json({
         error: true,
-        message: "At least one of productId, categoryType, or eventType must be provided"
+        message:
+          "At least one of productId, categoryType, or eventType must be provided",
       });
     }
-
-
 
     // ---------------- CREATE Theme ----------------
     const newTheme = new Theme({
@@ -71,43 +84,65 @@ router.post('/add', async (req, res, next) => {
       price,
       description,
       image,
+      productId,
       categoryType,
-      eventId: eventType,
+      ...(hasProducts
+        ? {}
+        : hasEvents
+          ? { eventId: eventType }
+          : {}),
     });
 
     const savedTheme = await newTheme.save();
 
-    // ---------------- LINK Theme ----------------
-    if (productId) {
-      // Single product update
-    if (productType === "Photography") {
-        await Photography.updateOne(
-          { _id: productId },
-          { $addToSet: { ThemesId: savedTheme._id } }
+    if (hasProducts) {
+      if (categoryType === "Photography") {
+        await Photography.updateMany(
+          {
+            _id: { $in: productId },
+          },
+          {
+            $addToSet: {
+              addons: savedTheme._id,
+            },
+          }
         );
       }
-    } else if (eventType) {
-       if (categoryType === "Photography") {
-           await Photography.updateMany(
-               { tag: eventType },
-               { $addToSet: { ThemesId: savedTheme._id } }
-           );
+    }
+
+    else if (hasEvents) {
+    if (categoryType === "Photography") {
+        await Photography.updateMany(
+          {
+            tag: { $in: eventType },
+          },
+          {
+            $addToSet: {
+              addons: savedTheme._id,
+            },
+          }
+        );
       }
-    } else if (categoryType) {
-       if (categoryType === "Photography") {
-           await Photography.updateMany(
-               {}, // all photography
-               { $addToSet: { ThemesId: savedTheme._id } }
-           );
+    }
+
+    else if (categoryType) {
+    if (categoryType === "Photography") {
+        await Photography.updateMany(
+          {},
+          {
+            $addToSet: {
+              addons: savedTheme._id,
+            },
+          }
+        );
       }
     }
 
     return res.status(201).json({
       error: false,
       message: "Theme added successfully and linked to products",
-      data: savedTheme
+      data: savedTheme,
     });
-
   } catch (error) {
     next(error);
   }

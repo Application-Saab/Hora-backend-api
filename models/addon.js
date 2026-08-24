@@ -27,6 +27,10 @@ const addOnSchema = new mongoose.Schema(
       type:[],
       default:[],
     },
+    productId :{
+      type:[],
+      default:[],
+    }
   },
   { timestamps: true }
 );

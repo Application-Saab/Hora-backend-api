@@ -27,6 +27,10 @@ const themeSchema = new mongoose.Schema(
       type: [],
       default: [],
     },
+    productId: {
+      type: [],
+      default: [],
+    }
   },
   { timestamps: true }
 );

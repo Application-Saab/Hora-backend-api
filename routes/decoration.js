@@ -172,40 +172,53 @@ router.post("/edit", upload.array("featured_images", 10), async (req, res, next)
       : [];
 
 
-    const eventAddonIds = (
-      await AddOn.find({
-        categoryType: "Decoration",
-        eventId: { $in: updatedTags }
-      }).distinct("_id")
-    ).map(id => id.toString());
+    // -----------------------------
+    // UPDATE ADDONS + EVENT IDs
+    // -----------------------------
 
     const existingAddonDocs = await AddOn.find({
       _id: { $in: existing.addons || [] }
-    }).select("_id eventId productId");
+    }).select("_id eventId productId categoryType");
 
-    const productAddonIds = existingAddonDocs
-      .filter(
-        (addon) =>
-          Array.isArray(addon.productId) &&
-          addon.productId.length > 0
-      )
-      .map((addon) => addon._id.toString());
+    const productAddonIds = [];
+    const genericAddonIds = [];
+    const eventAddonIds = [];
 
-    const genericAddonIds = existingAddonDocs
-      .filter(
-        (addon) =>
-          Array.isArray(addon.eventId) &&
-          addon.eventId.length === 0 &&
-          Array.isArray(addon.productId) &&
-          addon.productId.length === 0
-      )
-      .map((addon) => addon._id.toString());
+    for (const addon of existingAddonDocs) {
+
+      const productIds = Array.isArray(addon.productId)
+        ? addon.productId
+        : [];
+
+      // --------------------------------
+      // PRODUCT LEVEL ADDON
+      // --------------------------------
+      if (productIds.length > 0) {
+        productAddonIds.push(addon._id.toString());
+        continue;
+      }
+
+      // --------------------------------
+      // DECORATION ADDON
+      // --------------------------------
+      if (addon.categoryType?.includes("Decoration")) {
+
+        await AddOn.findByIdAndUpdate(
+          addon._id,
+          {
+            eventId: updatedTags,
+          }
+        );
+
+        eventAddonIds.push(addon._id.toString());
+      }
+    }
 
     const addonIds = [
       ...new Set([
         ...productAddonIds,
         ...genericAddonIds,
-        ...eventAddonIds
+        ...eventAddonIds,
       ])
     ];
 

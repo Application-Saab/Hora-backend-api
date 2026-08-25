@@ -3,13 +3,19 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const Theme = require('../models/photography-theme');
 const Photography = require('../models/photography');
+const Meal = require("../models/meal");
 const fs = require("fs");
 const path = require("path");
 
 router.put("/edit/:id", async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { title, price, image } = req.body;
+    const {
+      title,
+      price,
+      image,
+      eventId,
+    } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -27,10 +33,83 @@ router.put("/edit/:id", async (req, res, next) => {
       });
     }
 
+    const oldEventIds = Array.isArray(existingTheme.eventId)
+      ? existingTheme.eventId.map((id) => id.toString())
+      : [];
+
+    const productIds = Array.isArray(existingTheme.productId)
+      ? existingTheme.productId
+      : [];
+
+    const isGenericTheme =
+      oldEventIds.length === 0 &&
+      productIds.length === 0;
+
+    let effectiveOldEventIds = oldEventIds;
+
+    if (isGenericTheme) {
+      const allEvents = await Meal.find({}, "_id").lean();
+
+      effectiveOldEventIds = allEvents.map(
+        (event) => event._id.toString()
+      );
+    }
+
+    const newEventIds = Array.isArray(eventId)
+      ? eventId.map((id) => id.toString())
+      : [];
+
+    const removedEventIds = effectiveOldEventIds.filter(
+      (oldId) => !newEventIds.includes(oldId)
+    );
+
+    const addedEventIds = newEventIds.filter(
+      (newId) => !effectiveOldEventIds.includes(newId)
+    );
+
+    if (removedEventIds.length > 0) {
+      if (existingTheme.categoryType?.includes("Photography")) {
+        await Photography.updateMany(
+          {
+            tag: { $in: removedEventIds },
+          },
+          {
+            $pull: {
+              ThemesId: existingTheme._id,
+            },
+          }
+        );
+      }
+    }
+
+
+    if (addedEventIds.length > 0) {
+      if (existingTheme.categoryType?.includes("Photography")) {
+        await Photography.updateMany(
+          {
+            tag: { $in: addedEventIds },
+          },
+          {
+            $addToSet: {
+              ThemesId: existingTheme._id,
+            },
+          }
+        );
+      }
+    }
+
+
     const updatedTheme = await Theme.findByIdAndUpdate(
       id,
-      { title, price, image },
-      { new: true }
+      {
+        title,
+        price,
+        image,
+        eventId: newEventIds,
+      },
+      {
+        new: true,
+      }
     );
 
     return res.status(200).json({
@@ -103,7 +182,7 @@ router.post("/add", async (req, res, next) => {
           },
           {
             $addToSet: {
-              addons: savedTheme._id,
+              ThemesId: savedTheme._id,
             },
           }
         );
@@ -118,7 +197,7 @@ router.post("/add", async (req, res, next) => {
           },
           {
             $addToSet: {
-              addons: savedTheme._id,
+              ThemesId: savedTheme._id,
             },
           }
         );
@@ -131,7 +210,7 @@ router.post("/add", async (req, res, next) => {
           {},
           {
             $addToSet: {
-              addons: savedTheme._id,
+              ThemesId: savedTheme._id,
             },
           }
         );

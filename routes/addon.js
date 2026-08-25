@@ -176,7 +176,10 @@ router.post("/add", async (req, res, next) => {
     const hasEvents =
       Array.isArray(eventType) && eventType.length > 0;
 
-    if (!hasProducts && !hasEvents && !categoryType) {
+    const hasCategories =
+      Array.isArray(categoryType) && categoryType.length > 0;
+
+    if (!hasProducts && !hasEvents && !hasCategories) {
       return res.status(400).json({
         error: true,
         message:
@@ -196,7 +199,9 @@ router.post("/add", async (req, res, next) => {
       ...(hasProducts
         ? {}
         : hasEvents
-          ? { eventId: eventType }
+          ? {
+            eventId: eventType.map((event) => event.id),
+          }
           : {}),
     });
 
@@ -206,7 +211,8 @@ router.post("/add", async (req, res, next) => {
     // 1. PRODUCT SELECTED
     // =====================================================
     if (hasProducts) {
-      if (categoryType === "Photography") {
+      // Photography products
+      if (categoryType.includes("Photography")) {
         await Photography.updateMany(
           {
             _id: { $in: productId },
@@ -217,7 +223,10 @@ router.post("/add", async (req, res, next) => {
             },
           }
         );
-      } else if (categoryType === "Decoration") {
+      }
+
+      // Decoration products
+      if (categoryType.includes("Decoration")) {
         await Decoration.updateMany(
           {
             _id: { $in: productId },
@@ -235,10 +244,14 @@ router.post("/add", async (req, res, next) => {
     // 2. EVENT SELECTED
     // =====================================================
     else if (hasEvents) {
-      if (categoryType === "Decoration") {
+      const eventObjectIds = eventType.map(
+        (id) => new mongoose.Types.ObjectId(id)
+      );
+
+      if (categoryType.includes("Decoration")) {
         await Decoration.updateMany(
           {
-            tag: { $in: eventType },
+            tag: { $in: eventObjectIds },
           },
           {
             $addToSet: {
@@ -246,10 +259,12 @@ router.post("/add", async (req, res, next) => {
             },
           }
         );
-      } else if (categoryType === "Photography") {
+      }
+
+      if (categoryType.includes("Photography")) {
         await Photography.updateMany(
           {
-            tag: { $in: eventType },
+            tag: { $in: eventObjectIds },
           },
           {
             $addToSet: {
@@ -263,8 +278,9 @@ router.post("/add", async (req, res, next) => {
     // =====================================================
     // 3. ALL PRODUCTS OF CATEGORY
     // =====================================================
-    else if (categoryType) {
-      if (categoryType === "Decoration") {
+    else if (hasCategories) {
+      // ---------------- ALL DECORATION ----------------
+      if (categoryType.includes("Decoration")) {
         await Decoration.updateMany(
           {},
           {
@@ -273,7 +289,10 @@ router.post("/add", async (req, res, next) => {
             },
           }
         );
-      } else if (categoryType === "Photography") {
+      }
+
+      // ---------------- ALL PHOTOGRAPHY ----------------
+      if (categoryType.includes("Photography")) {
         await Photography.updateMany(
           {},
           {

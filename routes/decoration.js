@@ -539,53 +539,6 @@ router.get("/searchByTag/:tag", async (req, res, next) => {
   }
 });
 
-router.post("/searchByTags", async (req, res, next) => {
-  try {
-    const { tags } = req.body;
-
-    if (!Array.isArray(tags) || tags.length === 0) {
-      return res.status(400).json({
-        error: true,
-        status: 400,
-        message: "tags must be a non-empty array",
-      });
-    }
-
-    const cacheKey = `search_tags_${tags.sort().join("_")}`;
-
-    const cached = cache.get(cacheKey);
-
-    if (cached) {
-      return res.json({
-        ...cached,
-        cached: true,
-      });
-    }
-
-    const decorations = await decorationModel
-      .find({
-        tag: {
-          $in: tags,
-        },
-      })
-      .lean();
-
-    const response = {
-      error: false,
-      status: 200,
-      message: "Search Successful",
-      data: decorations,
-    };
-
-    cache.set(cacheKey, response);
-
-    return res.json(response);
-
-  } catch (error) {
-    error.isPublic = true;
-    next(error);
-  }
-});
 
 router.get("/details/:id", async (req, res, next) => {
   try {

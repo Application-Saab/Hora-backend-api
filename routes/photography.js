@@ -11,6 +11,7 @@ const AddressModel = require('../models/address');
 const photographyModel = require('../models/photography');
 const AddOn = require("../models/addon");
 const photographyTheme = require("../models/photography-theme")
+const decorationModel = require("../models/decoration")
 
 //........... used api ...........
 
@@ -383,7 +384,7 @@ router.get('/searchByTag/:tag', async (req, res, next) => {
 });
 router.post("/searchByTags", async (req, res, next) => {
     try {
-        const { tags } = req.body;
+        const { tags, categoryType } = req.body;
 
         if (!Array.isArray(tags) || tags.length === 0) {
             return res.status(400).json({
@@ -393,29 +394,49 @@ router.post("/searchByTags", async (req, res, next) => {
             });
         }
 
-        const photograph = await photographyModel
-            .find({
-                tag: {
-                    $in: tags,
-                },
-            })
-            .lean();
-
-        if (photograph.length > 0) {
-            return res.json({
-                error: false,
-                status: 200,
-                message: "Search Successful",
-                data: photograph,
-            });
-        } else {
-            return res.json({
+        if (!Array.isArray(categoryType) || categoryType.length === 0) {
+            return res.status(400).json({
                 error: true,
-                status: 404,
-                message: "No matching photographs found.",
-                data: [],
+                status: 400,
+                message: "categoryType must be a non-empty array",
             });
         }
+
+        const results = [];
+
+        // Decoration
+        if (categoryType.includes("Decoration")) {
+            const decorations = await decorationModel
+                .find({
+                    tag: {
+                        $in: tags,
+                    },
+                })
+                .lean();
+
+            results.push(...decorations);
+        }
+
+        // Photography
+        if (categoryType.includes("Photography")) {
+            const photographs = await photographyModel
+                .find({
+                    tag: {
+                        $in: tags,
+                    },
+                })
+                .lean();
+
+            results.push(...photographs);
+        }
+
+        return res.json({
+            error: false,
+            status: 200,
+            message: "Search Successful",
+            data: results,
+        });
+
     } catch (error) {
         error.isPublic = true;
         next(error);

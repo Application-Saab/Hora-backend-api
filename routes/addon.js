@@ -11,12 +11,19 @@ const path = require("path");
 router.put("/edit/:id", async (req, res, next) => {
   try {
     const { id } = req.params;
+
     const {
       title,
       price,
       image,
       eventId,
+      productId,
+      categoryType,
     } = req.body;
+
+    // =====================================================
+    // VALIDATE ADDON ID
+    // =====================================================
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -24,6 +31,10 @@ router.put("/edit/:id", async (req, res, next) => {
         message: "Invalid AddOn ID",
       });
     }
+
+    // =====================================================
+    // FIND EXISTING ADDON
+    // =====================================================
 
     const existingAddon = await AddOn.findById(id);
 
@@ -34,31 +45,72 @@ router.put("/edit/:id", async (req, res, next) => {
       });
     }
 
+    // =====================================================
+    // OLD VALUES
+    // =====================================================
+
     const oldEventIds = Array.isArray(existingAddon.eventId)
       ? existingAddon.eventId.map((id) => id.toString())
       : [];
 
-    const productIds = Array.isArray(existingAddon.productId)
-      ? existingAddon.productId
+    const oldProductIds = Array.isArray(existingAddon.productId)
+      ? existingAddon.productId.map((id) => id.toString())
       : [];
 
-    const isGenericAddon =
-      oldEventIds.length === 0 &&
-      productIds.length === 0;
+    const oldCategoryTypes = Array.isArray(
+      existingAddon.categoryType
+    )
+      ? existingAddon.categoryType
+      : [];
 
-    let effectiveOldEventIds = oldEventIds;
-
-    if (isGenericAddon) {
-      const allEvents = await Meal.find({}, "_id").lean();
-
-      effectiveOldEventIds = allEvents.map(
-        (event) => event._id.toString()
-      );
-    }
+    // =====================================================
+    // NEW VALUES
+    // =====================================================
 
     const newEventIds = Array.isArray(eventId)
       ? eventId.map((id) => id.toString())
       : [];
+
+    const newProductIds = Array.isArray(productId)
+      ? productId.map((id) => id.toString())
+      : [];
+
+    const newCategoryTypes = Array.isArray(categoryType)
+      ? categoryType
+      : [];
+
+    // =====================================================
+    // ADDON TYPE
+    // =====================================================
+
+    const isOldGenericAddon =
+      oldEventIds.length === 0 &&
+      oldProductIds.length === 0;
+
+    // =====================================================
+    // GENERIC ADDON
+    //
+    // Old:
+    // eventId []
+    // productId []
+    //
+    // Generic means it was attached to ALL events/products.
+    // So for comparison, old events = all events.
+    // =====================================================
+
+    let effectiveOldEventIds = oldEventIds;
+
+    if (isOldGenericAddon) {
+      const allEvents = await Meal.find({}, "_id").lean();
+
+      effectiveOldEventIds = allEvents.map((event) =>
+        event._id.toString()
+      );
+    }
+
+    // =====================================================
+    // EVENT CHANGES
+    // =====================================================
 
     const removedEventIds = effectiveOldEventIds.filter(
       (oldId) => !newEventIds.includes(oldId)
@@ -68,11 +120,44 @@ router.put("/edit/:id", async (req, res, next) => {
       (newId) => !effectiveOldEventIds.includes(newId)
     );
 
+    // =====================================================
+    // CATEGORY REMOVED
+    // =====================================================
+
+    const decorationRemoved =
+      oldCategoryTypes.includes("Decoration") &&
+      !newCategoryTypes.includes("Decoration");
+
+    const photographyRemoved =
+      oldCategoryTypes.includes("Photography") &&
+      !newCategoryTypes.includes("Photography");
+
+    // =====================================================
+    // CATEGORY ADDED
+    // =====================================================
+
+    const decorationAdded =
+      !oldCategoryTypes.includes("Decoration") &&
+      newCategoryTypes.includes("Decoration");
+
+    const photographyAdded =
+      !oldCategoryTypes.includes("Photography") &&
+      newCategoryTypes.includes("Photography");
+
+    // =====================================================
+    // 1. REMOVE ADDON FROM REMOVED EVENTS
+    // =====================================================
+
     if (removedEventIds.length > 0) {
-      if (existingAddon.categoryType?.includes("Photography")) {
+      // ---------------------------------------------------
+      // PHOTOGRAPHY
+      // ---------------------------------------------------
+
+      if (oldCategoryTypes.includes("Photography")) {
         await Photography.updateMany(
           {
             tag: { $in: removedEventIds },
+            addons: existingAddon._id,
           },
           {
             $pull: {
@@ -82,10 +167,15 @@ router.put("/edit/:id", async (req, res, next) => {
         );
       }
 
-      if (existingAddon.categoryType?.includes("Decoration")) {
+      // ---------------------------------------------------
+      // DECORATION
+      // ---------------------------------------------------
+
+      if (oldCategoryTypes.includes("Decoration")) {
         await Decoration.updateMany(
           {
             tag: { $in: removedEventIds },
+            addons: existingAddon._id,
           },
           {
             $pull: {
@@ -96,9 +186,16 @@ router.put("/edit/:id", async (req, res, next) => {
       }
     }
 
+    // =====================================================
+    // 2. ADD ADDON TO NEW EVENTS
+    // =====================================================
 
     if (addedEventIds.length > 0) {
-      if (existingAddon.categoryType?.includes("Photography")) {
+      // ---------------------------------------------------
+      // PHOTOGRAPHY
+      // ---------------------------------------------------
+
+      if (newCategoryTypes.includes("Photography")) {
         await Photography.updateMany(
           {
             tag: { $in: addedEventIds },
@@ -111,7 +208,11 @@ router.put("/edit/:id", async (req, res, next) => {
         );
       }
 
-      if (existingAddon.categoryType?.includes("Decoration")) {
+      // ---------------------------------------------------
+      // DECORATION
+      // ---------------------------------------------------
+
+      if (newCategoryTypes.includes("Decoration")) {
         await Decoration.updateMany(
           {
             tag: { $in: addedEventIds },
@@ -125,26 +226,311 @@ router.put("/edit/:id", async (req, res, next) => {
       }
     }
 
+    // =====================================================
+    // 3. CATEGORY REMOVED COMPLETELY
+    //
+    // Example:
+    //
+    // old:
+    // categoryType ["Decoration"]
+    //
+    // new:
+    // categoryType ["Photography"]
+    //
+    // => Remove addon from ALL Decoration products
+    // =====================================================
 
-    const updatedAddOn = await AddOn.findByIdAndUpdate(
-      id,
-      {
-        title,
-        price,
-        image,
-        eventId: newEventIds,
-      },
-      {
-        new: true,
-      }
+    if (decorationRemoved) {
+      await Decoration.updateMany(
+        {
+          addons: existingAddon._id,
+        },
+        {
+          $pull: {
+            addons: existingAddon._id,
+          },
+        }
+      );
+    }
+
+    if (photographyRemoved) {
+      await Photography.updateMany(
+        {
+          addons: existingAddon._id,
+        },
+        {
+          $pull: {
+            addons: existingAddon._id,
+          },
+        }
+      );
+    }
+
+    // =====================================================
+    // 4. PRODUCT CHANGES
+    // =====================================================
+
+    const removedProductIds = oldProductIds.filter(
+      (oldId) => !newProductIds.includes(oldId)
     );
+
+    const addedProductIds = newProductIds.filter(
+      (newId) => !oldProductIds.includes(newId)
+    );
+
+    // =====================================================
+    // 5. REMOVE ADDON FROM UNCHECKED PRODUCTS
+    // =====================================================
+
+    if (removedProductIds.length > 0) {
+      // ---------------------------------------------------
+      // PHOTOGRAPHY
+      // ---------------------------------------------------
+
+      if (oldCategoryTypes.includes("Photography")) {
+        await Photography.updateMany(
+          {
+            _id: { $in: removedProductIds },
+            addons: existingAddon._id,
+          },
+          {
+            $pull: {
+              addons: existingAddon._id,
+            },
+          }
+        );
+      }
+
+      // ---------------------------------------------------
+      // DECORATION
+      // ---------------------------------------------------
+
+      if (oldCategoryTypes.includes("Decoration")) {
+        await Decoration.updateMany(
+          {
+            _id: { $in: removedProductIds },
+            addons: existingAddon._id,
+          },
+          {
+            $pull: {
+              addons: existingAddon._id,
+            },
+          }
+        );
+      }
+    }
+
+    // =====================================================
+    // 6. ADD ADDON TO NEWLY CHECKED PRODUCTS
+    // =====================================================
+
+    if (addedProductIds.length > 0) {
+      // ---------------------------------------------------
+      // PHOTOGRAPHY
+      // ---------------------------------------------------
+
+      if (newCategoryTypes.includes("Photography")) {
+        await Photography.updateMany(
+          {
+            _id: { $in: addedProductIds },
+          },
+          {
+            $addToSet: {
+              addons: existingAddon._id,
+            },
+          }
+        );
+      }
+
+      // ---------------------------------------------------
+      // DECORATION
+      // ---------------------------------------------------
+
+      if (newCategoryTypes.includes("Decoration")) {
+        await Decoration.updateMany(
+          {
+            _id: { $in: addedProductIds },
+          },
+          {
+            $addToSet: {
+              addons: existingAddon._id,
+            },
+          }
+        );
+      }
+    }
+
+    // =====================================================
+    // 7. CATEGORY WAS ADDED
+    //
+    // Example:
+    //
+    // Old category:
+    // ["Photography"]
+    //
+    // New category:
+    // ["Photography", "Decoration"]
+    //
+    // If events are selected, attach addon to Decoration
+    // products/events also.
+    // =====================================================
+
+    if (decorationAdded && newEventIds.length > 0) {
+      await Decoration.updateMany(
+        {
+          tag: { $in: newEventIds },
+        },
+        {
+          $addToSet: {
+            addons: existingAddon._id,
+          },
+        }
+      );
+    }
+
+    if (photographyAdded && newEventIds.length > 0) {
+      await Photography.updateMany(
+        {
+          tag: { $in: newEventIds },
+        },
+        {
+          $addToSet: {
+            addons: existingAddon._id,
+          },
+        }
+      );
+    }
+
+    // =====================================================
+    // 8. GENERIC ADDON HANDLING
+    //
+    // If NEW addon is also generic:
+    //
+    // eventId []
+    // productId []
+    //
+    // Then addon should effectively be available everywhere.
+    //
+    // Attach addon to ALL products in selected categories.
+    // =====================================================
+
+    const isNewGenericAddon =
+      newEventIds.length === 0 &&
+      newProductIds.length === 0;
+
+    if (isNewGenericAddon) {
+      // ---------------------------------------------------
+      // ALL PHOTOGRAPHY PRODUCTS
+      // ---------------------------------------------------
+
+      if (newCategoryTypes.includes("Photography")) {
+        await Photography.updateMany(
+          {},
+          {
+            $addToSet: {
+              addons: existingAddon._id,
+            },
+          }
+        );
+      }
+
+      // ---------------------------------------------------
+      // ALL DECORATION PRODUCTS
+      // ---------------------------------------------------
+
+      if (newCategoryTypes.includes("Decoration")) {
+        await Decoration.updateMany(
+          {},
+          {
+            $addToSet: {
+              addons: existingAddon._id,
+            },
+          }
+        );
+      }
+    }
+
+    // =====================================================
+    // 9. EVENT LEVEL ADDON
+    //
+    // eventId exists
+    // productId []
+    //
+    // => ALL PRODUCTS OF SELECTED EVENTS
+    // =====================================================
+
+    const isNewEventLevelAddon =
+      newEventIds.length > 0 &&
+      newProductIds.length === 0;
+
+    if (isNewEventLevelAddon) {
+      // ---------------------------------------------------
+      // PHOTOGRAPHY
+      // ---------------------------------------------------
+
+      if (newCategoryTypes.includes("Photography")) {
+        await Photography.updateMany(
+          {
+            tag: { $in: newEventIds },
+          },
+          {
+            $addToSet: {
+              addons: existingAddon._id,
+            },
+          }
+        );
+      }
+
+      // ---------------------------------------------------
+      // DECORATION
+      // ---------------------------------------------------
+
+      if (newCategoryTypes.includes("Decoration")) {
+        await Decoration.updateMany(
+          {
+            tag: { $in: newEventIds },
+          },
+          {
+            $addToSet: {
+              addons: existingAddon._id,
+            },
+          }
+        );
+      }
+    }
+
+    // =====================================================
+    // 10. UPDATE ADDON DOCUMENT
+    // =====================================================
+
+    const updatedAddOn =
+      await AddOn.findByIdAndUpdate(
+        id,
+        {
+          title,
+          price,
+          image,
+          eventId: newEventIds,
+          productId: newProductIds,
+          categoryType: newCategoryTypes,
+        },
+        {
+          new: true,
+        }
+      );
+
+    // =====================================================
+    // RESPONSE
+    // =====================================================
 
     return res.status(200).json({
       success: true,
       message: "AddOn updated successfully",
       data: updatedAddOn,
     });
+
   } catch (error) {
+    console.error("Edit AddOn Error:", error);
     next(error);
   }
 });
@@ -193,16 +579,22 @@ router.post("/add", async (req, res, next) => {
       price,
       description,
       image,
-      productId,
-      categoryType,
 
-      ...(hasProducts
-        ? {}
-        : hasEvents
-          ? {
-            eventId: eventType.map((event) => event.id),
-          }
-          : {}),
+      productId: Array.isArray(productId)
+        ? productId
+        : [],
+
+      categoryType: Array.isArray(categoryType)
+        ? categoryType
+        : [],
+
+      eventId: hasEvents
+        ? eventType.map((event) =>
+          typeof event === "object"
+            ? event.id
+            : event
+        )
+        : [],
     });
 
     const savedAddOn = await newAddOn.save();

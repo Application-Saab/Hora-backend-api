@@ -54,6 +54,7 @@ const orderSchema = new mongoose.Schema({
     notificationStep: { type: Number, default: 0 },
     lastNotifiedAt: { type: Date, default: null },
     orderDriveLink: {type: String, default:""},
+    themes: { type: Array, default: [] },
 allDriveLinks: {
   type: [
     {

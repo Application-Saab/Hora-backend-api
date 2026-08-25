@@ -10,6 +10,7 @@ const path = require("path");
 const fs = require("fs");
 const multer = require("multer");
 const sharp = require("sharp");
+const AddOn = require("../models/addon");
 
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
@@ -119,11 +120,29 @@ router.post(
         });
       }
 
+      const tags = req.body.mealId
+        ? JSON.parse(req.body.mealId)
+        : [];
+
+      const addonIds = await AddOn.find({
+        categoryType: "Decoration",
+        $or: [
+          {
+            eventId: { $in: tags }
+          },
+          {
+            eventId: { $size: 0 },
+            productId: { $size: 0 }
+          }
+        ]
+      }).distinct("_id");
+
       const data = new decorationModel({
         name: req.body.name,
         short_link: "",
         featured_images: images, // 👈 MAIN CHANGE
         caption: req.body.description || "",
+        addons: addonIds,
         badge: null,
         price: req.body.dish_rate || 0,
         cost_price: req.body.price,
@@ -153,8 +172,8 @@ router.post(
         data: saved,
       });
     } catch (err) {
-    error.isPublic = true;
-    next(error);
+    err.isPublic = true;
+    next(err);
     }
   },
 );

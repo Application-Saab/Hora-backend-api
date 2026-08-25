@@ -9,6 +9,9 @@ var ObjectId = require('mongoose').Types.ObjectId;
 var _ = require('lodash');
 const AddressModel = require('../models/address');
 const photographyModel = require('../models/photography');
+const AddOn = require("../models/addon");
+const photographyTheme = require("../models/photography-theme")
+const decorationModel = require("../models/decoration")
 
 //........... used api ...........
 
@@ -32,6 +35,31 @@ router.post('/add', async (req, res, next) => {
         advance_amount
     } = req.body;
 
+    const addonIds = await AddOn.find({
+        categoryType: "Photography",
+        $or: [
+            {
+                eventId: { $in: tag }
+            },
+            {
+                eventId: { $size: 0 },
+                productId: { $size: 0 }
+            }
+        ]
+    }).distinct("_id");
+
+    const themeIds = await photographyTheme.find({
+        categoryType: "Photography",
+        $or: [
+            {
+                eventId: { $in: tag }
+            },
+            {
+                eventId: { $size: 0 },
+                productId: { $size: 0 }
+            }
+        ]
+    }).distinct("_id");
     const data = new photographyModel({
         name,
         short_link,
@@ -48,7 +76,9 @@ router.post('/add', async (req, res, next) => {
         inclusion,
         tag,
         duration,
-        advance_amount
+        advance_amount,
+        addons: addonIds,
+        ThemesId: themeIds,
     });
 
     try {

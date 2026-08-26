@@ -8,11 +8,14 @@ const Meal = require("../models/meal");
 router.put("/edit/:id", async (req, res, next) => {
   try {
     const { id } = req.params;
+
     const {
       title,
       price,
       image,
       eventId,
+      productId,
+      categoryType,
     } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -35,27 +38,35 @@ router.put("/edit/:id", async (req, res, next) => {
       ? existingTheme.eventId.map((id) => id.toString())
       : [];
 
-    const productIds = Array.isArray(existingTheme.productId)
-      ? existingTheme.productId
+    const oldProductIds = Array.isArray(existingTheme.productId)
+      ? existingTheme.productId.map((id) => id.toString())
       : [];
 
-    const isGenericTheme =
-      oldEventIds.length === 0 &&
-      productIds.length === 0;
-
-    let effectiveOldEventIds = oldEventIds;
-
-    if (isGenericTheme) {
-      const allEvents = await Meal.find({}, "_id").lean();
-
-      effectiveOldEventIds = allEvents.map(
-        (event) => event._id.toString()
-      );
-    }
+    const oldCategoryTypes = Array.isArray(existingTheme.categoryType)
+      ? existingTheme.categoryType
+      : [];
 
     const newEventIds = Array.isArray(eventId)
       ? eventId.map((id) => id.toString())
       : [];
+
+    const newProductIds = Array.isArray(productId)
+      ? productId.map((id) => id.toString())
+      : [];
+
+    const newCategoryTypes = Array.isArray(categoryType)
+      ? categoryType
+      : [];
+
+    const isOldGenericTheme =
+      oldEventIds.length === 0 && oldProductIds.length === 0;
+
+    let effectiveOldEventIds = oldEventIds;
+
+    if (isOldGenericTheme) {
+      const allEvents = await Meal.find({}, "_id").lean();
+      effectiveOldEventIds = allEvents.map((event) => event._id.toString());
+    }
 
     const removedEventIds = effectiveOldEventIds.filter(
       (oldId) => !newEventIds.includes(oldId)
@@ -65,37 +76,110 @@ router.put("/edit/:id", async (req, res, next) => {
       (newId) => !effectiveOldEventIds.includes(newId)
     );
 
+    const photographyRemoved =
+      oldCategoryTypes.includes("Photography") &&
+      !newCategoryTypes.includes("Photography");
+
+    const photographyAdded =
+      !oldCategoryTypes.includes("Photography") &&
+      newCategoryTypes.includes("Photography");
+
     if (removedEventIds.length > 0) {
-      if (existingTheme.categoryType?.includes("Photography")) {
+      const removeQueryExtra =
+        oldProductIds.length > 0 ? { _id: { $in: oldProductIds } } : {};
+
+      if (oldCategoryTypes.includes("Photography")) {
         await Photography.updateMany(
           {
             tag: { $in: removedEventIds },
+            ThemesId: existingTheme._id,
+            ...removeQueryExtra,
           },
-          {
-            $pull: {
-              ThemesId: existingTheme._id,
-            },
-          }
+          { $pull: { ThemesId: existingTheme._id } }
         );
       }
     }
-
 
     if (addedEventIds.length > 0) {
-      if (existingTheme.categoryType?.includes("Photography")) {
+      const addQuery =
+        newProductIds.length > 0
+          ? { tag: { $in: addedEventIds }, _id: { $in: newProductIds } }
+          : { tag: { $in: addedEventIds } };
+
+      if (newCategoryTypes.includes("Photography")) {
+        await Photography.updateMany(addQuery, {
+          $addToSet: { ThemesId: existingTheme._id },
+        });
+      }
+    }
+
+    if (photographyRemoved) {
+      await Photography.updateMany(
+        { ThemesId: existingTheme._id },
+        { $pull: { ThemesId: existingTheme._id } }
+      );
+    }
+
+    const removedProductIds = oldProductIds.filter(
+      (oldId) => !newProductIds.includes(oldId)
+    );
+
+    const addedProductIds = newProductIds.filter(
+      (newId) => !oldProductIds.includes(newId)
+    );
+
+    if (removedProductIds.length > 0) {
+      if (oldCategoryTypes.includes("Photography")) {
         await Photography.updateMany(
-          {
-            tag: { $in: addedEventIds },
-          },
-          {
-            $addToSet: {
-              ThemesId: existingTheme._id,
-            },
-          }
+          { _id: { $in: removedProductIds }, ThemesId: existingTheme._id },
+          { $pull: { ThemesId: existingTheme._id } }
         );
       }
     }
 
+    if (addedProductIds.length > 0) {
+      if (newCategoryTypes.includes("Photography")) {
+        await Photography.updateMany(
+          { _id: { $in: addedProductIds } },
+          { $addToSet: { ThemesId: existingTheme._id } }
+        );
+      }
+    }
+
+    if (photographyAdded && newEventIds.length > 0) {
+      const query =
+        newProductIds.length > 0
+          ? { tag: { $in: newEventIds }, _id: { $in: newProductIds } }
+          : { tag: { $in: newEventIds } };
+
+      await Photography.updateMany(query, {
+        $addToSet: { ThemesId: existingTheme._id },
+      });
+    }
+
+    const isNewGenericTheme =
+      newEventIds.length === 0 && newProductIds.length === 0;
+
+    if (isNewGenericTheme) {
+      if (newCategoryTypes.includes("Photography")) {
+        await Photography.updateMany(
+          {},
+          { $addToSet: { ThemesId: existingTheme._id } }
+        );
+      }
+    }
+
+    const isNewEventLevelTheme =
+      newEventIds.length > 0 && newProductIds.length === 0;
+
+    if (isNewEventLevelTheme) {
+      if (newCategoryTypes.includes("Photography")) {
+        await Photography.updateMany(
+          { tag: { $in: newEventIds } },
+          { $addToSet: { ThemesId: existingTheme._id } }
+        );
+      }
+    }
 
     const updatedTheme = await Theme.findByIdAndUpdate(
       id,
@@ -104,10 +188,10 @@ router.put("/edit/:id", async (req, res, next) => {
         price,
         image,
         eventId: newEventIds,
+        productId: newProductIds,
+        categoryType: newCategoryTypes,
       },
-      {
-        new: true,
-      }
+      { new: true }
     );
 
     return res.status(200).json({
@@ -116,6 +200,7 @@ router.put("/edit/:id", async (req, res, next) => {
       data: updatedTheme,
     });
   } catch (error) {
+    console.error("Edit Theme Error:", error);
     next(error);
   }
 });
@@ -147,7 +232,10 @@ router.post("/add", async (req, res, next) => {
     const hasEvents =
       Array.isArray(eventType) && eventType.length > 0;
 
-    if (!hasProducts && !hasEvents && !categoryType) {
+    const hasCategories =
+      Array.isArray(categoryType) && categoryType.length > 0;
+
+    if (!hasProducts && !hasEvents && !hasCategories) {
       return res.status(400).json({
         error: true,
         message:
@@ -155,25 +243,34 @@ router.post("/add", async (req, res, next) => {
       });
     }
 
-    // ---------------- CREATE Theme ----------------
+    // ---------------- CREATE THEME ----------------
     const newTheme = new Theme({
       title,
       price,
       description,
       image,
-      productId,
-      categoryType,
-      ...(hasProducts
-        ? {}
-        : hasEvents
-          ? { eventId: eventType }
-          : {}),
+
+      productId: Array.isArray(productId)
+        ? productId
+        : [],
+
+      categoryType: Array.isArray(categoryType)
+        ? categoryType
+        : [],
+
+      eventId: hasEvents
+        ? eventType.map((event) =>
+          typeof event === "object"
+            ? event.id
+            : event
+        )
+        : [],
     });
 
     const savedTheme = await newTheme.save();
 
     if (hasProducts) {
-      if (categoryType === "Photography") {
+      if (categoryType.includes("Photography")) {
         await Photography.updateMany(
           {
             _id: { $in: productId },
@@ -186,12 +283,15 @@ router.post("/add", async (req, res, next) => {
         );
       }
     }
-
     else if (hasEvents) {
-      if (categoryType === "Photography") {
+      const eventObjectIds = eventType.map(
+        (id) => new mongoose.Types.ObjectId(id)
+      );
+
+      if (categoryType.includes("Photography")) {
         await Photography.updateMany(
           {
-            tag: { $in: eventType },
+            tag: { $in: eventObjectIds },
           },
           {
             $addToSet: {
@@ -201,9 +301,9 @@ router.post("/add", async (req, res, next) => {
         );
       }
     }
+    else if (hasCategories) {
 
-    else if (categoryType) {
-      if (categoryType === "Photography") {
+      if (categoryType.includes("Photography")) {
         await Photography.updateMany(
           {},
           {

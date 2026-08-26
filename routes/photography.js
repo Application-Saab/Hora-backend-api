@@ -257,6 +257,67 @@ router.get('/searchByTag/:tag', async (req, res, next) => {
     }
 });
 
+router.post("/searchByTags", async (req, res, next) => {
+    try {
+        const { tags, categoryType } = req.body;
+
+        if (!Array.isArray(tags) || tags.length === 0) {
+            return res.status(400).json({
+                error: true,
+                status: 400,
+                message: "tags must be a non-empty array",
+            });
+        }
+
+        if (!Array.isArray(categoryType) || categoryType.length === 0) {
+            return res.status(400).json({
+                error: true,
+                status: 400,
+                message: "categoryType must be a non-empty array",
+            });
+        }
+
+        const results = [];
+
+        // Decoration
+        if (categoryType.includes("Decoration")) {
+            const decorations = await decorationModel
+                .find({
+                    tag: {
+                        $in: tags,
+                    },
+                })
+                .lean();
+
+            results.push(...decorations);
+        }
+
+        // Photography
+        if (categoryType.includes("Photography")) {
+            const photographs = await photographyModel
+                .find({
+                    tag: {
+                        $in: tags,
+                    },
+                })
+                .lean();
+
+            results.push(...photographs);
+        }
+
+        return res.json({
+            error: false,
+            status: 200,
+            message: "Search Successful",
+            data: results,
+        });
+
+    } catch (error) {
+        error.isPublic = true;
+        next(error);
+    }
+});
+
 router.get('/details/:id', async (req, res, next) => {
     try {
         const data = await photographyModel.findById(req.params.id).populate({

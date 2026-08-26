@@ -384,6 +384,7 @@ router.post('/add', async(req, res, next) => {
         addressId: req.body.addressId,
         fromId: req.body.fromId,
         toId: req.body.toId,
+        themes: req.body.themes,
         orderApplianceIds: req.body.orderApplianceIds,
         categoryIds: req.body.categoryIds,
         otp: otp,

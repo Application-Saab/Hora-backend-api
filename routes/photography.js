@@ -9,6 +9,9 @@ var ObjectId = require('mongoose').Types.ObjectId;
 var _ = require('lodash');
 const AddressModel = require('../models/address');
 const photographyModel = require('../models/photography');
+const AddOn = require("../models/addon");
+const photographyTheme = require("../models/photography-theme")
+const decorationModel = require("../models/decoration")
 
 //........... used api ...........
 
@@ -32,6 +35,31 @@ router.post('/add', async (req, res, next) => {
         advance_amount
     } = req.body;
 
+    const addonIds = await AddOn.find({
+        categoryType: "Photography",
+        $or: [
+            {
+                eventId: { $in: tag }
+            },
+            {
+                eventId: { $size: 0 },
+                productId: { $size: 0 }
+            }
+        ]
+    }).distinct("_id");
+
+    const themeIds = await photographyTheme.find({
+        categoryType: "Photography",
+        $or: [
+            {
+                eventId: { $in: tag }
+            },
+            {
+                eventId: { $size: 0 },
+                productId: { $size: 0 }
+            }
+        ]
+    }).distinct("_id");
     const data = new photographyModel({
         name,
         short_link,
@@ -48,7 +76,9 @@ router.post('/add', async (req, res, next) => {
         inclusion,
         tag,
         duration,
-        advance_amount
+        advance_amount,
+        addons: addonIds,
+        ThemesId: themeIds,
     });
 
     try {
@@ -221,6 +251,67 @@ router.get('/searchByTag/:tag', async (req, res, next) => {
                 message: 'No matching photograph found.'
             });
         }
+    } catch (error) {
+        error.isPublic = true;
+        next(error);
+    }
+});
+
+router.post("/searchByTags", async (req, res, next) => {
+    try {
+        const { tags, categoryType } = req.body;
+
+        if (!Array.isArray(tags) || tags.length === 0) {
+            return res.status(400).json({
+                error: true,
+                status: 400,
+                message: "tags must be a non-empty array",
+            });
+        }
+
+        if (!Array.isArray(categoryType) || categoryType.length === 0) {
+            return res.status(400).json({
+                error: true,
+                status: 400,
+                message: "categoryType must be a non-empty array",
+            });
+        }
+
+        const results = [];
+
+        // Decoration
+        if (categoryType.includes("Decoration")) {
+            const decorations = await decorationModel
+                .find({
+                    tag: {
+                        $in: tags,
+                    },
+                })
+                .lean();
+
+            results.push(...decorations);
+        }
+
+        // Photography
+        if (categoryType.includes("Photography")) {
+            const photographs = await photographyModel
+                .find({
+                    tag: {
+                        $in: tags,
+                    },
+                })
+                .lean();
+
+            results.push(...photographs);
+        }
+
+        return res.json({
+            error: false,
+            status: 200,
+            message: "Search Successful",
+            data: results,
+        });
+
     } catch (error) {
         error.isPublic = true;
         next(error);

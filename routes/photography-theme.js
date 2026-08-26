@@ -1,8 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const AddOn = require('../models/addon');
-const Decoration = require('../models/decoration');
+const Theme = require('../models/photography-theme');
 const Photography = require('../models/photography');
 const Meal = require("../models/meal");
 
@@ -22,29 +21,29 @@ router.put("/edit/:id", async (req, res, next) => {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         error: true,
-        message: "Invalid AddOn ID",
+        message: "Invalid Theme ID",
       });
     }
 
-    const existingAddon = await AddOn.findById(id);
+    const existingTheme = await Theme.findById(id);
 
-    if (!existingAddon) {
+    if (!existingTheme) {
       return res.status(404).json({
         error: true,
-        message: "AddOn not found",
+        message: "Theme not found",
       });
     }
 
-    const oldEventIds = Array.isArray(existingAddon.eventId)
-      ? existingAddon.eventId.map((id) => id.toString())
+    const oldEventIds = Array.isArray(existingTheme.eventId)
+      ? existingTheme.eventId.map((id) => id.toString())
       : [];
 
-    const oldProductIds = Array.isArray(existingAddon.productId)
-      ? existingAddon.productId.map((id) => id.toString())
+    const oldProductIds = Array.isArray(existingTheme.productId)
+      ? existingTheme.productId.map((id) => id.toString())
       : [];
 
-    const oldCategoryTypes = Array.isArray(existingAddon.categoryType)
-      ? existingAddon.categoryType
+    const oldCategoryTypes = Array.isArray(existingTheme.categoryType)
+      ? existingTheme.categoryType
       : [];
 
     const newEventIds = Array.isArray(eventId)
@@ -59,12 +58,12 @@ router.put("/edit/:id", async (req, res, next) => {
       ? categoryType
       : [];
 
-    const isOldGenericAddon =
+    const isOldGenericTheme =
       oldEventIds.length === 0 && oldProductIds.length === 0;
 
     let effectiveOldEventIds = oldEventIds;
 
-    if (isOldGenericAddon) {
+    if (isOldGenericTheme) {
       const allEvents = await Meal.find({}, "_id").lean();
       effectiveOldEventIds = allEvents.map((event) => event._id.toString());
     }
@@ -77,17 +76,9 @@ router.put("/edit/:id", async (req, res, next) => {
       (newId) => !effectiveOldEventIds.includes(newId)
     );
 
-    const decorationRemoved =
-      oldCategoryTypes.includes("Decoration") &&
-      !newCategoryTypes.includes("Decoration");
-
     const photographyRemoved =
       oldCategoryTypes.includes("Photography") &&
       !newCategoryTypes.includes("Photography");
-
-    const decorationAdded =
-      !oldCategoryTypes.includes("Decoration") &&
-      newCategoryTypes.includes("Decoration");
 
     const photographyAdded =
       !oldCategoryTypes.includes("Photography") &&
@@ -101,21 +92,10 @@ router.put("/edit/:id", async (req, res, next) => {
         await Photography.updateMany(
           {
             tag: { $in: removedEventIds },
-            addons: existingAddon._id,
+            ThemesId: existingTheme._id,
             ...removeQueryExtra,
           },
-          { $pull: { addons: existingAddon._id } }
-        );
-      }
-
-      if (oldCategoryTypes.includes("Decoration")) {
-        await Decoration.updateMany(
-          {
-            tag: { $in: removedEventIds },
-            addons: existingAddon._id,
-            ...removeQueryExtra,
-          },
-          { $pull: { addons: existingAddon._id } }
+          { $pull: { ThemesId: existingTheme._id } }
         );
       }
     }
@@ -128,28 +108,15 @@ router.put("/edit/:id", async (req, res, next) => {
 
       if (newCategoryTypes.includes("Photography")) {
         await Photography.updateMany(addQuery, {
-          $addToSet: { addons: existingAddon._id },
+          $addToSet: { ThemesId: existingTheme._id },
         });
       }
-
-      if (newCategoryTypes.includes("Decoration")) {
-        await Decoration.updateMany(addQuery, {
-          $addToSet: { addons: existingAddon._id },
-        });
-      }
-    }
-
-    if (decorationRemoved) {
-      await Decoration.updateMany(
-        { addons: existingAddon._id },
-        { $pull: { addons: existingAddon._id } }
-      );
     }
 
     if (photographyRemoved) {
       await Photography.updateMany(
-        { addons: existingAddon._id },
-        { $pull: { addons: existingAddon._id } }
+        { ThemesId: existingTheme._id },
+        { $pull: { ThemesId: existingTheme._id } }
       );
     }
 
@@ -164,15 +131,8 @@ router.put("/edit/:id", async (req, res, next) => {
     if (removedProductIds.length > 0) {
       if (oldCategoryTypes.includes("Photography")) {
         await Photography.updateMany(
-          { _id: { $in: removedProductIds }, addons: existingAddon._id },
-          { $pull: { addons: existingAddon._id } }
-        );
-      }
-
-      if (oldCategoryTypes.includes("Decoration")) {
-        await Decoration.updateMany(
-          { _id: { $in: removedProductIds }, addons: existingAddon._id },
-          { $pull: { addons: existingAddon._id } }
+          { _id: { $in: removedProductIds }, ThemesId: existingTheme._id },
+          { $pull: { ThemesId: existingTheme._id } }
         );
       }
     }
@@ -181,27 +141,9 @@ router.put("/edit/:id", async (req, res, next) => {
       if (newCategoryTypes.includes("Photography")) {
         await Photography.updateMany(
           { _id: { $in: addedProductIds } },
-          { $addToSet: { addons: existingAddon._id } }
+          { $addToSet: { ThemesId: existingTheme._id } }
         );
       }
-
-      if (newCategoryTypes.includes("Decoration")) {
-        await Decoration.updateMany(
-          { _id: { $in: addedProductIds } },
-          { $addToSet: { addons: existingAddon._id } }
-        );
-      }
-    }
-
-    if (decorationAdded && newEventIds.length > 0) {
-      const query =
-        newProductIds.length > 0
-          ? { tag: { $in: newEventIds }, _id: { $in: newProductIds } }
-          : { tag: { $in: newEventIds } };
-
-      await Decoration.updateMany(query, {
-        $addToSet: { addons: existingAddon._id },
-      });
     }
 
     if (photographyAdded && newEventIds.length > 0) {
@@ -211,48 +153,35 @@ router.put("/edit/:id", async (req, res, next) => {
           : { tag: { $in: newEventIds } };
 
       await Photography.updateMany(query, {
-        $addToSet: { addons: existingAddon._id },
+        $addToSet: { ThemesId: existingTheme._id },
       });
     }
 
-    const isNewGenericAddon =
+    const isNewGenericTheme =
       newEventIds.length === 0 && newProductIds.length === 0;
 
-    if (isNewGenericAddon) {
+    if (isNewGenericTheme) {
       if (newCategoryTypes.includes("Photography")) {
         await Photography.updateMany(
           {},
-          { $addToSet: { addons: existingAddon._id } }
-        );
-      }
-      if (newCategoryTypes.includes("Decoration")) {
-        await Decoration.updateMany(
-          {},
-          { $addToSet: { addons: existingAddon._id } }
+          { $addToSet: { ThemesId: existingTheme._id } }
         );
       }
     }
 
-    const isNewEventLevelAddon =
+    const isNewEventLevelTheme =
       newEventIds.length > 0 && newProductIds.length === 0;
 
-    if (isNewEventLevelAddon) {
+    if (isNewEventLevelTheme) {
       if (newCategoryTypes.includes("Photography")) {
         await Photography.updateMany(
           { tag: { $in: newEventIds } },
-          { $addToSet: { addons: existingAddon._id } }
-        );
-      }
-
-      if (newCategoryTypes.includes("Decoration")) {
-        await Decoration.updateMany(
-          { tag: { $in: newEventIds } },
-          { $addToSet: { addons: existingAddon._id } }
+          { $addToSet: { ThemesId: existingTheme._id } }
         );
       }
     }
 
-    const updatedAddOn = await AddOn.findByIdAndUpdate(
+    const updatedTheme = await Theme.findByIdAndUpdate(
       id,
       {
         title,
@@ -267,15 +196,16 @@ router.put("/edit/:id", async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      message: "AddOn updated successfully",
-      data: updatedAddOn,
+      message: "Theme updated successfully",
+      data: updatedTheme,
     });
   } catch (error) {
-    console.error("Edit AddOn Error:", error);
+    console.error("Edit Theme Error:", error);
     next(error);
   }
 });
 
+// ----------------- ADD Theme -----------------
 router.post("/add", async (req, res, next) => {
   try {
     const {
@@ -313,8 +243,8 @@ router.post("/add", async (req, res, next) => {
       });
     }
 
-    // ---------------- CREATE ADDON ----------------
-    const newAddOn = new AddOn({
+    // ---------------- CREATE THEME ----------------
+    const newTheme = new Theme({
       title,
       price,
       description,
@@ -331,17 +261,14 @@ router.post("/add", async (req, res, next) => {
       eventId: hasEvents
         ? eventType.map((event) =>
           typeof event === "object"
-            ? event.id || event._id
+            ? event.id
             : event
         )
         : [],
     });
 
-    const savedAddOn = await newAddOn.save();
+    const savedTheme = await newTheme.save();
 
-    // =====================================================
-    // 1. PRODUCT SELECTED
-    // =====================================================
     if (hasProducts) {
       if (categoryType.includes("Photography")) {
         await Photography.updateMany(
@@ -350,47 +277,17 @@ router.post("/add", async (req, res, next) => {
           },
           {
             $addToSet: {
-              addons: savedAddOn._id,
-            },
-          }
-        );
-      }
-
-      if (categoryType.includes("Decoration")) {
-        await Decoration.updateMany(
-          {
-            _id: { $in: productId },
-          },
-          {
-            $addToSet: {
-              addons: savedAddOn._id,
+              ThemesId: savedTheme._id,
             },
           }
         );
       }
     }
-
-    // =====================================================
-    // 2. EVENT SELECTED
-    // =====================================================
     else if (hasEvents) {
       const eventObjectIds = eventType.map(
         (id) => new mongoose.Types.ObjectId(id)
       );
 
-      if (categoryType.includes("Decoration")) {
-        await Decoration.updateMany(
-          {
-            tag: { $in: eventObjectIds },
-          },
-          {
-            $addToSet: {
-              addons: savedAddOn._id,
-            },
-          }
-        );
-      }
-
       if (categoryType.includes("Photography")) {
         await Photography.updateMany(
           {
@@ -398,34 +295,20 @@ router.post("/add", async (req, res, next) => {
           },
           {
             $addToSet: {
-              addons: savedAddOn._id,
+              ThemesId: savedTheme._id,
             },
           }
         );
       }
     }
-
-    // =====================================================
-    // 3. ALL PRODUCTS OF CATEGORY
-    // =====================================================
     else if (hasCategories) {
-      if (categoryType.includes("Decoration")) {
-        await Decoration.updateMany(
-          {},
-          {
-            $addToSet: {
-              addons: savedAddOn._id,
-            },
-          }
-        );
-      }
 
       if (categoryType.includes("Photography")) {
         await Photography.updateMany(
           {},
           {
             $addToSet: {
-              addons: savedAddOn._id,
+              ThemesId: savedTheme._id,
             },
           }
         );
@@ -434,8 +317,8 @@ router.post("/add", async (req, res, next) => {
 
     return res.status(201).json({
       error: false,
-      message: "AddOn added successfully and linked to products",
-      data: savedAddOn,
+      message: "Theme added successfully and linked to products",
+      data: savedTheme,
     });
   } catch (error) {
     next(error);
@@ -444,11 +327,11 @@ router.post("/add", async (req, res, next) => {
 
 router.get('/getAll', async (req, res, next) => {
   try {
-    const addons = await AddOn.find().sort({ createdAt: -1 });
+    const Themes = await Theme.find().sort({ createdAt: -1 });
     return res.status(200).json({
       error: false,
-      message: "All AddOns fetched successfully",
-      data: addons
+      message: "All Themes fetched successfully",
+      data: Themes
     });
   } catch (error) {
     next(error);
@@ -462,28 +345,22 @@ router.post("/delete/:id", async (req, res, next) => {
     if (!id) {
       return res.status(400).json({
         error: true,
-        message: "AddOn ID required",
+        message: "Theme ID required",
       });
     }
 
-    // Remove from Decoration
-    await Decoration.updateMany(
-      { addons: id },
-      { $pull: { addons: id } }
-    );
-
     // Remove from Photography
     await Photography.updateMany(
-      { addons: id },
-      { $pull: { addons: id } }
+      { ThemesId: id },
+      { $pull: { ThemesId: id } }
     );
 
-    // Delete from AddOn collection
-    await AddOn.findByIdAndDelete(id);
+    // Delete from Theme collection
+    await Theme.findByIdAndDelete(id);
 
     res.json({
       success: true,
-      message: "AddOn deleted successfully",
+      message: "Theme deleted successfully",
     });
 
   } catch (error) {
@@ -491,7 +368,7 @@ router.post("/delete/:id", async (req, res, next) => {
   }
 });
 
-// ----------------- GET ADDON(S) -----------------
+// ----------------- GET Theme(S) -----------------
 router.get('/get', async (req, res, next) => {
   try {
     let { ids } = req.query;
@@ -499,7 +376,7 @@ router.get('/get', async (req, res, next) => {
     if (!ids || ids.length === 0) {
       return res.status(400).json({
         error: true,
-        message: "At least one addon ID is required"
+        message: "At least one Theme ID is required"
       });
     }
 
@@ -512,17 +389,17 @@ router.get('/get', async (req, res, next) => {
     if (validIds.length === 0) {
       return res.status(400).json({
         error: true,
-        message: "No valid addon IDs provided"
+        message: "No valid Theme IDs provided"
       });
     }
 
-    // Fetch addons
-    const addons = await AddOn.find({ _id: { $in: validIds } });
+    // Fetch Themes
+    const Themes = await Theme.find({ _id: { $in: validIds } });
 
     return res.status(200).json({
       error: false,
-      message: "AddOn(s) fetched successfully",
-      data: addons
+      message: "Theme(s) fetched successfully",
+      data: Themes
     });
 
   } catch (error) {

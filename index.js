@@ -436,6 +436,7 @@ const SearchTrackingRoutes = require("./routes/search-tracking")
 const EventDateRoutes = require("./routes/event-dates");
 const AddonRoutes = require("./routes/addon");
 const ThemeRoutes = require("./routes/photography-theme");
+const team = require("./routes/team");
 const ErrorLogRoutes = require("./routes/error-log")
 const pinCodes = require("./routes/serviceabilityPincodes")
 let passportAuth = require("./store/passportAuth").passportAuth;
@@ -477,6 +478,7 @@ app.use("/smartinvite/share", EventShareRoutes);
 app.use("/eventcapsule/share", ShareCapsule);
 app.use("/api/addon", AddonRoutes);
 app.use("/api/photography-theme", ThemeRoutes);
+app.use("/api/team", team);
 app.use("/api/error-log", ErrorLogRoutes.router);
 app.use("/api/pincode", pinCodes)
 

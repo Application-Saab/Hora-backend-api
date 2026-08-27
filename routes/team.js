@@ -46,5 +46,64 @@ router.post('/add', async (req, res, next) => {
     }
 });
 
+router.put('/edit/:id', async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { name, number, dob } = req.body;
+
+        const updatedTeam = await team.findByIdAndUpdate(
+            id,
+            {
+                name,
+                number,
+                dob,
+            },
+            {
+                new: true,
+                runValidators: true,
+            }
+        );
+
+        if (!updatedTeam) {
+            return res.status(404).json({
+                error: true,
+                message: "Team not found",
+            });
+        }
+
+        return res.status(200).json({
+            error: false,
+            message: "Team updated successfully",
+            data: updatedTeam,
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+
+router.post('/delete/:id', async (req, res, next) => {
+    try {
+        const { id } = req.params;
+
+        const deletedTeam = await team.findByIdAndDelete(id);
+
+        if (!deletedTeam) {
+            return res.status(404).json({
+                error: true,
+                message: "Team not found",
+            });
+        }
+
+        return res.status(200).json({
+            error: false,
+            message: "Team deleted successfully",
+            data: deletedTeam,
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
 
 module.exports = router;

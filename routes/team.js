@@ -24,14 +24,24 @@ router.get('/getAll', async (req, res, next) => {
     }
 });
 
-router.post('/add', async (req, res, next) => {
+router.post("/add", async (req, res, next) => {
     try {
-        const { name, number, dob } = req.body;
-
-        const newTeam = new team({
+        const {
             name,
             number,
+            alternativeNumber,
             dob,
+            address,
+        } = req.body;
+
+        const newTeam = new team({
+            name: name || "",
+            number: number ? Number(number) : 0,
+            alternativeNumber: alternativeNumber
+                ? Number(alternativeNumber)
+                : 0,
+            dob: dob || "",
+            address: address || "",
         });
 
         const savedTeam = await newTeam.save();
@@ -49,14 +59,23 @@ router.post('/add', async (req, res, next) => {
 router.put('/edit/:id', async (req, res, next) => {
     try {
         const { id } = req.params;
-        const { name, number, dob } = req.body;
+
+        const {
+            name,
+            number,
+            alternativeNumber,
+            dob,
+            address
+        } = req.body;
 
         const updatedTeam = await team.findByIdAndUpdate(
             id,
             {
                 name,
                 number,
+                alternativeNumber,
                 dob,
+                address,
             },
             {
                 new: true,
@@ -76,6 +95,7 @@ router.put('/edit/:id', async (req, res, next) => {
             message: "Team updated successfully",
             data: updatedTeam,
         });
+
     } catch (error) {
         next(error);
     }

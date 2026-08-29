@@ -60,6 +60,12 @@ const decorationSchema = new mongoose.Schema(
       default: null,
     },
     designType: { type: Object, default: {} },
+
+    productUrl: {
+      type: String,
+      default: "",
+    },
+    
   },
   {
     strict: false,

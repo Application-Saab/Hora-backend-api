@@ -12,7 +12,17 @@ const teamSchema = new mongoose.Schema(
             default: 0,
         },
 
+        alternativeNumber: {
+            type: Number,
+            default: 0,
+        },
+
         dob: {
+            type: String,
+            default: "",
+        },
+
+        address: {
             type: String,
             default: "",
         },

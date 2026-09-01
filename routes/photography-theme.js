@@ -11,7 +11,6 @@ router.put("/edit/:id", async (req, res, next) => {
 
     const {
       title,
-      price,
       image,
       eventId,
       productId,
@@ -185,7 +184,6 @@ router.put("/edit/:id", async (req, res, next) => {
       id,
       {
         title,
-        price,
         image,
         eventId: newEventIds,
         productId: newProductIds,
@@ -210,7 +208,6 @@ router.post("/add", async (req, res, next) => {
   try {
     const {
       title,
-      price,
       description,
       image,
       productId,
@@ -219,10 +216,10 @@ router.post("/add", async (req, res, next) => {
     } = req.body;
 
     // ---------------- VALIDATION ----------------
-    if (!title || !price || !image) {
+    if (!title || !image) {
       return res.status(400).json({
         error: true,
-        message: "title, price, and image are required",
+        message: "title, and image are required",
       });
     }
 
@@ -246,7 +243,6 @@ router.post("/add", async (req, res, next) => {
     // ---------------- CREATE THEME ----------------
     const newTheme = new Theme({
       title,
-      price,
       description,
       image,
 

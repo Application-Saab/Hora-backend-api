@@ -26,6 +26,10 @@ const teamSchema = new mongoose.Schema(
             type: String,
             default: "",
         },
+        weekOff: {
+            type: String,
+            default: "",
+        },
     },
     { timestamps: true }
 );

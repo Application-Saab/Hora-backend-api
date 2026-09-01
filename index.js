@@ -11,7 +11,9 @@ const commonFunction = require("./store/commonFunction");
 const sharp = require("sharp");
 const cron = require("node-cron");
 const { runPackageSync } = require("./store/import-venue-packages");
+const { router: leadsRoutes, syncLeadsFromSheet } = require("./routes/leads"); 
 const axios = require("axios")
+
 // Database Connection Start
 mongoose.set("strictQuery", true);
 mongoose.connect(
@@ -391,6 +393,21 @@ cron.schedule('0 20 * * *', async () => {
     console.error('Error running cron job:', error);
   }
 });
+
+cron.schedule('0 1 * * *', async () => {
+  console.log('--- Executing Cron Job (Every 1 Minute) ---');
+  try {
+    if (typeof syncLeadsFromSheet === 'function') {
+      await syncLeadsFromSheet();
+    } else {
+      console.error("ERROR: syncLeadsFromSheet is not a function! Check require/export path.");
+    }
+  } catch (err) {
+    console.error("CRON SYNC ERROR:", err);
+  }
+});
+
+
 database.on("error", (error) => {
   console.log(error);
 });
@@ -479,6 +496,7 @@ app.use("/eventcapsule/share", ShareCapsule);
 app.use("/api/addon", AddonRoutes);
 app.use("/api/photography-theme", ThemeRoutes);
 app.use("/api/team", team);
+app.use("/api/leads", leadsRoutes); 
 app.use("/api/error-log", ErrorLogRoutes.router);
 app.use("/api/pincode", pinCodes)
 

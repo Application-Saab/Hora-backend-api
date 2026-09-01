@@ -107,4 +107,6 @@ orderSchema.index({
   createdAt: -1
 });
 
+orderSchema.index({ phone_no: 1 });
+
 module.exports = mongoose.model('order', orderSchema)

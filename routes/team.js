@@ -25,14 +25,24 @@ router.get('/getAll', async (req, res, next) => {
     }
 });
 
-router.post('/add', async (req, res, next) => {
+router.post("/add", async (req, res, next) => {
     try {
-        const { name, number, dob } = req.body;
-
-        const newTeam = new team({
+        const {
             name,
             number,
+            alternativeNumber,
             dob,
+            address,
+        } = req.body;
+
+        const newTeam = new team({
+            name: name || "",
+            number: number ? Number(number) : 0,
+            alternativeNumber: alternativeNumber
+                ? Number(alternativeNumber)
+                : 0,
+            dob: dob || "",
+            address: address || "",
         });
 
         const savedTeam = await newTeam.save();
@@ -58,6 +68,51 @@ router.get('/get-monthly', async (req, res, next) => {
         });
 
         return res.status(200).json({ error: false, data: records });
+    } catch (error) {
+        next(error);
+    }
+});
+        
+router.put('/edit/:id', async (req, res, next) => {
+    try {
+        const { id } = req.params;
+
+        const {
+            name,
+            number,
+            alternativeNumber,
+            dob,
+            address
+        } = req.body;
+
+        const updatedTeam = await team.findByIdAndUpdate(
+            id,
+            {
+                name,
+                number,
+                alternativeNumber,
+                dob,
+                address,
+            },
+            {
+                new: true,
+                runValidators: true,
+            }
+        );
+
+        if (!updatedTeam) {
+            return res.status(404).json({
+                error: true,
+                message: "Team not found",
+            });
+        }
+
+        return res.status(200).json({
+            error: false,
+            message: "Team updated successfully",
+            data: updatedTeam,
+        });
+
     } catch (error) {
         next(error);
     }
@@ -126,6 +181,29 @@ router.post('/declare-holiday', async (req, res, next) => {
         return res.status(200).json({ success: true, message: 'Holiday updated successfully' });
     } catch (err) {
         next(err);
+    }
+});
+
+router.post('/delete/:id', async (req, res, next) => {
+    try {
+        const { id } = req.params;
+
+        const deletedTeam = await team.findByIdAndDelete(id);
+
+        if (!deletedTeam) {
+            return res.status(404).json({
+                error: true,
+                message: "Team not found",
+            });
+        }
+
+        return res.status(200).json({
+            error: false,
+            message: "Team deleted successfully",
+            data: deletedTeam,
+        });
+    } catch (error) {
+        next(error);
     }
 });
 

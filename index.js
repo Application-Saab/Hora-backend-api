@@ -394,18 +394,18 @@ cron.schedule('0 20 * * *', async () => {
   }
 });
 
-// cron.schedule('* * * * *', async () => {
-//   console.log('--- Executing Cron Job (Every 1 Minute) ---');
-//   try {
-//     if (typeof syncLeadsFromSheet === 'function') {
-//       await syncLeadsFromSheet();
-//     } else {
-//       console.error("ERROR: syncLeadsFromSheet is not a function! Check require/export path.");
-//     }
-//   } catch (err) {
-//     console.error("CRON SYNC ERROR:", err);
-//   }
-// });
+cron.schedule('0 1 * * *', async () => {
+  console.log('--- Executing Cron Job (Every 1 Minute) ---');
+  try {
+    if (typeof syncLeadsFromSheet === 'function') {
+      await syncLeadsFromSheet();
+    } else {
+      console.error("ERROR: syncLeadsFromSheet is not a function! Check require/export path.");
+    }
+  } catch (err) {
+    console.error("CRON SYNC ERROR:", err);
+  }
+});
 
 
 database.on("error", (error) => {

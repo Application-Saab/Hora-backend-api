@@ -1,9 +1,9 @@
-const Lead = require('../models/leads'); // Path verify kar lena
+const Lead = require('../models/leads');
 const { google } = require("googleapis");
 const fs = require("fs");
 const express = require("express");
 const router = express.Router();
-const Order = require("../models/order"); 
+const Order = require("../models/order");
 
 const credentials = JSON.parse(fs.readFileSync("google-sheet.json", "utf-8"));
 const { client_email, private_key } = credentials;
@@ -15,13 +15,18 @@ const auth = new google.auth.JWT({
     scopes: ["https://www.googleapis.com/auth/spreadsheets"],
 });
 
+const sanitizePhone = (phone) => {
+    if (!phone) return "";
+    const cleaned = String(phone).replace(/\D/g, "");
+    return cleaned.length >= 10 ? cleaned.slice(-10) : cleaned;
+};
+
 function parseSheetDate(dateStr) {
     if (!dateStr) return new Date();
 
     const parsed = new Date(dateStr);
     if (!isNaN(parsed.getTime())) return parsed;
 
-    // Handles DD/MM/YYYY or DD-MM-YYYY
     const parts = dateStr.split(/[\/\-]/);
     if (parts.length === 3) {
         const [day, month, year] = parts.map((p) => p.trim());
@@ -32,36 +37,15 @@ function parseSheetDate(dateStr) {
     return new Date();
 }
 
-async function getSheetData(range) {
-    const sheets = google.sheets({ version: "v4", auth });
-    const response = await sheets.spreadsheets.values.get({
-        spreadsheetId,
-        range,
-    });
-    const rows = response.data.values || [];
-    if (!rows.length) return [];
-
-    // Headers se extra spaces trim karo
-    const headers = rows[0].map((h) => String(h).trim());
-
-    return rows.slice(1).map((row) => {
-        const obj = {};
-        headers.forEach((header, i) => {
-            obj[header] = row[i] ? String(row[i]).trim() : "";
-        });
-        return obj;
-    });
-}
-
 async function syncLeadsFromSheet() {
     try {
         console.log("hello ----- [Incremental Sheet Sync Triggered]");
 
         let tracker = await Lead.findOne({ phoneNumber: "SYNC_TRACKER_ROW" });
 
-        let startRow = 2; 
+        let startRow = 2;
         if (tracker && tracker.lastSyncedRow && tracker.lastSyncedRow > 0) {
-            startRow = tracker.lastSyncedRow + 1; 
+            startRow = tracker.lastSyncedRow + 1;
         }
 
         const range = `Assigned leads!A${startRow}:Z`;
@@ -85,19 +69,18 @@ async function syncLeadsFromSheet() {
         const leadsToInsert = [];
 
         for (const row of newRows) {
-
             const rawPhone = row[0] || "";
             const rawAgent = row[1] || "";
             const rawSource = row[2] || "";
             const rawDate = row[3] || null;
 
-            if (!rawPhone && !rawAgent) continue; 
+            if (!rawPhone && !rawAgent) continue;
 
             leadsToInsert.push({
-                phoneNumber: String(rawPhone).trim(),
+                phoneNumber: sanitizePhone(rawPhone),
                 agentName: String(rawAgent).trim(),
-                source: String(rawSource).trim(), 
-                date: parseSheetDate(rawDate),    
+                source: String(rawSource).trim(),
+                date: parseSheetDate(rawDate),
                 lastSyncedRow: 0
             });
         }
@@ -114,7 +97,7 @@ async function syncLeadsFromSheet() {
                 phoneNumber: "SYNC_TRACKER_ROW",
                 agentName: "SYSTEM_TRACKER",
                 source: "SYSTEM_TRACKER",
-                lastSyncedRow: newLastRow, 
+                lastSyncedRow: newLastRow,
                 date: new Date()
             },
             { upsert: true, new: true }
@@ -127,60 +110,170 @@ async function syncLeadsFromSheet() {
     }
 }
 
-const formatAnalyticsList = (list) => {
-    return (list || []).map((item) => {
-        const total = item.totalLeadsAssigned || 0;
-        const confirmed = item.orderConfirmed || 0;
-        const ratio = total > 0 ? ((confirmed / total) * 100).toFixed(2) : "0.00";
+const fetchAnalyticsFast = async (groupByField, startDate, endDate) => {
+    const leadQuery = {
+        phoneNumber: {
+            $exists: true,
+            $nin: ["", "SYNC_TRACKER_ROW"]
+        },
+        agentName: {
+            $exists: true,
+            $ne: "SYSTEM_TRACKER"
+        },
+        source: {
+            $exists: true,
+            $ne: "SYSTEM_TRACKER"
+        }
+    };
+
+    if (startDate || endDate) {
+        leadQuery.date = {};
+
+        if (startDate) {
+            const start = new Date(startDate);
+            start.setHours(0, 0, 0, 0);
+
+            leadQuery.date.$gte = start;
+        }
+
+        if (endDate) {
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+
+            leadQuery.date.$lte = end;
+        }
+    }
+
+    const leads = await Lead.find(
+        leadQuery,
+        {
+            phoneNumber: 1,
+            [groupByField]: 1
+        }
+    ).lean();
+
+    if (!leads.length) {
+        return {
+            totalLeads: 0,
+            list: []
+        };
+    }
+
+    const leadPhones = [
+        ...new Set(
+            leads
+                .map((lead) => sanitizePhone(lead.phoneNumber))
+                .filter(Boolean)
+        )
+    ];
+
+    const matchingOrders = await Order.find(
+        {
+            phone_no: {
+                $exists: true,
+                $nin: ["", null]
+            }
+        },
+        {
+            phone_no: 1
+        }
+    ).lean();
+
+    const orderPhoneSet = new Set();
+
+    for (const order of matchingOrders) {
+        const phone = sanitizePhone(order.phone_no);
+
+        if (phone && leadPhones.includes(phone)) {
+            orderPhoneSet.add(phone);
+        }
+    }
+
+    const statsMap = {};
+    let totalLeadsCount = 0;
+
+    for (const lead of leads) {
+        const groupName = lead[groupByField] || "Unknown";
+
+        const cleanLeadPhone = sanitizePhone(
+            lead.phoneNumber
+        );
+
+        if (!statsMap[groupName]) {
+            statsMap[groupName] = {
+                totalLeadsAssigned: 0,
+                orderConfirmed: 0
+            };
+        }
+
+        statsMap[groupName].totalLeadsAssigned += 1;
+        totalLeadsCount += 1;
+
+        if (
+            cleanLeadPhone &&
+            orderPhoneSet.has(cleanLeadPhone)
+        ) {
+            statsMap[groupName].orderConfirmed += 1;
+        }
+    }
+
+    // ================= FINAL RESPONSE =================
+    const resultList = Object.keys(statsMap).map((key) => {
+        const total =
+            statsMap[key].totalLeadsAssigned;
+
+        const confirmed =
+            statsMap[key].orderConfirmed;
+
+        const ratio =
+            total > 0
+                ? ((confirmed / total) * 100).toFixed(2)
+                : "0.00";
 
         return {
-            name: item._id || "Unknown",
+            name: key,
             totalLeadsAssigned: total,
             orderConfirmed: confirmed,
             conversionRatio: `${ratio}%`
         };
     });
+
+    resultList.sort(
+        (a, b) =>
+            b.totalLeadsAssigned -
+            a.totalLeadsAssigned
+    );
+
+    return {
+        totalLeads: totalLeadsCount,
+        list: resultList
+    };
 };
 
-const getAnalyticsPipeline = (groupByField) => [
-    {
-        $match: {
-            phoneNumber: { $ne: "SYNC_TRACKER_ROW" }
-        }
-    },
-    {
-        $lookup: {
-            from: "orders",
-            localField: "phoneNumber",
-            foreignField: "phone_no",
-            as: "matchedOrders"
-        }
-    },
-    {
-        $addFields: {
-            isConfirmed: { $gt: [{ $size: "$matchedOrders" }, 0] }
-        }
-    },
-    {
-        $group: {
-            _id: `$${groupByField}`,
-            totalLeadsAssigned: { $sum: 1 },
-            orderConfirmed: { $sum: { $cond: ["$isConfirmed", 1, 0] } }
-        }
-    },
-    { $sort: { totalLeadsAssigned: -1 } }
-];
 
 router.get("/agent-analytics", async (req, res) => {
     try {
-        const result = await Lead.aggregate(getAnalyticsPipeline("agentName"));
+        const { startDate, endDate } = req.query;
+
+        const analyticsData = await fetchAnalyticsFast(
+            "agentName",
+            startDate,
+            endDate
+        );
+
         return res.status(200).json({
             error: false,
             message: "Agent analytics fetched successfully",
-            data: formatAnalyticsList(result)
+            totalLeads: analyticsData.totalLeads,
+            data: analyticsData.list
         });
+
     } catch (error) {
-        console.error("Error fetching agent analytics:", error);
+        console.error(
+            "Error fetching agent analytics:",
+            error
+        );
+
         return res.status(500).json({
             error: true,
             message: "Server error fetching agent analytics",
@@ -189,16 +282,31 @@ router.get("/agent-analytics", async (req, res) => {
     }
 });
 
+
+// ================= SOURCE ANALYTICS =================
 router.get("/source-analytics", async (req, res) => {
     try {
-        const result = await Lead.aggregate(getAnalyticsPipeline("source"));
+        const { startDate, endDate } = req.query;
+
+        const analyticsData = await fetchAnalyticsFast(
+            "source",
+            startDate,
+            endDate
+        );
+
         return res.status(200).json({
             error: false,
             message: "Source analytics fetched successfully",
-            data: formatAnalyticsList(result)
+            totalLeads: analyticsData.totalLeads,
+            data: analyticsData.list
         });
+
     } catch (error) {
-        console.error("Error fetching source analytics:", error);
+        console.error(
+            "Error fetching source analytics:",
+            error
+        );
+
         return res.status(500).json({
             error: true,
             message: "Server error fetching source analytics",

@@ -32,6 +32,7 @@ router.post("/add", async (req, res, next) => {
             alternativeNumber,
             dob,
             address,
+            weekOff
         } = req.body;
 
         const newTeam = new team({
@@ -42,6 +43,7 @@ router.post("/add", async (req, res, next) => {
                 : 0,
             dob: dob || "",
             address: address || "",
+            weekOff: weekOff || "",
         });
 
         const savedTeam = await newTeam.save();
@@ -65,7 +67,8 @@ router.put('/edit/:id', async (req, res, next) => {
             number,
             alternativeNumber,
             dob,
-            address
+            address,
+            weekOff
         } = req.body;
 
         const updatedTeam = await team.findByIdAndUpdate(
@@ -76,6 +79,7 @@ router.put('/edit/:id', async (req, res, next) => {
                 alternativeNumber,
                 dob,
                 address,
+                weekOff
             },
             {
                 new: true,

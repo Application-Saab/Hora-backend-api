@@ -8,11 +8,6 @@ const themeSchema = new mongoose.Schema(
             trim: true,
         },
 
-        price: {
-            type: Number,
-            required: true,
-        },
-
         description: String,
 
         image: {

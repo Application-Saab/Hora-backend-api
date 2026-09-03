@@ -140,11 +140,11 @@ router.post('/mark', async (req, res, next) => {
 
 router.post('/apply-leave', async (req, res, next) => {
     try {
-        const { memberId, date, leaveType, reason } = req.body;
+        const { memberId, date, leaveType, status, reason } = req.body;
 
         const updated = await Attendance.findOneAndUpdate(
             { memberId, date },
-            { status: "Leave", leaveType, reason },
+            { status, leaveType, reason },
             { upsert: true, new: true }
         );
 

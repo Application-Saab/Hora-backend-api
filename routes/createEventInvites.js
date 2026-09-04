@@ -440,6 +440,7 @@ router.get("/event-invites/all/:userId", async (req, res, next) => {
           hostName: 1,
           eventDate: 1,
           eventRole: 1,
+          externalTemplateImageUrl: 1,
           guests: 1,
         },
       },

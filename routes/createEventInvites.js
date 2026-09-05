@@ -227,7 +227,7 @@ router.post("/create-event-invite", async (req, res, next) => {
       innerErr.isPublic = true;
       next(innerErr);
     }
-    
+
     if (orderId) {
       try {
         const folder = await Folders.findOne({ orderId });
@@ -288,6 +288,7 @@ router.get("/event-invites/:id", async (req, res, next) => {
     next(err);
   }
 });
+
 // Fetch all event invites for a user as a guest or host
 router.get("/event-invites/all/:userId", async (req, res, next) => {
   try {
@@ -348,7 +349,7 @@ router.get("/event-invites/all/:userId", async (req, res, next) => {
         },
       },
 
-      // Remoce duplicates if same event is already exists as host
+      // Remove duplicates if same event already exists as host
       {
         $group: {
           _id: "$_id",
@@ -357,15 +358,90 @@ router.get("/event-invites/all/:userId", async (req, res, next) => {
       },
       { $replaceRoot: { newRoot: "$doc" } },
 
+      // Lookup all guests for this event
+      {
+        $lookup: {
+          from: "eventguests",
+          localField: "_id",
+          foreignField: "eventId",
+          as: "guestDocs",
+        },
+      },
+
+      // Lookup user details for each guest
+      {
+        $lookup: {
+          from: "users",
+          localField: "guestDocs.userId",
+          foreignField: "_id",
+          as: "userDocs",
+        },
+      },
+
+      // Build guests array with only required fields
+      {
+        $addFields: {
+          guests: {
+            $map: {
+              input: "$guestDocs",
+              as: "g",
+              in: {
+                url: {
+                  $let: {
+                    vars: {
+                      matchedUser: {
+                        $arrayElemAt: [
+                          {
+                            $filter: {
+                              input: "$userDocs",
+                              as: "u",
+                              cond: { $eq: ["$$u._id", "$$g.userId"] },
+                            },
+                          },
+                          0,
+                        ],
+                      },
+                    },
+                    in: { $ifNull: ["$$matchedUser.avatar", ""] },
+                  },
+                },
+                name: {
+                  $let: {
+                    vars: {
+                      matchedUser: {
+                        $arrayElemAt: [
+                          {
+                            $filter: {
+                              input: "$userDocs",
+                              as: "u",
+                              cond: { $eq: ["$$u._id", "$$g.userId"] },
+                            },
+                          },
+                          0,
+                        ],
+                      },
+                    },
+                    in: { $ifNull: ["$$matchedUser.name", ""] },
+                  },
+                },
+                rsvpStatus: { $ifNull: ["$$g.rsvpStatus", ""] },
+              },
+            },
+          },
+        },
+      },
+
       // Sorting for latest first
       { $sort: { createdAt: -1 } },
 
-      // projection only required fields in response
+      // Projection only required fields
       {
         $project: {
           hostName: 1,
           eventDate: 1,
           eventRole: 1,
+          externalTemplateImageUrl: 1,
+          guests: 1,
         },
       },
     ]);
@@ -376,7 +452,6 @@ router.get("/event-invites/all/:userId", async (req, res, next) => {
     next(err);
   }
 });
-
 // Update event invite
 router.put("/event-invites/:id", async (req, res, next) => {
   const { id } = req.params;

@@ -402,6 +402,7 @@ router.post('/add', async(req, res, next) => {
 	    order_taken_by:req.body.order_taken_by,
         eventName:req.body.eventName,
         inclusionVariables :req.body.inclusionVariables,
+        customInclusion: req.body.customInclusion,
         notificationStep: 1,
         lastNotifiedAt: new Date(),
     })

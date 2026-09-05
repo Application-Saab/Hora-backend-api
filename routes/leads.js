@@ -250,40 +250,270 @@ const fetchAnalyticsFast = async (groupByField, startDate, endDate) => {
     };
 };
 
+const fetchAgentAnalyticsFast = async (groupByField, startDate, endDate) => {
 
-router.get("/agent-analytics", async (req, res) => {
-    try {
-        const { startDate, endDate } = req.query;
+    const startOfDay = (date) => {
+        if (!date) return null;
 
-        const analyticsData = await fetchAnalyticsFast(
-            "agentName",
-            startDate,
-            endDate
+        const value = String(date).trim();
+
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+            return null;
+        }
+
+        const parsedDate = new Date(
+            `${value}T00:00:00.000Z`
         );
 
-        return res.status(200).json({
-            error: false,
-            message: "Agent analytics fetched successfully",
-            totalLeads: analyticsData.totalLeads,
-            data: analyticsData.list
-        });
+        if (isNaN(parsedDate.getTime())) {
+            return null;
+        }
 
-    } catch (error) {
-        console.error(
-            "Error fetching agent analytics:",
-            error
+        return parsedDate;
+    };
+
+
+    const endOfDay = (date) => {
+        if (!date) return null;
+
+        const value = String(date).trim();
+
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+            return null;
+        }
+
+        const parsedDate = new Date(
+            `${value}T23:59:59.999Z`
         );
 
-        return res.status(500).json({
-            error: true,
-            message: "Server error fetching agent analytics",
-            details: error.message
-        });
+        if (isNaN(parsedDate.getTime())) {
+            return null;
+        }
+
+        return parsedDate;
+    };
+
+    const start = startOfDay(startDate);
+    const end = endOfDay(endDate);
+
+    if (startDate && !start) {
+        throw new Error(
+            `Invalid startDate: ${ startDate } `
+        );
     }
-});
+
+    if (endDate && !end) {
+        throw new Error(
+            `Invalid endDate: ${ endDate } `
+        );
+    }
+
+    const leadQuery = {
+        phoneNumber: {
+            $exists: true,
+            $nin: [
+                "",
+                "SYNC_TRACKER_ROW"
+            ]
+        },
+
+        agentName: {
+            $exists: true,
+            $ne: "SYSTEM_TRACKER"
+        },
+
+        source: {
+            $exists: true,
+            $ne: "SYSTEM_TRACKER"
+        }
+    };
+
+    if (start || end) {
+
+        leadQuery.date = {};
+
+        if (start) {
+            leadQuery.date.$gte = start;
+        }
+
+        if (end) {
+            leadQuery.date.$lte = end;
+        }
+    }
+
+    const leads = await Lead.find(
+        leadQuery,
+        {
+            agentName: 1,
+            [groupByField]: 1,
+            date: 1
+        }
+    ).lean();
+
+    const orderQuery = {
+        order_taken_by: {
+            $exists: true,
+            $nin: [
+                "",
+                null
+            ]
+        }
+    };
+
+    if (start || end) {
+
+        orderQuery.createdAt = {};
+
+        if (start) {
+            orderQuery.createdAt.$gte = start;
+        }
+
+        if (end) {
+            orderQuery.createdAt.$lte = end;
+        }
+    }
+
+    const orders = await Order.find(
+        orderQuery,
+        {
+            order_taken_by: 1,
+            createdAt: 1
+        }
+    ).lean();
+
+    const statsMap = {};
+    for (const lead of leads) {
+        const name =
+            String(
+                lead[groupByField] || ""
+            ).trim() || "Unknown";
 
 
-// ================= SOURCE ANALYTICS =================
+        if (!statsMap[name]) {
+
+            statsMap[name] = {
+                totalLeadsAssigned: 0,
+                orderConfirmed: 0
+            };
+        }
+
+
+        statsMap[name].totalLeadsAssigned++;
+    }
+    for (const order of orders) {
+        const orderAgent =
+            String(
+                order.order_taken_by || ""
+            ).trim();
+
+
+        if (!orderAgent) {
+            continue;
+        }
+        let key;
+
+        if (
+            orderAgent.toLowerCase() ===
+            "booked online"
+        ) {
+
+            key = "Unknown";
+
+        } else {
+
+            key = Object.keys(statsMap).find(
+                name =>
+                    name.toLowerCase() ===
+                    orderAgent.toLowerCase()
+            );
+        }
+
+        if (key) {
+
+            statsMap[key].orderConfirmed++;
+        }
+    }
+
+    const list = Object.entries(
+        statsMap
+    ).map(
+        ([name, data]) => {
+
+            const conversionRatio =
+                data.totalLeadsAssigned > 0
+                    ? (
+                        (
+                            data.orderConfirmed /
+                            data.totalLeadsAssigned
+                        ) * 100
+                    ).toFixed(2)
+                    : "0.00";
+
+
+            return {
+                name,
+
+                totalLeadsAssigned:
+                    data.totalLeadsAssigned,
+
+                orderConfirmed:
+                    data.orderConfirmed,
+
+                conversionRatio:
+                    `${ conversionRatio }% `
+            };
+        }
+    );
+
+    list.sort(
+        (a, b) =>
+            b.totalLeadsAssigned -
+            a.totalLeadsAssigned
+    );
+
+    return {
+        totalLeads: leads.length,
+        list
+    };
+};
+
+router.get("/agent-analytics",async (req, res) => {
+        try {
+            const {
+                startDate,
+                endDate
+            } = req.query;
+            const analyticsData =
+                await fetchAgentAnalyticsFast(
+                    "agentName",
+                    startDate,
+                    endDate
+                );
+            return res.status(200).json({
+                error: false,
+                message:
+                    "Agent analytics fetched successfully",
+                totalLeads:
+                    analyticsData.totalLeads,
+                data:
+                    analyticsData.list
+            });
+        } catch (error) {
+            console.error(
+                "Error fetching agent analytics:",
+                error
+            );
+            return res.status(500).json({
+                error: true,
+                message:
+                    "Server error fetching agent analytics",
+                details:
+                    error.message
+            });
+        }
+    }
+);
+
 router.get("/source-analytics", async (req, res) => {
     try {
         const { startDate, endDate } = req.query;

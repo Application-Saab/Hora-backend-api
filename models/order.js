@@ -55,6 +55,8 @@ const orderSchema = new mongoose.Schema({
     lastNotifiedAt: { type: Date, default: null },
     orderDriveLink: {type: String, default:""},
     themes: { type: Array, default: [] },
+    isPaymentDone: { type: Boolean, default: true },
+    isEmergencyOrder: { type: Boolean, default: false },
   customInclusion: {
     type: [String],
     default: []

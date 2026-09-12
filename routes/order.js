@@ -404,6 +404,8 @@ router.post('/add', async(req, res, next) => {
         inclusionVariables :req.body.inclusionVariables,
         customInclusion: req.body.customInclusion,
         notificationStep: 1,
+        isPaymentDone: req.body.isPaymentDone,
+        isEmergencyOrder: req.body.isEmergencyOrder,
         lastNotifiedAt: new Date(),
     })
     if(req.body.items.length>0){
@@ -460,6 +462,7 @@ router.post('/add', async(req, res, next) => {
                const orderLocality = req.body.order_locality || '';
                const orderType = req.body.type || '';
                const orderStatus = req.body.status;
+               const isPaymentDone = req.body.isPaymentDone;
 
                console.log("Order locality:", orderLocality, "Order type:", orderType, "Order status:", orderStatus);
 
@@ -491,13 +494,49 @@ router.post('/add', async(req, res, next) => {
                                'New Order',
                                `New Order!!! Order ID: #${nextOrderId + 10800} 🥳🤩`,
                                '',
-                               0
+                               0, 
+                               "",
+                               "notification"
                            );
                        });
                    } else {
                        console.log("No suppliers matched the locality and type for notification.");
                    }
-               } else {
+               } 
+               else if (orderStatus == 0 && isPaymentDone === false) {
+                   filteredSuppliers = userIds.filter(user => {
+                       // user.city and user.order_type must exist
+                       return (
+                           user.city &&
+                           user.order_type &&
+                           user.city == orderLocality &&
+                           user.order_type == orderType &&
+                           user.performanceBadge == "Elite"
+                       );
+                   });
+
+                   console.log("Filtered suppliers matching locality and type:", filteredSuppliers.length);
+
+                   if (filteredSuppliers.length > 0) {
+                       filteredSuppliers.forEach(element => {
+                           userSupplierIdsArray.push(element._id);
+                           console.log(`Sending notification to supplier: ${element._id}, device_token: ${element.device_token}`);
+                           notificationFunction.sendNotifications(
+                               element.device_token,
+                               req.body.fromId,
+                               'New Order',
+                               `New Order!!! Order ID: #${nextOrderId + 10800} 🥳🤩`,
+                               '',
+                               0,
+                               "",
+                               "emergency_notification"
+                           );
+                       });
+                   } else {
+                       console.log("No suppliers matched the locality and type for notification.");
+                   }
+               }
+               else {
                    console.log("Order status is not 1, no notifications sent to suppliers.");
                }
 
@@ -529,7 +568,7 @@ router.post('/add', async(req, res, next) => {
                 //data.supplierUserIds=userSupplierIdsArray;
                 const dataToSave = await data.save();
                 const io = getIO();
-                if (orderStatus == 1 && filteredSuppliers.length) {
+                if ((orderStatus == 1 && filteredSuppliers.length) || (orderStatus == 0 && isPaymentDone === false && filteredSuppliers.length)) {
                 filteredSuppliers.forEach((supplier) => {
                  io.to(supplier._id.toString()).emit("order:new", dataToSave);
                 });
@@ -578,7 +617,7 @@ router.get('/details/:id', async(req, res, next) => {
 })
 
 router.post('/update_order_status', async (req, res, next) => {
-  const { _id, status } = req.body;
+    const { _id, status, isPaymentDone } = req.body;
 
   if (!_id) {
     return res.json({
@@ -598,6 +637,7 @@ router.post('/update_order_status', async (req, res, next) => {
 
     // Update the status
     order.status = status;
+    order.isPaymentDone = isPaymentDone;
     await order.save();
 
     // If status is 1, send notifications to suppliers

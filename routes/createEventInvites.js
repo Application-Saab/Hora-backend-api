@@ -11,6 +11,7 @@ const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
 const axios = require("axios");
+const Folder = require("../models/folder");
 
 const {
   generateTemplateThumbnail,
@@ -452,6 +453,440 @@ router.get("/event-invites/all/:userId", async (req, res, next) => {
     next(err);
   }
 });
+
+// Fetch all event invites + capsules for a user
+router.get("/event-invites-and-capsules/:userId", async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return sendResponse(res, 400, true, "Invalid user ID");
+    }
+
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const userIdString = userId.toString();
+
+    // Invites + Capsules
+    const [inviteData, capsuleData] = await Promise.all([
+      EventInvite.aggregate([
+        {
+          $match: {
+            userId: userObjectId,
+            hostName: {
+              $exists: true,
+              $ne: "",
+            },
+          },
+        },
+
+        {
+          $addFields: {
+            eventRole: "host",
+            dataType: "invite",
+          },
+        },
+        {
+          $unionWith: {
+            coll: "eventguests",
+
+            pipeline: [
+              {
+                $match: {
+                  userId: userObjectId,
+                },
+              },
+
+              {
+                $lookup: {
+                  from: "eventinvites",
+                  localField: "eventId",
+                  foreignField: "_id",
+                  as: "event",
+                },
+              },
+
+              {
+                $unwind: "$event",
+              },
+
+              {
+                $match: {
+                  "event.hostName": {
+                    $exists: true,
+                    $ne: "",
+                  },
+                },
+              },
+
+              {
+                $replaceRoot: {
+                  newRoot: {
+                    $mergeObjects: [
+                      "$event",
+                      {
+                        eventRole: "guest",
+                        dataType: "invite",
+                      },
+                    ],
+                  },
+                },
+              },
+            ],
+          },
+        },
+        {
+          $group: {
+            _id: "$_id",
+            doc: {
+              $first: "$$ROOT",
+            },
+          },
+        },
+
+        {
+          $replaceRoot: {
+            newRoot: "$doc",
+          },
+        },
+        {
+          $lookup: {
+            from: "eventguests",
+            localField: "_id",
+            foreignField: "eventId",
+            as: "guestDocs",
+          },
+        },
+        {
+          $lookup: {
+            from: "users",
+            localField: "guestDocs.userId",
+            foreignField: "_id",
+            as: "userDocs",
+          },
+        },
+        {
+          $addFields: {
+            guests: {
+              $map: {
+                input: "$guestDocs",
+                as: "g",
+
+                in: {
+                  url: {
+                    $let: {
+                      vars: {
+                        matchedUser: {
+                          $arrayElemAt: [
+                            {
+                              $filter: {
+                                input: "$userDocs",
+                                as: "u",
+                                cond: {
+                                  $eq: ["$$u._id", "$$g.userId"],
+                                },
+                              },
+                            },
+                            0,
+                          ],
+                        },
+                      },
+
+                      in: {
+                        $ifNull: ["$$matchedUser.avatar", ""],
+                      },
+                    },
+                  },
+
+                  name: {
+                    $let: {
+                      vars: {
+                        matchedUser: {
+                          $arrayElemAt: [
+                            {
+                              $filter: {
+                                input: "$userDocs",
+                                as: "u",
+                                cond: {
+                                  $eq: ["$$u._id", "$$g.userId"],
+                                },
+                              },
+                            },
+                            0,
+                          ],
+                        },
+                      },
+
+                      in: {
+                        $ifNull: ["$$matchedUser.name", ""],
+                      },
+                    },
+                  },
+
+                  rsvpStatus: {
+                    $ifNull: ["$$g.rsvpStatus", ""],
+                  },
+                },
+              },
+            },
+          },
+        },
+        {
+          $lookup: {
+            from: "folders",
+            let: {
+              inviteOrderId: "$orderId",
+            },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      {
+                        $ne: ["$$inviteOrderId", null],
+                      },
+                      {
+                        $eq: [
+                          "$orderId",
+                          {
+                            $toString: {
+                              $convert: {
+                                input: "$$inviteOrderId",
+                                to: "long",
+                                onError: null,
+                                onNull: null,
+                              },
+                            },
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                },
+              },
+            ],
+            as: "linkedCapsule",
+          },
+        },
+        {
+          $addFields: {
+            capsule: {
+              $cond: [
+                {
+                  $gt: [{ $size: "$linkedCapsule" }, 0],
+                },
+                {
+                  $let: {
+                    vars: {
+                      folder: {
+                        $arrayElemAt: ["$linkedCapsule", 0],
+                      },
+                    },
+                    in: {
+                      _id: "$$folder._id",
+                      hostName: "$$folder.folderName",
+                      eventDate: "$$folder.createdAt",
+                      externalTemplateImageUrl:
+                        "$$folder.capsuleBannerImageUrl",
+                      eventRole: {
+                        $cond: [
+                          {
+                            $eq: ["$$folder.customerId", userIdString],
+                          },
+                          "host",
+                          "guest",
+                        ],
+                      },
+                    },
+                  },
+                },
+                {},
+              ],
+            },
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+            hostName: 1,
+            eventDate: 1,
+            externalTemplateImageUrl: 1,
+            eventRole: 1,
+            dataType: 1,
+            guests: 1,
+            capsule: 1,
+            createdAt: 1,
+          },
+        },
+      ]),
+      Folder.aggregate([
+        {
+          $match: {
+            $or: [
+              {
+                customerId: userIdString,
+              },
+              {
+                "viewedBy.userId": userIdString,
+              },
+            ],
+          },
+        },
+        {
+          $lookup: {
+            from: "users",
+
+            let: {
+              viewedUserIds: {
+                $ifNull: ["$viewedBy.userId", []],
+              },
+            },
+
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $in: [
+                      {
+                        $toString: "$_id",
+                      },
+                      "$$viewedUserIds",
+                    ],
+                  },
+                },
+              },
+            ],
+
+            as: "capsuleUsers",
+          },
+        },
+        {
+          $addFields: {
+            guests: {
+              $map: {
+                input: {
+                  $ifNull: ["$viewedBy", []],
+                },
+                as: "viewer",
+
+                in: {
+                  url: {
+                    $let: {
+                      vars: {
+                        matchedUser: {
+                          $arrayElemAt: [
+                            {
+                              $filter: {
+                                input: "$capsuleUsers",
+                                as: "u",
+                                cond: {
+                                  $eq: [
+                                    {
+                                      $toString: "$$u._id",
+                                    },
+                                    "$$viewer.userId",
+                                  ],
+                                },
+                              },
+                            },
+                            0,
+                          ],
+                        },
+                      },
+
+                      in: {
+                        $ifNull: ["$$matchedUser.avatar", ""],
+                      },
+                    },
+                  },
+
+                  name: {
+                    $let: {
+                      vars: {
+                        matchedUser: {
+                          $arrayElemAt: [
+                            {
+                              $filter: {
+                                input: "$capsuleUsers",
+                                as: "u",
+                                cond: {
+                                  $eq: [
+                                    {
+                                      $toString: "$$u._id",
+                                    },
+                                    "$$viewer.userId",
+                                  ],
+                                },
+                              },
+                            },
+                            0,
+                          ],
+                        },
+                      },
+
+                      in: {
+                        $ifNull: ["$$matchedUser.name", ""],
+                      },
+                    },
+                  },
+                  rsvpStatus: null,
+                },
+              },
+            },
+            eventRole: {
+              $cond: [
+                {
+                  $eq: ["$customerId", userIdString],
+                },
+                "host",
+                "guest",
+              ],
+            },
+
+            dataType: "capsule",
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+            hostName: "$folderName",
+            eventDate: "$createdAt",
+            externalTemplateImageUrl: "$capsuleBannerImageUrl",
+            eventRole: 1,
+            dataType: 1,
+            guests: 1,
+            createdAt: 1,
+          },
+        },
+      ]),
+    ]);
+    const data = [...inviteData, ...capsuleData];
+
+    data.sort((a, b) => {
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+
+      return dateB - dateA;
+    });
+
+    const finalData = data.map((item) => {
+      const { createdAt, ...rest } = item;
+      return rest;
+    });
+
+    return sendResponse(
+      res,
+      200,
+      false,
+      "Events and capsules fetched successfully",
+      finalData,
+    );
+  } catch (err) {
+    err.isPublic = true;
+    next(err);
+  }
+});
+
 // Update event invite
 router.put("/event-invites/:id", async (req, res, next) => {
   const { id } = req.params;

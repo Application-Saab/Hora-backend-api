@@ -12,6 +12,8 @@ const {
 } = require("../store/multerS3Config");
 const fsp = require("fs").promises;
 const EventinvitesModel = require("../models/event-invite")
+const capsuleGenerateShortCode = require("../utils/capsuleGenerateShortCode");
+
 
 const apiKey = process.env.GOOGLE_DRIVE_API_KEY;
 const deploymentId = process.env.GOOGLE_SCRIPT_DEPLOYMENT_ID;
@@ -249,14 +251,17 @@ router.post("/import-drive-folder", async (req, res, next) => {
 
     const mainFolderId = folder._id;
 
-    const webLink = `https://horaservices.com/weblink-gallery?folderName=${folderName}&customerId=${customerId}`;
+    const webLink = `https://horaservices.com/weblink-gallery?galleryId=${encodeURIComponent(folder._id)}`;
 
     const isLinkAlreadyProvided = order.orderDriveLink === folderUrl;
 
     let updateFields = {
       orderDriveLink: folderUrl,
-      orderWebLink: webLink,
     };
+
+    if (!order.orderWebLink) {
+      updateFields.orderWebLink = webLink;
+    }
 
     if (order.allDriveLinks && order.allDriveLinks.length > 0) {
       const now = new Date();
@@ -283,9 +288,11 @@ router.post("/import-drive-folder", async (req, res, next) => {
       { $set: updateFields }
     );
 
+    const finalWebLink = order.orderWebLink || webLink;
+
     res.status(201).json({
       message: "Drive link added successfully",
-      webLink,
+      webLink: finalWebLink,
       phoneNo:phoneNo,
       fulfillmentDate:fulfillmentDate,
       folderName:folderName,
@@ -421,8 +428,13 @@ router.post("/add-order-drive-link", async (req, res, next) => {
 
     let folder = await FolderModel.findOne({ folderName, customerId });
 
+    let shortCode = folder?.shortCode;
+    if (!shortCode) {
+      shortCode = await capsuleGenerateShortCode();
+    }
+
     if (!folder) {
-      folder = new FolderModel({ folderName, customerId, orderId, eventId, status: "processing" });
+      folder = new FolderModel({ folderName, customerId, orderId, eventId, status: "processing", shortCode });
       await folder.save();
     }
     else {
@@ -431,7 +443,9 @@ router.post("/add-order-drive-link", async (req, res, next) => {
         { $set: { status: "processing" } }
       );
     }
-    let webLink = order.orderWebLink;
+    const shortCodeFolder = await FolderModel.findById(folder._id).lean();
+
+    let capsuleShortLink = `https://horaservices.com/eventcapsule/share/${encodeURIComponent(shortCodeFolder.shortCode)}`;
     let updateFields = {};
 
     let isAnySubLinkChangedOrNew = false; 
@@ -453,11 +467,12 @@ router.post("/add-order-drive-link", async (req, res, next) => {
         return { ...item, submittedAt: existingItem.submittedAt || new Date(), updatedAt: now, };
       });
     }
+    let webLink;
 
     if (folderUrl && folderUrl.trim() !== "") {
 
       let mainFolderId = folder._id;
-      webLink = `https://horaservices.com/weblink-gallery?folderName=${folderName}&customerId=${customerId}`;
+       webLink = `https://horaservices.com/weblink-gallery?galleryId=${encodeURIComponent(folder._id)}`;
 
       updateFields.orderDriveLink = folderUrl;
       updateFields.orderWebLink = webLink;
@@ -542,7 +557,7 @@ router.post("/add-order-drive-link", async (req, res, next) => {
           customerNumber: `="${customerNumber}"`,
           service: "Photography",
           driveLink: folderUrl,
-          webLink: webLink,
+          webLink: capsuleShortLink,
 
           contentTypes: contentTypesPayload
         };

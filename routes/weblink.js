@@ -435,7 +435,34 @@ router.get("/capsule-tracking", async (req, res) => {
         {
           $project: {
             order_id: 1,
-            orderWebLink: 1,
+            orderWebLink: {
+              $cond: [
+                {
+                  $gt: [
+                    {
+                      $strLenCP: {
+                        $trim: {
+                          input: { $ifNull: ["$folder.shortCode", ""] }
+                        }
+                      }
+                    },
+                    0
+                  ]
+                },
+                {
+                  $concat: [
+                    "https://horaservices.com/eventcapsule/share/",
+                    {
+                      $trim: {
+                        input: "$folder.shortCode"
+                      }
+                    }
+                  ]
+                },
+                "$orderWebLink"
+              ]
+            },
+
             orderDriveLink: 1,
             allDriveLinks: 1,
             imageUploadCounts: 1,

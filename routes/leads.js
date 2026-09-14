@@ -306,14 +306,24 @@ const fetchAgentAnalyticsFast = async (groupByField, startDate, endDate) => {
     }
 
     // 4. Fetch Orders
-    const orderQuery = { order_taken_by: { $exists: true, $nin: ["", null] } };
+    const orderQuery = {
+        order_taken_by: { $exists: true, $nin: ["", null] },
+        status: 1
+    };
     if (start || end) {
         orderQuery.createdAt = {};
         if (start) orderQuery.createdAt.$gte = start;
         if (end) orderQuery.createdAt.$lte = end;
     }
 
-    const orders = await Order.find(orderQuery, { order_taken_by: 1, createdAt: 1 }).lean();
+    const orders = await Order.find(
+        orderQuery,
+        {
+            order_taken_by: 1,
+            createdAt: 1,
+            status: 1
+        }
+    ).lean();
 
     // Helper to find matching key from Sheet Agents ONLY
     const findMatchingKey = (orderAgentNorm) => {

@@ -7,6 +7,8 @@ let cookieParser = require("cookie-parser");
 let bodyParser = require("body-parser");
 let fs = require("fs");
 const orderModel = require("./models/order");
+const User = require('./models/user');
+const { sendWhatsApp } = require('./utils/whatsappService');
 const commonFunction = require("./store/commonFunction");
 const sharp = require("sharp");
 const cron = require("node-cron");
@@ -395,7 +397,6 @@ cron.schedule('0 20 * * *', async () => {
 });
 
 cron.schedule('0 1 * * *', async () => {
-  console.log('--- Executing Cron Job (Every 1 Minute) ---');
   try {
     if (typeof syncLeadsFromSheet === 'function') {
       await syncLeadsFromSheet();
@@ -405,6 +406,191 @@ cron.schedule('0 1 * * *', async () => {
   } catch (err) {
     console.error("CRON SYNC ERROR:", err);
   }
+});
+
+const getDaysDifference = (fromDate, toDate) => {
+  if (!fromDate || !toDate) return -1;
+  const d1 = new Date(fromDate);
+  const d2 = new Date(toDate);
+  d1.setHours(0, 0, 0, 0);
+  d2.setHours(0, 0, 0, 0);
+
+  const diffTime = d2.getTime() - d1.getTime();
+  return Math.round(diffTime / (1000 * 60 * 60 * 24));
+};
+
+const processDailyRetentionSequences = async () => {
+  try {
+    const today = new Date();
+    const safetyCutoffDate = new Date("2026-06-19T00:00:00.000Z");
+    const activeOrders = await orderModel.aggregate([
+      {
+        $match: {
+          type: 8,
+          "imageUploadCounts.AllImagesUploadedAt": { $gte: safetyCutoffDate }
+        }
+      },
+      {
+        $addFields: {
+          orderIdString: { $toString: "$order_id" }
+        }
+      },
+      {
+        $lookup: {
+          from: "folders",
+          let: { localOrderIdStr: "$orderIdString", localOrderIdNum: "$order_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $or: [
+                    { $eq: ["$orderId", "$$localOrderIdStr"] },
+                    { $eq: ["$orderId", "$$localOrderIdNum"] }
+                  ]
+                }
+              }
+            }
+          ],
+          as: "folderDetails"
+        }
+      },
+      {
+        $unwind: "$folderDetails"
+      }
+    ]);
+
+    if (activeOrders.length === 0) {
+      console.log("[Daily Retention] Koi active order nahi mila.");
+      return;
+    }
+
+    for (let order of activeOrders) {
+      const hostPhone = order.phone_no;
+      const hostId = order.fromId ? order.fromId.toString() : null;
+
+      const viewedByArray = order.folderDetails.viewedBy;
+
+
+      const hostUploadDate = order.imageUploadCounts.AllImagesUploadedAt;
+
+      const link = order.folderDetails?.shortCode
+        ? `https://horaservices.com/eventcapsule/share/${order.folderDetails.shortCode}`
+        : order.orderWebLink;
+
+      if (hostPhone && hostUploadDate) {
+        const hostDiffDays = getDaysDifference(hostUploadDate, today) + 1;
+
+        let hostTemplate = null;
+
+        if (viewedByArray.length === 0) {
+          if (hostDiffDays === 2) hostTemplate = "testing_capsule_3";
+          else if (hostDiffDays === 3) hostTemplate = "testing_capsule_6";
+        }
+        else {
+          const safeArray = Array.isArray(viewedByArray) ? viewedByArray : [];
+          const sortedViews = safeArray
+            .filter(v => v.viewedAt)
+            .sort((a, b) => new Date(a.viewedAt) - new Date(b.viewedAt));
+
+          let joinedOnDay = 2;
+          if (sortedViews.length > 0) {
+            const registrationDate = new Date(sortedViews[0].viewedAt);
+            joinedOnDay = getDaysDifference(hostUploadDate, registrationDate) + 1;
+          }
+
+          if (hostDiffDays === joinedOnDay) { // login date of host no template one from frontend sede only
+            hostTemplate = null;
+          }
+          else if (joinedOnDay >= 3) {
+            if (hostDiffDays === 4) hostTemplate = "host_to_guest_sharing_03";
+            else if (hostDiffDays === 7) hostTemplate = "host_to_guest_sharing_5";
+            else if (hostDiffDays === 13) hostTemplate = "host_to_guest_sharing_01";
+            else if (hostDiffDays === 21) hostTemplate = "share_capsule_link_1";
+          }
+          else {
+            if (hostDiffDays === 3) hostTemplate = "host_to_guest_sharing_03";
+            else if (hostDiffDays === 4) hostTemplate = "host_to_guest_sharing_5";
+            else if (hostDiffDays === 7) hostTemplate = "host_to_guest_sharing_01";
+            else if (hostDiffDays === 13) hostTemplate = "share_capsule_link_1";
+          }
+        }
+
+        if (hostTemplate) {
+          const sent = await sendWhatsApp(
+            hostPhone,
+            hostTemplate,
+            link,
+            (hostTemplate === "testing_capsule_6" || hostTemplate === "share_capsule_link_1" || hostTemplate === "testing_capsule_3")
+              ? order.order_id + 10800
+              : null
+          );
+          if (sent) {
+            await User.findOneAndUpdate({ phone: hostPhone }, { $inc: { capsuleNotificationCount: 1 } });
+            console.log(`[HOST ALERT] Sent ${hostTemplate} to ${hostPhone} (Day ${hostDiffDays})`);
+          }
+        }
+      }
+
+      const guestUserIds = viewedByArray
+        .filter(item => item.userId && item.userId.toString() !== hostId)
+        .map(item => item.userId.toString());
+
+      if (guestUserIds.length > 0) {
+        const guests = await User.find({
+          _id: { $in: guestUserIds },
+          phone: { $exists: true, $ne: "" }
+        });
+
+        for (let guest of guests) {
+          const guestPhone = guest.phone;
+
+          // matching viewedAt object for specific guest
+          const safeViewedBy = Array.isArray(viewedByArray) ? viewedByArray : [];
+          const viewRecord = safeViewedBy?.find(item => item.userId && item.userId.toString() === guest._id.toString());
+          const guestViewedAtDate = viewRecord ? viewRecord.viewedAt : null;
+
+          if (guestPhone && guestPhone !== hostPhone && guestViewedAtDate) {
+            const guestDiffDays = getDaysDifference(guestViewedAtDate, today) + 1;
+            let guestTemplate = null;
+
+            if (guestDiffDays === 2) guestTemplate = "guest_to_guest_sharing_02";
+            else if (guestDiffDays === 3) guestTemplate = "host_to_guest_sharing_01";
+            else if (guestDiffDays === 4) guestTemplate = "guest_to_guest_sharing";
+            else if (guestDiffDays === 7) guestTemplate = "host_to_guest_sharing_5";
+
+            if (guestTemplate) {
+              const sent = await sendWhatsApp(
+                guestPhone,
+                guestTemplate,
+                link,
+                null
+              );
+              if (sent) {
+                await User.updateOne(
+                  { _id: guest._id },
+                  { $inc: { capsuleNotificationCount: 1 } }
+                );
+                // console.log(`[GUEST ALERT] Sent ${guestTemplate} to ${guestPhone} (Day ${guestDiffDays} since ViewedAt)`);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // console.log("[Daily Retention] All sequences processed perfectly.");
+
+  } catch (error) {
+    console.error("Error in processDailyRetentionSequences:", error);
+  }
+};
+
+cron.schedule('0 20 * * *', async () => {
+  console.log("[Daily Retention Cron - 8 PM] Triggered successfully.");
+  await processDailyRetentionSequences();
+}, {
+  scheduled: true,
+  timezone: "Asia/Kolkata"
 });
 
 

@@ -11,8 +11,7 @@ const leadSchema = new mongoose.Schema(
             trim: true,
         },
         date: {
-            type: Date,
-            default: Date.now,
+            type: String,
         },
         source: {
             type: String,

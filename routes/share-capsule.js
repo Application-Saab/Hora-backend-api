@@ -45,17 +45,19 @@ router.get("/:shortCode", async (req, res, next) => {
                 message: "Order web link not found",
             });
         }
-
         let redirectUrl = order.orderWebLink;
 
         if (fromPanel === "true") {
-            redirectUrl += redirectUrl.includes("?")
-                ? "&fromPanel=true"
-                : "?fromPanel=true";
+            const url = new URL(redirectUrl);
+            url.searchParams.set("fromPanel", "true");
+            redirectUrl = url.toString();
         }
 
-        return res.redirect(redirectUrl);
+        console.log("FROM PANEL:", fromPanel);
+        console.log("FINAL REDIRECT:", redirectUrl);
 
+        return res.redirect(redirectUrl);
+        
     } catch (err) {
         console.error("Error in redirection:", err);
         err.isPublic = true;

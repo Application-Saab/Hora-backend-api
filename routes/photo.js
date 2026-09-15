@@ -321,20 +321,24 @@ router.post("/upload", upload.array("files", 300), async (req, res, next) => {
 
 router.get("/thumbnailsWithinProject", async (req, res, next) => {
   try {
-    const { folderName, customerId, subFolderId, page, limit } = req.query;
+    const { folderName, galleryId, subFolderId, page, limit } = req.query;
 
-    if (!folderName) {
+    if (!folderName && !galleryId) {
       return res.status(400).json({
-        message: "folderName is required.",
+        message: "Either folderName or galleryId is required.",
       });
     }
 
-    const folderNames = folderName.split(",");
+    const queryFilter = {};
 
-    const folders = await FolderModel.find({
-      folderName: { $in: folderNames },
-    }).lean();
+    if (galleryId) {
+      queryFilter._id = galleryId;
+    } else if (folderName) {
+      const folderNames = folderName.split(",").map((name) => name.trim());
+      queryFilter.folderName = { $in: folderNames };
+    }
 
+    const folders = await FolderModel.find(queryFilter).lean();
     if (!folders.length) {
       return res.status(404).json({
         message: "No folders found.",

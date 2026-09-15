@@ -568,7 +568,9 @@ router.get("/event-invites-and-capsules/:userId", async (req, res, next) => {
           $addFields: {
             guests: {
               $map: {
-                input: "$guestDocs",
+                input: {
+                  $ifNull: ["$guestDocs", []],
+                },
                 as: "g",
 
                 in: {
@@ -663,6 +665,68 @@ router.get("/event-invites-and-capsules/:userId", async (req, res, next) => {
                   },
                 },
               },
+              {
+                $lookup: {
+                  from: "orders",
+
+                  let: {
+                    folderOrderId: "$orderId",
+                  },
+
+                  pipeline: [
+                    {
+                      $match: {
+                        $expr: {
+                          $eq: [
+                            "$order_id",
+                            {
+                              $convert: {
+                                input: "$$folderOrderId",
+                                to: "long",
+                                onError: null,
+                                onNull: null,
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    },
+
+                    {
+                      $project: {
+                        _id: 0,
+                        eventName: 1,
+                      },
+                    },
+                  ],
+
+                  as: "orderData",
+                },
+              },
+              {
+                $addFields: {
+                  orderEventName: {
+                    $ifNull: [
+                      {
+                        $arrayElemAt: ["$orderData.eventName", 0],
+                      },
+                      "",
+                    ],
+                  },
+                },
+              },
+
+              {
+                $project: {
+                  _id: 1,
+                  createdAt: 1,
+                  capsuleBannerImageUrl: 1,
+                  customerId: 1,
+                  viewedBy: 1,
+                  orderEventName: 1,
+                  folderName: 1,
+                },
+              },
             ],
             as: "linkedCapsule",
           },
@@ -683,7 +747,9 @@ router.get("/event-invites-and-capsules/:userId", async (req, res, next) => {
                     },
                     in: {
                       _id: "$$folder._id",
-                      hostName: "$$folder.folderName",
+                      hostName: {
+                        $ifNull: ["$$folder.orderEventName", ""],
+                      },
                       eventDate: "$$folder.createdAt",
                       externalTemplateImageUrl:
                         "$$folder.capsuleBannerImageUrl",
@@ -694,6 +760,17 @@ router.get("/event-invites-and-capsules/:userId", async (req, res, next) => {
                           },
                           "host",
                           "guest",
+                        ],
+                      },
+
+                      dataType: "capsule",
+
+                      capsuleUrl: {
+                        $concat: [
+                          "https://horaservices.com/weblink-gallery?folderName=",
+                          "$$folder.folderName",
+                          "&customerId=",
+                          "$$folder.customerId",
                         ],
                       },
                     },
@@ -757,6 +834,56 @@ router.get("/event-invites-and-capsules/:userId", async (req, res, next) => {
             ],
 
             as: "capsuleUsers",
+          },
+        },
+        {
+          $lookup: {
+            from: "orders",
+
+            let: {
+              folderOrderId: "$orderId",
+            },
+
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $eq: [
+                      "$order_id",
+                      {
+                        $convert: {
+                          input: "$$folderOrderId",
+                          to: "long",
+                          onError: null,
+                          onNull: null,
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+
+              {
+                $project: {
+                  _id: 0,
+                  eventName: 1,
+                },
+              },
+            ],
+
+            as: "orderData",
+          },
+        },
+        {
+          $addFields: {
+            orderEventName: {
+              $ifNull: [
+                {
+                  $arrayElemAt: ["$orderData.eventName", 0],
+                },
+                "",
+              ],
+            },
           },
         },
         {
@@ -848,13 +975,21 @@ router.get("/event-invites-and-capsules/:userId", async (req, res, next) => {
         {
           $project: {
             _id: 1,
-            hostName: "$folderName",
+            hostName: "$orderEventName",
             eventDate: "$createdAt",
             externalTemplateImageUrl: "$capsuleBannerImageUrl",
             eventRole: 1,
             dataType: 1,
             guests: 1,
             createdAt: 1,
+            capsuleUrl: {
+              $concat: [
+                "https://horaservices.com/weblink-gallery?folderName=",
+                "$folderName",
+                "&customerId=",
+                "$customerId",
+              ],
+            },
           },
         },
       ]),

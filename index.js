@@ -397,7 +397,6 @@ cron.schedule('0 20 * * *', async () => {
 });
 
 cron.schedule('0 1 * * *', async () => {
-  console.log('--- Executing Cron Job (Every 1 Minute) ---');
   try {
     if (typeof syncLeadsFromSheet === 'function') {
       await syncLeadsFromSheet();

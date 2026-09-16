@@ -632,6 +632,7 @@ router.post("/process-emergency-order", async (req, res, next) => {
         order.processedBy.push({
             id: supplierId,
             action: action,
+            time: new Date(),
         });
 
         await order.save();
@@ -703,12 +704,15 @@ router.post('/update_order_status', async (req, res, next) => {
       return res.json({ error: true, status: 503, message: 'Details Not Found' });
     }
 
+      const firstYesProcessed = order.processedBy?.find((item) => item?.action === "yes" && item?.time); 
+      const emergencyStartTime = firstYesProcessed?.time;
+
       // Emergency order expiry check
       const isEmergencyExpired =
           order.isEmergencyOrder === true &&
           order.status === 0 &&
-          order.createdAt &&
-          Date.now() - new Date(order.createdAt).getTime() >= 30 * 60 * 1000;
+          emergencyStartTime &&
+          Date.now() - new Date(emergencyStartTime).getTime() >= 10 * 60 * 1000;
 
       if (isEmergencyExpired) {
           order.order_status = 6;
@@ -748,11 +752,11 @@ router.post('/update_order_status', async (req, res, next) => {
         const orderType = order.type || '';
 
         const filteredSuppliers = suppliers.filter(user =>
-          user.city && user.order_type && user.city === orderLocality && user.order_type === orderType
+          user.city && user.order_type && user.city === orderLocality && user.order_type == orderType
         );
 
           const isEmergencyOrder =
-              order.isEmergencyOrder === true && order.isPaymentDone === false;
+              order.isEmergencyOrder === true && order.isPaymentDone === true;
 
           const notificationSuppliers = isEmergencyOrder
               ? filteredSuppliers.filter(supplier =>
@@ -765,6 +769,7 @@ router.post('/update_order_status', async (req, res, next) => {
               : filteredSuppliers;
 
           console.log("Filtered suppliers matching locality and type:", notificationSuppliers.length);
+          console.log("supplier ids", notificationSuppliers)
           if (notificationSuppliers.length > 0) {
               notificationSuppliers.forEach(supplier => {
           userSupplierIdsArray.push(supplier._id);

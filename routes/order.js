@@ -365,6 +365,75 @@ router.post('/add_backup', async(req, res, next) => {
     }
 })
 
+
+router.post("/process-emergency-order", async (req, res, next) => {
+    try {
+        const { orderId, supplierId, action } = req.body;
+
+        if (!orderId || !supplierId || !action) {
+            return res.status(422).json({
+                error: true,
+                status: 422,
+                message: "orderId, supplierId and action are required",
+            });
+        }
+
+        if (!["yes", "no"].includes(action)) {
+            return res.status(422).json({
+                error: true,
+                status: 422,
+                message: "Action must be either yes or no",
+            });
+        }
+
+        const order = await orderModel.findOne({ _id: orderId });
+
+        if (!order) {
+            return res.status(404).json({
+                error: true,
+                status: 404,
+                message: "Order not found",
+            });
+        }
+
+        // Check if supplier has already processed this order
+        const alreadyProcessed = order.processedBy?.some(
+            (item) => item.id?.toString() === supplierId.toString()
+        );
+
+        if (alreadyProcessed) {
+            return res.status(400).json({
+                error: true,
+                status: 400,
+                message: "You have already processed this emergency order",
+            });
+        }
+
+        order.processedBy = order.processedBy || [];
+
+        order.processedBy.push({
+            id: supplierId,
+            action: action,
+            time: new Date(),
+        });
+
+        await order.save();
+
+        return res.status(200).json({
+            error: false,
+            status: 200,
+            message:
+                action === "yes"
+                    ? "Emergency order accepted successfully"
+                    : "Emergency order rejected successfully",
+            data: order,
+        });
+    } catch (error) {
+        error.isPublic = true;
+        next(error);
+    }
+});
+
 router.post('/add', async(req, res, next) => {
     const lastOrder = await orderModel.findOne().sort({ order_id: -1 }).select('order_id');
     const nextOrderId = lastOrder ? lastOrder.order_id + 1 : 1;

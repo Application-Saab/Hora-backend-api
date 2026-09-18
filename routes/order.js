@@ -512,7 +512,7 @@ router.post('/add', async(req, res, next) => {
                            user.order_type &&
                            user.city == orderLocality &&
                            user.order_type == orderType &&
-                           user.performanceBadge == "Elite"
+                           user.performanceBadge == "Elite" || user.performanceBadge == "Good"
                        );
                    });
 

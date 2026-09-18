@@ -55,6 +55,10 @@ const orderSchema = new mongoose.Schema({
     lastNotifiedAt: { type: Date, default: null },
     orderDriveLink: {type: String, default:""},
     themes: { type: Array, default: [] },
+  supplierUpload: {
+    type: String,
+    default: ""
+  },
   customInclusion: {
     type: [String],
     default: []

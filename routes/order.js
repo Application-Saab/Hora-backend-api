@@ -11,7 +11,12 @@ const notificationFunction = require("../store/notifications");
 const cityServedLocalityModel = require('../models/city-served-locality');
 const cityServedModel = require('../models/city-served');
 const decorationModel = require('../models/decoration');
-const photographyModel = require('../models/photography')
+const photographyModel = require('../models/photography');
+const FolderModel = require("../models/folder");
+const EventinvitesModel = require("../models/event-invite");
+const capsuleGenerateShortCode = require("../utils/capsuleGenerateShortCode");
+
+
 // Load the full build.
 var _ = require('lodash');
 const AddressModel = require('../models/address');
@@ -434,9 +439,66 @@ router.post("/process-emergency-order", async (req, res, next) => {
     }
 });
 
+const createEventCapsuleFolder = async (order) => {
+    try {
+        if (Number(order.type) !== 8) {
+            return;
+        }
+
+        const customerId = order.fromId;
+        const orderId = order.order_id;
+        const phoneNo = order.phone_no;
+
+        const eventInvite = await EventinvitesModel.findOne({
+            orderId: Number(orderId)
+        });
+
+        const eventId = eventInvite ? eventInvite._id : null;
+
+        const folderName = `${orderId}_${customerId}_${phoneNo}`;
+
+        const existingFolder = await FolderModel.findOne({
+            folderName,
+            customerId
+        });
+
+        if (existingFolder) {
+            console.log(
+                `Event Capsule folder already exists for order ${orderId}: ${existingFolder._id}`
+            );
+            return;
+        }
+
+        const shortCode = await capsuleGenerateShortCode();
+
+        const folder = new FolderModel({
+            folderName,
+            customerId,
+            orderId,
+            eventId,
+            status: "processing",
+            shortCode
+        });
+
+        await folder.save();
+
+        console.log(
+            `Event Capsule folder created for order ${orderId}: ${folder._id}`
+        );
+
+    } catch (error) {
+        console.error(
+            `Failed to create Event Capsule folder for order ${order?.order_id}:`,
+            error
+        );
+    }
+};
+
 router.post('/add', async(req, res, next) => {
     const lastOrder = await orderModel.findOne().sort({ order_id: -1 }).select('order_id');
     const nextOrderId = lastOrder ? lastOrder.order_id + 1 : 1;
+    const supplierUpload =
+        `https://horaservices.com/supplier/login?orderId=${nextOrderId}`;
     const otp = commonFunction.OTP();
     const data = new orderModel({
         order_date: req.body.order_date,
@@ -473,6 +535,7 @@ router.post('/add', async(req, res, next) => {
         inclusionVariables :req.body.inclusionVariables,
         customInclusion: req.body.customInclusion,
         notificationStep: 1,
+        supplierUpload: supplierUpload,
         lastNotifiedAt: new Date(),
     })
     if(req.body.items.length>0){
@@ -597,6 +660,7 @@ router.post('/add', async(req, res, next) => {
                 data.helper=commonFunction.getCalcalutionOfChefAndHelper(noOfChefHelper).helper;
                 //data.supplierUserIds=userSupplierIdsArray;
                 const dataToSave = await data.save();
+                createEventCapsuleFolder(dataToSave);
                 const io = getIO();
                 if (orderStatus == 1 && filteredSuppliers.length) {
                 filteredSuppliers.forEach((supplier) => {

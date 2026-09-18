@@ -1091,6 +1091,69 @@ router.get("/getSubFolders", async (req, res) => {
 });
 
 
+router.get("/gallery-details/:orderId", async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    if (!orderId) {
+      return res.status(400).json({
+        success: false,
+        message: "orderId is required",
+      });
+    }
+
+    const order = await Order.findOne({
+      order_id: Number(orderId),
+    }).lean();
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    const customerId = order.fromId;
+    const phoneNo = order.phone_no;
+
+    const folderName = `${orderId}_${customerId}_${phoneNo}`;
+
+    const folder = await Folder.findOne({
+      folderName,
+      customerId,
+    }).lean();
+
+    if (!folder) {
+      return res.status(404).json({
+        success: false,
+        message: "Event Capsule folder not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        folderId: folder._id,
+        folderName: folder.folderName,
+        customerId: folder.customerId,
+        orderId: folder.orderId,
+        eventId: folder.eventId,
+        shortCode: folder.shortCode,
+        status: folder.status,
+      },
+    });
+  } catch (error) {
+    console.error("Get Event Capsule folder details error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to get folder details",
+      error: error.message,
+    });
+  }
+});
+
+
 const fontPath = path.resolve(__dirname, "./fonts/CinzelDecorative-Bold.ttf");
 if (fs.existsSync(fontPath)) {
   GlobalFonts.registerFromPath(fontPath, "CinzelDecorativeBold");

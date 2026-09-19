@@ -21,22 +21,6 @@ const sanitizePhone = (phone) => {
     return cleaned.length >= 10 ? cleaned.slice(-10) : cleaned;
 };
 
-function parseSheetDate(dateStr) {
-    if (!dateStr) return new Date();
-
-    const parsed = new Date(dateStr);
-    if (!isNaN(parsed.getTime())) return parsed;
-
-    const parts = dateStr.split(/[\/\-]/);
-    if (parts.length === 3) {
-        const [day, month, year] = parts.map((p) => p.trim());
-        const formattedDate = new Date(`${year}-${month}-${day}`);
-        if (!isNaN(formattedDate.getTime())) return formattedDate;
-    }
-
-    return new Date();
-}
-
 async function syncLeadsFromSheet() {
     try {
         console.log("hello ----- [Incremental Sheet Sync Triggered]");
@@ -80,7 +64,7 @@ async function syncLeadsFromSheet() {
                 phoneNumber: sanitizePhone(rawPhone),
                 agentName: String(rawAgent).trim(),
                 source: String(rawSource).trim(),
-                date: parseSheetDate(rawDate),
+                date: String(rawDate).trim(),
                 lastSyncedRow: 0
             });
         }
@@ -109,6 +93,7 @@ async function syncLeadsFromSheet() {
         console.error("[Cron Error] Failed to sync leads:", error.message);
     }
 }
+// syncLeadsFromSheet();
 
 const fetchAnalyticsFast = async (groupByField, startDate, endDate) => {
     const leadQuery = {
@@ -252,229 +237,141 @@ const fetchAnalyticsFast = async (groupByField, startDate, endDate) => {
 
 const fetchAgentAnalyticsFast = async (groupByField, startDate, endDate) => {
 
-    const startOfDay = (date) => {
-        if (!date) return null;
-
-        const value = String(date).trim();
-
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-            return null;
-        }
-
-        const parsedDate = new Date(
-            `${value}T00:00:00.000Z`
-        );
-
-        if (isNaN(parsedDate.getTime())) {
-            return null;
-        }
-
-        return parsedDate;
+    const parseStartDate = (dateStr) => {
+        if (!dateStr) return null;
+        const value = String(dateStr).trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+        const date = new Date(`${value}T00:00:00.000Z`);
+        return isNaN(date.getTime()) ? null : date;
     };
 
-
-    const endOfDay = (date) => {
-        if (!date) return null;
-
-        const value = String(date).trim();
-
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-            return null;
-        }
-
-        const parsedDate = new Date(
-            `${value}T23:59:59.999Z`
-        );
-
-        if (isNaN(parsedDate.getTime())) {
-            return null;
-        }
-
-        return parsedDate;
+    const parseEndDate = (dateStr) => {
+        if (!dateStr) return null;
+        const value = String(dateStr).trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+        const date = new Date(`${value}T23:59:59.999Z`);
+        return isNaN(date.getTime()) ? null : date;
     };
 
-    const start = startOfDay(startDate);
-    const end = endOfDay(endDate);
+    const start = parseStartDate(startDate);
+    const end = parseEndDate(endDate);
 
-    if (startDate && !start) {
-        throw new Error(
-            `Invalid startDate: ${ startDate } `
-        );
-    }
+    if (startDate && !start) throw new Error(`Invalid startDate: ${startDate}`);
+    if (endDate && !end) throw new Error(`Invalid endDate: ${endDate}`);
 
-    if (endDate && !end) {
-        throw new Error(
-            `Invalid endDate: ${ endDate } `
-        );
-    }
+    const parseDDMMYYYY = (dateStr) => {
+        if (!dateStr || typeof dateStr !== "string") return null;
+        const parts = dateStr.trim().split("/");
+        if (parts.length !== 3) return null;
+        const [day, month, year] = parts.map(Number);
+        if (!day || !month || !year) return null;
+        return new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+    };
 
+    const normalize = (str) => String(str || "").trim().toLowerCase().replace(/\s+/g, " ");
+
+    // 2. Fetch Leads (Primary Source for Agents)
     const leadQuery = {
-        phoneNumber: {
-            $exists: true,
-            $nin: [
-                "",
-                "SYNC_TRACKER_ROW"
-            ]
-        },
-
-        agentName: {
-            $exists: true,
-            $ne: "SYSTEM_TRACKER"
-        },
-
-        source: {
-            $exists: true,
-            $ne: "SYSTEM_TRACKER"
-        }
+        phoneNumber: { $exists: true, $nin: ["", "SYNC_TRACKER_ROW"] },
+        agentName: { $exists: true, $ne: "SYSTEM_TRACKER" },
+        source: { $exists: true, $ne: "SYSTEM_TRACKER" }
     };
 
+    let leads = await Lead.find(leadQuery, { agentName: 1, [groupByField]: 1, date: 1 }).lean();
+
+    // In-memory Date range filter for Leads ("DD/MM/YYYY")
     if (start || end) {
+        leads = leads.filter((lead) => {
+            if (!lead.date) return false;
+            const leadDate = parseDDMMYYYY(lead.date);
+            if (!leadDate) return false;
 
-        leadQuery.date = {};
-
-        if (start) {
-            leadQuery.date.$gte = start;
-        }
-
-        if (end) {
-            leadQuery.date.$lte = end;
-        }
+            if (start && leadDate < start) return false;
+            if (end && leadDate > end) return false;
+            return true;
+        });
     }
 
-    const leads = await Lead.find(
-        leadQuery,
-        {
-            agentName: 1,
-            [groupByField]: 1,
-            date: 1
-        }
-    ).lean();
+    // 3. Prepare Stats Bucket solely based on Leads Sheet
+    const statsMap = {};
 
+    for (const lead of leads) {
+        const rawName = String(lead[groupByField] || "").trim() || "Unknown";
+        const key = normalize(rawName);
+
+        if (!statsMap[key]) {
+            statsMap[key] = { displayName: rawName, totalLeadsAssigned: 0, orderConfirmed: 0 };
+        }
+        statsMap[key].totalLeadsAssigned++;
+    }
+
+    // 4. Fetch Orders
     const orderQuery = {
-        order_taken_by: {
-            $exists: true,
-            $nin: [
-                "",
-                null
-            ]
-        }
+        order_taken_by: { $exists: true, $nin: ["", null] },
+        status: 1
     };
-
     if (start || end) {
-
         orderQuery.createdAt = {};
-
-        if (start) {
-            orderQuery.createdAt.$gte = start;
-        }
-
-        if (end) {
-            orderQuery.createdAt.$lte = end;
-        }
+        if (start) orderQuery.createdAt.$gte = start;
+        if (end) orderQuery.createdAt.$lte = end;
     }
 
     const orders = await Order.find(
         orderQuery,
         {
             order_taken_by: 1,
-            createdAt: 1
+            createdAt: 1,
+            status: 1
         }
     ).lean();
 
-    const statsMap = {};
-    for (const lead of leads) {
-        const name =
-            String(
-                lead[groupByField] || ""
-            ).trim() || "Unknown";
+    // Helper to find matching key from Sheet Agents ONLY
+    const findMatchingKey = (orderAgentNorm) => {
+        // Direct match
+        if (statsMap[orderAgentNorm]) return orderAgentNorm;
 
+        // Partial / Prefix / Contains match with existing sheet agents
+        for (const key of Object.keys(statsMap)) {
+            if (key === "unknown") continue;
 
-        if (!statsMap[name]) {
-
-            statsMap[name] = {
-                totalLeadsAssigned: 0,
-                orderConfirmed: 0
-            };
+            // Substring check (e.g. "parveen" vs "parveen jahan")
+            if (key.includes(orderAgentNorm) || orderAgentNorm.includes(key)) {
+                return key;
+            }
         }
-
-
-        statsMap[name].totalLeadsAssigned++;
-    }
-    for (const order of orders) {
-        const orderAgent =
-            String(
-                order.order_taken_by || ""
-            ).trim();
-
-
-        if (!orderAgent) {
-            continue;
-        }
-        let key;
-
-        if (
-            orderAgent.toLowerCase() ===
-            "booked online"
-        ) {
-
-            key = "Unknown";
-
-        } else {
-
-            key = Object.keys(statsMap).find(
-                name =>
-                    name.toLowerCase() ===
-                    orderAgent.toLowerCase()
-            );
-        }
-
-        if (key) {
-
-            statsMap[key].orderConfirmed++;
-        }
-    }
-
-    const list = Object.entries(
-        statsMap
-    ).map(
-        ([name, data]) => {
-
-            const conversionRatio =
-                data.totalLeadsAssigned > 0
-                    ? (
-                        (
-                            data.orderConfirmed /
-                            data.totalLeadsAssigned
-                        ) * 100
-                    ).toFixed(2)
-                    : "0.00";
-
-
-            return {
-                name,
-
-                totalLeadsAssigned:
-                    data.totalLeadsAssigned,
-
-                orderConfirmed:
-                    data.orderConfirmed,
-
-                conversionRatio:
-                    `${ conversionRatio }% `
-            };
-        }
-    );
-
-    list.sort(
-        (a, b) =>
-            b.totalLeadsAssigned -
-            a.totalLeadsAssigned
-    );
-
-    return {
-        totalLeads: leads.length,
-        list
+        return null; // Match nahi mila
     };
+
+    // 5. Count Orders ONLY for agents present in statsMap (Leads Sheet)
+    for (const order of orders) {
+        const rawAgent = String(order.order_taken_by || "").trim();
+        if (!rawAgent) continue;
+
+        const orderAgentNorm = normalize(rawAgent);
+        const matchingKey = findMatchingKey(orderAgentNorm);
+
+        // AGAR LEADS SHEET ME BUCKET MILI TABHI MATCH KARO, WARNA IGNORE KARO
+        if (matchingKey && statsMap[matchingKey]) {
+            statsMap[matchingKey].orderConfirmed++;
+        }
+    }
+
+    // 6. Format Response
+    const list = Object.values(statsMap).map((data) => {
+        const conversionRatio = data.totalLeadsAssigned > 0
+            ? ((data.orderConfirmed / data.totalLeadsAssigned) * 100).toFixed(2)
+            : "0.00";
+        return {
+            name: data.displayName,
+            totalLeadsAssigned: data.totalLeadsAssigned,
+            orderConfirmed: data.orderConfirmed,
+            conversionRatio: `${conversionRatio}%`
+        };
+    });
+
+    list.sort((a, b) => b.totalLeadsAssigned - a.totalLeadsAssigned);
+
+    return { totalLeads: leads.length, list };
 };
 
 router.get("/agent-analytics",async (req, res) => {

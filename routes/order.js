@@ -462,7 +462,7 @@ router.post('/add', async(req, res, next) => {
         order_pincode: req.body.order_pincode,
         decoration_comments:req.body.decoration_comments,
 	    status:req.body.status,
-        order_status: req.body.order_status,
+        order_status: req.body.order_status ?? 0,
 	    add_on:req.body.add_on,
 	    advance_amount:req.body.advance_amount,
 	    balance_amount:req.body.balance_amount,

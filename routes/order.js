@@ -798,8 +798,10 @@ router.post('/update_order_status', async (req, res, next) => {
           });
       }
       else{
+          if (order.isEmergencyOrder === true && status == 1 && order.order_status == 7) {
           order.order_status = 0;
           await order.save();
+          }
       }
 
     // Update the status

@@ -841,4 +841,35 @@ router.get("/getUserDetails/:id", async (req, res, next) => {
   }
 });
 
+router.post("/getMultipleUserDetails", async (req, res, next) => {
+  try {
+    const { ids } = req.body;
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.json({
+        error: true,
+        status: 422,
+        message: "Supplier IDs are required.",
+        data: [],
+      });
+    }
+
+    const objectIds = ids.map((id) => new ObjectId(id));
+
+    const data = await UserModel.find({
+      _id: { $in: objectIds },
+      role: "supplier",
+    }).select("name firstName lastName city job_type phone");
+
+    return res.json({
+      error: false,
+      status: 200,
+      message: "Details Fetch Successfully",
+      data: data,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;

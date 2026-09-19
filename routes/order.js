@@ -462,6 +462,7 @@ router.post('/add', async(req, res, next) => {
         order_pincode: req.body.order_pincode,
         decoration_comments:req.body.decoration_comments,
 	    status:req.body.status,
+        order_status: req.body.order_status,
 	    add_on:req.body.add_on,
 	    advance_amount:req.body.advance_amount,
 	    balance_amount:req.body.balance_amount,
@@ -473,6 +474,8 @@ router.post('/add', async(req, res, next) => {
         inclusionVariables :req.body.inclusionVariables,
         customInclusion: req.body.customInclusion,
         notificationStep: 1,
+        isPaymentDone: req.body.isPaymentDone,
+        isEmergencyOrder: req.body.isEmergencyOrder,
         lastNotifiedAt: new Date(),
     })
     if(req.body.items.length>0){
@@ -529,6 +532,7 @@ router.post('/add', async(req, res, next) => {
                const orderLocality = req.body.order_locality || '';
                const orderType = req.body.type || '';
                const orderStatus = req.body.status;
+               const isPaymentDone = req.body.isPaymentDone;
 
                console.log("Order locality:", orderLocality, "Order type:", orderType, "Order status:", orderStatus);
 
@@ -560,13 +564,49 @@ router.post('/add', async(req, res, next) => {
                                'New Order',
                                `New Order!!! Order ID: #${nextOrderId + 10800} 🥳🤩`,
                                '',
-                               0
+                               0, 
+                               "",
+                               "notification"
                            );
                        });
                    } else {
                        console.log("No suppliers matched the locality and type for notification.");
                    }
-               } else {
+               } 
+               else if (orderStatus == 0 && isPaymentDone === false) {
+                   filteredSuppliers = userIds.filter(user => {
+                       // user.city and user.order_type must exist
+                       return (
+                           user.city &&
+                           user.order_type &&
+                           user.city == orderLocality &&
+                           user.order_type == orderType &&
+                           user.performanceBadge == "Elite" || user.performanceBadge == "Good"
+                       );
+                   });
+
+                   console.log("Filtered suppliers matching locality and type:", filteredSuppliers.length);
+
+                   if (filteredSuppliers.length > 0) {
+                       filteredSuppliers.forEach(element => {
+                           userSupplierIdsArray.push(element._id);
+                           console.log(`Sending notification to supplier: ${element._id}, device_token: ${element.device_token}`);
+                           notificationFunction.sendNotifications(
+                               element.device_token,
+                               req.body.fromId,
+                               'New Order',
+                               `New Order!!! Order ID: #${nextOrderId + 10800} 🥳🤩`,
+                               '',
+                               0,
+                               "",
+                               "emergency_notification"
+                           );
+                       });
+                   } else {
+                       console.log("No suppliers matched the locality and type for notification.");
+                   }
+               }
+               else {
                    console.log("Order status is not 1, no notifications sent to suppliers.");
                }
 
@@ -598,7 +638,7 @@ router.post('/add', async(req, res, next) => {
                 //data.supplierUserIds=userSupplierIdsArray;
                 const dataToSave = await data.save();
                 const io = getIO();
-                if (orderStatus == 1 && filteredSuppliers.length) {
+                if ((orderStatus == 1 && filteredSuppliers.length) || (orderStatus == 0 && isPaymentDone === false && filteredSuppliers.length)) {
                 filteredSuppliers.forEach((supplier) => {
                  io.to(supplier._id.toString()).emit("order:new", dataToSave);
                 });
@@ -612,6 +652,74 @@ router.post('/add', async(req, res, next) => {
         next(error);
     }
 })
+
+router.post("/process-emergency-order", async (req, res, next) => {
+    try {
+        const { orderId, supplierId, action } = req.body;
+
+        if (!orderId || !supplierId || !action) {
+            return res.status(422).json({
+                error: true,
+                status: 422,
+                message: "orderId, supplierId and action are required",
+            });
+        }
+
+        if (!["yes", "no"].includes(action)) {
+            return res.status(422).json({
+                error: true,
+                status: 422,
+                message: "Action must be either yes or no",
+            });
+        }
+
+        const order = await orderModel.findOne({ _id: orderId });
+
+        if (!order) {
+            return res.status(404).json({
+                error: true,
+                status: 404,
+                message: "Order not found",
+            });
+        }
+
+        // Check if supplier has already processed this order
+        const alreadyProcessed = order.processedBy?.some(
+            (item) => item.id?.toString() === supplierId.toString()
+        );
+
+        if (alreadyProcessed) {
+            return res.status(400).json({
+                error: true,
+                status: 400,
+                message: "You have already processed this emergency order",
+            });
+        }
+
+        order.processedBy = order.processedBy || [];
+
+        order.processedBy.push({
+            id: supplierId,
+            action: action,
+            time: new Date(),
+        });
+
+        await order.save();
+
+        return res.status(200).json({
+            error: false,
+            status: 200,
+            message:
+                action === "yes"
+                    ? "Emergency order accepted successfully"
+                    : "Emergency order rejected successfully",
+            data: order,
+        });
+    } catch (error) {
+        error.isPublic = true;
+        next(error);
+    }
+});
 
 router.post('/edit', async (req, res, next) => {
   try {
@@ -647,7 +755,7 @@ router.get('/details/:id', async(req, res, next) => {
 })
 
 router.post('/update_order_status', async (req, res, next) => {
-  const { _id, status } = req.body;
+    const { _id, status, isPaymentDone } = req.body;
 
   if (!_id) {
     return res.json({
@@ -665,8 +773,38 @@ router.post('/update_order_status', async (req, res, next) => {
       return res.json({ error: true, status: 503, message: 'Details Not Found' });
     }
 
+      const firstYesProcessed = order.processedBy?.find((item) => item?.action === "yes" && item?.time); 
+      const emergencyStartTime = firstYesProcessed?.time;
+
+      // Emergency order expiry check
+      const isEmergencyExpired =
+          order.isEmergencyOrder === true &&
+          order.status === 0 &&
+          emergencyStartTime &&
+          Date.now() - new Date(emergencyStartTime).getTime() >= 10 * 60 * 1000;
+
+      if (isEmergencyExpired) {
+          order.order_status = 6;
+          await order.save();
+
+          return res.json({
+              error: true,
+              status: 410,
+              message: 'This emergency order has expired.',
+              data: {
+                  orderId: order._id,
+                  order_status: 6
+              }
+          });
+      }
+      else{
+          order.order_status = 0;
+          await order.save();
+      }
+
     // Update the status
     order.status = status;
+    order.isPaymentDone = isPaymentDone;
     await order.save();
 
     // If status is 1, send notifications to suppliers
@@ -683,12 +821,26 @@ router.post('/update_order_status', async (req, res, next) => {
         const orderType = order.type || '';
 
         const filteredSuppliers = suppliers.filter(user =>
-          user.city && user.order_type && user.city === orderLocality && user.order_type === orderType
+          user.city && user.order_type && user.city === orderLocality && user.order_type == orderType
         );
 
-        console.log("Filtered suppliers matching locality and type:", filteredSuppliers.length);
-        if (filteredSuppliers.length > 0) {
-        filteredSuppliers.forEach(supplier => {
+          const isEmergencyOrder =
+              order.isEmergencyOrder === true && order.isPaymentDone === true;
+
+          const notificationSuppliers = isEmergencyOrder
+              ? filteredSuppliers.filter(supplier =>
+                  order.processedBy?.some(
+                      item =>
+                          item?.id?.toString() === supplier._id?.toString() &&
+                          item?.action === "yes"
+                  )
+              )
+              : filteredSuppliers;
+
+          console.log("Filtered suppliers matching locality and type:", notificationSuppliers.length);
+          console.log("supplier ids", notificationSuppliers)
+          if (notificationSuppliers.length > 0) {
+              notificationSuppliers.forEach(supplier => {
           userSupplierIdsArray.push(supplier._id);
           console.log(`Sending notification to supplier: ${supplier._id}, device_token: ${supplier.device_token}`);
           notificationFunction.sendNotifications(
@@ -708,6 +860,9 @@ router.post('/update_order_status', async (req, res, next) => {
         
       }
     return res.json({ error: false, status: 200, message: 'Status Updated Successfully' });
+    }
+    else {
+        return res.json({ error: false, status: 200, message: 'Status Updated Successfully' });
     }
 
   } catch (error) {

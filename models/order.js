@@ -54,8 +54,10 @@ const orderSchema = new mongoose.Schema({
     notificationStep: { type: Number, default: 0 },
     lastNotifiedAt: { type: Date, default: null },
     orderDriveLink: {type: String, default:""},
-    themes: { type: Array, default: [] },
     processedBy: { type: Array, default: [] },
+    themes: { type: Array, default: [] },
+    isPaymentDone: { type: Boolean, default: true },
+    isEmergencyOrder: { type: Boolean, default: false },
   customInclusion: {
     type: [String],
     default: []

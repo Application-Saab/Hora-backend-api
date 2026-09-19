@@ -77,6 +77,10 @@ const FolderSchema = new mongoose.Schema(
       sparse: true,
       index: true,
     },
+    supplierDone: {
+      type: Boolean,
+      default: false
+    },
     status: {
       type: String,
       enum: ["processing", "done", "failed"],

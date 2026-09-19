@@ -1094,6 +1094,7 @@ router.get("/getSubFolders", async (req, res) => {
 router.get("/gallery-details/:orderId", async (req, res) => {
   try {
     const { orderId } = req.params;
+    const { toId } = req.query;
 
     if (!orderId) {
       return res.status(400).json({
@@ -1102,14 +1103,22 @@ router.get("/gallery-details/:orderId", async (req, res) => {
       });
     }
 
+    if (!toId) {
+      return res.status(400).json({
+        success: false,
+        message: "toId is required",
+      });
+    }
+
     const order = await Order.findOne({
       order_id: Number(orderId),
+      toId: toId,
     }).lean();
 
     if (!order) {
       return res.status(404).json({
         success: false,
-        message: "Order not found",
+        message: "Order not found or toId does not match",
       });
     }
 
@@ -1140,8 +1149,10 @@ router.get("/gallery-details/:orderId", async (req, res) => {
         eventId: folder.eventId,
         shortCode: folder.shortCode,
         status: folder.status,
+        supplierDone: folder.supplierDone,
       },
     });
+
   } catch (error) {
     console.error("Get Event Capsule folder details error:", error);
 
@@ -1149,6 +1160,45 @@ router.get("/gallery-details/:orderId", async (req, res) => {
       success: false,
       message: "Failed to get folder details",
       error: error.message,
+    });
+  }
+});
+
+router.post("/supplier-done/:orderId", async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    const folder = await Folder.findOneAndUpdate(
+      { orderId: orderId },
+      {
+        $set: {
+          supplierDone: true
+        }
+      },
+      {
+        new: true
+      }
+    );
+
+    if (!folder) {
+      return res.status(404).json({
+        error: true,
+        message: "Folder not found"
+      });
+    }
+
+    return res.status(200).json({
+      error: false,
+      message: "Supplier status marked as done",
+      data: folder
+    });
+
+  } catch (error) {
+    console.error("supplier-done error:", error);
+
+    return res.status(500).json({
+      error: true,
+      message: "Something went wrong"
     });
   }
 });

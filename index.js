@@ -619,6 +619,7 @@ const CityServedRoutes = require("./routes/city-served");
 const CityServedLocalityRoutes = require("./routes/city-served-locality");
 const ShopsRoutes = require("./routes/shops");
 const AddressRoutes = require("./routes/address");
+const AddressRoutesAdmin = require("./routes/address-admin-api");
 const OrderRoutes = require("./routes/order");
 const PaymentGatewayRoutes = require("./routes/payment-gateway");
 const DecorationRoutes = require("./routes/decoration");
@@ -645,6 +646,13 @@ const ErrorLogRoutes = require("./routes/error-log")
 const pinCodes = require("./routes/serviceabilityPincodes")
 let passportAuth = require("./store/passportAuth").passportAuth;
 
+app.get("/api/check-token-health", passportAuth, async (req, res) => {
+    return res.status(200).json({
+        error: false,
+        status: 200,
+        authenticated: true,
+    });
+});
 app.use("/api/admin", AdminRoutes);
 app.use("/api/user", UserRoutes);
 app.use("/api/customer/event", EventInviteRoutes);
@@ -661,6 +669,7 @@ app.use("/api/city_served_locality", CityServedLocalityRoutes);
 app.use("/api/shops", ShopsRoutes);
 app.use("/api/order", OrderRoutes);
 app.use("/api/users/address", passportAuth, AddressRoutes);
+app.use("/api/admin/address", AddressRoutesAdmin);
 app.use("/api/payment_gateway", PaymentGatewayRoutes);
 app.use("/api/decoration", DecorationRoutes);
 app.use("/api/photography", PhotographyRoutes);

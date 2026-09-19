@@ -22,7 +22,7 @@ const axios = require("axios");
 const EventGuest = require("../models/event-guest");
 const EventMessage = require("../models/eventMessage");
 const ChatRoom = require("../models/eventChatRoom");
-const OrderModel = require("../models/order")
+const OrderModel = require("../models/order");
 
 router.post("/otp_generate_backup", async (req, res, next) => {
   const { phone } = req.body;
@@ -120,7 +120,7 @@ router.post("/otp_generate", async (req, res, next) => {
       if (fromWonderlandInternational !== true) {
         const smsUrl = `https://www.fast2sms.com/dev/bulkV2?authorization=${process.env.FAST2SMS_API_KEY}&route=dlt&sender_id=HORASR&message=207805&variables_values=${otp}|${otp}&numbers=${phone}`;
         try {
-          console.log('Sending OTP');
+          console.log("Sending OTP");
           await axios.get(smsUrl); // Send OTP SMS
         } catch (smsError) {
           console.error("Error sending OTP SMS:", smsError);
@@ -265,6 +265,7 @@ router.post("/otp_verify", async (req, res, next) => {
         status: 200,
         data: user,
         token: passportAuth.signToken(user),
+        refreshToken: passportAuth.signRefreshToken(user),
         message: "Login successful",
       });
     }
@@ -313,6 +314,7 @@ router.post("/otp_verify", async (req, res, next) => {
         status: 200,
         data: user,
         token: passportAuth.signToken(user),
+        refreshToken: passportAuth.signRefreshToken(user),
       });
     }
     // NORMAL OTP VALIDATION
@@ -359,6 +361,72 @@ router.post("/otp_verify", async (req, res, next) => {
       status: 200,
       data: user,
       token: passportAuth.signToken(user),
+      refreshToken: passportAuth.signRefreshToken(user),
+    });
+  } catch (error) {
+    error.isPublic = true;
+    next(error);
+  }
+});
+
+router.post("/refresh-token", async (req, res, next) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(401).json({
+        error: true,
+        status: 401,
+        message: "Refresh token is required.",
+      });
+    }
+
+    let decoded;
+
+    try {
+      decoded = passportAuth.verifyRefreshToken(refreshToken);
+    } catch (error) {
+      return res.status(401).json({
+        error: true,
+        status: 401,
+        message: "Refresh token expired or invalid.",
+      });
+    }
+
+    const user = await UserModel.findById(decoded._id);
+
+    if (!user) {
+      return res.status(401).json({
+        error: true,
+        status: 401,
+        message: "User not found.",
+      });
+    }
+
+    // Optional but recommended
+    if (user.status === 0 && user.role !== "supplier") {
+      return res.status(401).json({
+        error: true,
+        status: 401,
+        message: "Account blocked.",
+      });
+    }
+
+    if (user.status === 2) {
+      return res.status(401).json({
+        error: true,
+        status: 401,
+        message: "Account deleted.",
+      });
+    }
+
+    const newAccessToken = passportAuth.signToken(user);
+
+    return res.status(200).json({
+      error: false,
+      status: 200,
+      token: newAccessToken,
+      message: "Access token refreshed successfully.",
     });
   } catch (error) {
     error.isPublic = true;
@@ -446,32 +514,20 @@ const sendResponse = (res, status, error, message, data = null) =>
 //  Get user details by phone
 router.get("/user-details-by-phone/:phone", async (req, res, next) => {
   try {
-
     const { phone } = req.params;
 
     // query param
     const { isWonderlandInternational } = req.query;
-    const isInternational =
-      isWonderlandInternational === "true";
+    const isInternational = isWonderlandInternational === "true";
 
     // NORMAL FLOW VALIDATION
     if (!isInternational && phone.length < 10) {
-      return sendResponse(
-        res,
-        400,
-        true,
-        "Invalid phone number"
-      );
+      return sendResponse(res, 400, true, "Invalid phone number");
     }
-    
+
     // INTERNATIONAL FLOW VALIDATION
     if (isInternational && phone.length < 4) {
-      return sendResponse(
-        res,
-        400,
-        true,
-        "Invalid phone number"
-      );
+      return sendResponse(res, 400, true, "Invalid phone number");
     }
 
     const user = await UserModel.findOne({ phone })
@@ -479,25 +535,11 @@ router.get("/user-details-by-phone/:phone", async (req, res, next) => {
       .lean();
 
     if (!user) {
-      return sendResponse(
-        res,
-        200,
-        false,
-        "User not found",
-        null
-      );
+      return sendResponse(res, 200, false, "User not found", null);
     }
 
-    return sendResponse(
-      res,
-      200,
-      false,
-      "User fetched successfully",
-      user
-    );
-
+    return sendResponse(res, 200, false, "User fetched successfully", user);
   } catch (err) {
-
     console.error("Fetch user error:", err.message);
     err.isPublic = true;
     next(err);
@@ -854,7 +896,7 @@ router.post("/supplier_personal_details_update/:id", async (req, res, next) => {
     job_profile: req.body.job_profile,
   };
   if (req.body.supplierOrderLimit !== undefined) {
-  updatedData.supplierOrderLimit = req.body.supplierOrderLimit;
+    updatedData.supplierOrderLimit = req.body.supplierOrderLimit;
   }
 
   const options = { new: true };
@@ -874,31 +916,38 @@ router.post("/supplier_personal_details_update/:id", async (req, res, next) => {
   }
 });
 
-router.post("/supplier_professional_details_update/:id", async (req, res, next) => {
-  let { id } = req.params;
-  const updatedData = {};
-  updatedData.userAppliance = req.body.userAppliance;
-  updatedData.userRestaurant = req.body.userRestaurant;
-  updatedData.userServedLocalities = req.body.userServedLocalities;
-  updatedData.job_type = req.body.job_type;
-  updatedData.experience = req.body.experience;
-  updatedData.resume = req.body.resume;
-  updatedData.userCuisioness = req.body.userCuisioness;
-  updatedData.description = req.body.description;
-  const options = { new: true };
-  try {
-    const result = await UserModel.findByIdAndUpdate(id, updatedData, options);
-    return res.json({
-      error: false,
-      status: 200,
-      message: "Professional Details Updated Successfully",
-      data: result,
-    });
-  } catch (error) {
-    error.isPublic = true;
-    next(error);
-  }
-});
+router.post(
+  "/supplier_professional_details_update/:id",
+  async (req, res, next) => {
+    let { id } = req.params;
+    const updatedData = {};
+    updatedData.userAppliance = req.body.userAppliance;
+    updatedData.userRestaurant = req.body.userRestaurant;
+    updatedData.userServedLocalities = req.body.userServedLocalities;
+    updatedData.job_type = req.body.job_type;
+    updatedData.experience = req.body.experience;
+    updatedData.resume = req.body.resume;
+    updatedData.userCuisioness = req.body.userCuisioness;
+    updatedData.description = req.body.description;
+    const options = { new: true };
+    try {
+      const result = await UserModel.findByIdAndUpdate(
+        id,
+        updatedData,
+        options,
+      );
+      return res.json({
+        error: false,
+        status: 200,
+        message: "Professional Details Updated Successfully",
+        data: result,
+      });
+    } catch (error) {
+      error.isPublic = true;
+      next(error);
+    }
+  },
+);
 
 router.get("/my_account/:id", async (req, res, next) => {
   let { id } = req.params;
@@ -1165,16 +1214,23 @@ router.get("/getCityServedLocalityList", async (req, res, next) => {
   }
 });
 
-router.get('/supplier-order-count-by-date', async (req, res, next) => {
+router.get("/supplier-order-count-by-date", async (req, res, next) => {
   try {
-    const { supplierId, fulfillmentDate } = req.query; 
+    const { supplierId, fulfillmentDate } = req.query;
 
     if (!supplierId || !fulfillmentDate) {
-      return res.status(400).json({ success: false, message: "Supplier ID and Fulfillment Date are required" });
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Supplier ID and Fulfillment Date are required",
+        });
     }
 
-    const supplier = await UserModel.findById(supplierId).select('supplierOrderLimit');
-    const dynamicLimit = supplier && supplier.supplierOrderLimit ? supplier.supplierOrderLimit : 4;
+    const supplier =
+      await UserModel.findById(supplierId).select("supplierOrderLimit");
+    const dynamicLimit =
+      supplier && supplier.supplierOrderLimit ? supplier.supplierOrderLimit : 4;
 
     const targetDate = new Date(fulfillmentDate);
 
@@ -1186,7 +1242,7 @@ router.get('/supplier-order-count-by-date', async (req, res, next) => {
       toId: supplierId,
       order_date: {
         $gte: startOfDay,
-        $lte: endOfDay
+        $lte: endOfDay,
       },
       order_status: 1,
     });
@@ -1195,9 +1251,8 @@ router.get('/supplier-order-count-by-date', async (req, res, next) => {
       success: true,
       count: count,
       limit: dynamicLimit,
-      isFull: count >= dynamicLimit
+      isFull: count >= dynamicLimit,
     });
-
   } catch (error) {
     error.isPublic = true;
     next(error);

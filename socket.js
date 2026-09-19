@@ -10,7 +10,7 @@ function initSocket(server) {
   const io = new Server(server, {
     path: "/socket.io",
     cors: {
-      origin: ["https://horaservices.com", "http://localhost:3000"],
+      origin: ["https://horaservices.com", "http://localhost:3000", "http://localhost:4700"],
       methods: ["GET", "POST"],
       credentials: true,
     },

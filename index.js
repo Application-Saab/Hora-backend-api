@@ -644,6 +644,13 @@ const ErrorLogRoutes = require("./routes/error-log")
 const pinCodes = require("./routes/serviceabilityPincodes")
 let passportAuth = require("./store/passportAuth").passportAuth;
 
+app.get("/api/check-token-health", passportAuth, async (req, res) => {
+    return res.status(200).json({
+        error: false,
+        status: 200,
+        authenticated: true,
+    });
+});
 app.use("/api/admin", AdminRoutes);
 app.use("/api/user", UserRoutes);
 app.use("/api/customer/event", EventInviteRoutes);

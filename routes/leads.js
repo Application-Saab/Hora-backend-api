@@ -23,7 +23,7 @@ const sanitizePhone = (phone) => {
 
 async function syncLeadsFromSheet() {
     try {
-        console.log("hello ----- [Incremental Sheet Sync Triggered]");
+        console.log("[Incremental Sheet Sync Triggered]");
 
         let tracker = await Lead.findOne({ phoneNumber: "SYNC_TRACKER_ROW" });
 

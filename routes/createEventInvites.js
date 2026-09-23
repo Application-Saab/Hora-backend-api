@@ -721,6 +721,7 @@ router.get("/event-invites-and-capsules/:userId", async (req, res, next) => {
                   _id: 1,
                   createdAt: 1,
                   capsuleBannerImageUrl: 1,
+                  selectedForBanner: 1,
                   customerId: 1,
                   viewedBy: 1,
                   orderEventName: 1,
@@ -751,8 +752,18 @@ router.get("/event-invites-and-capsules/:userId", async (req, res, next) => {
                         $ifNull: ["$$folder.orderEventName", ""],
                       },
                       eventDate: "$$folder.createdAt",
-                      externalTemplateImageUrl:
-                        "$$folder.capsuleBannerImageUrl",
+                      externalTemplateImageUrl: {
+                        $cond: [
+                          {
+                            $and: [
+                              { $ne: ["$$folder.selectedForBanner", null] },
+                              { $ne: ["$$folder.selectedForBanner", ""] },
+                            ],
+                          },
+                          "$$folder.selectedForBanner",
+                          "$$folder.capsuleBannerImageUrl",
+                        ],
+                      },
                       eventRole: {
                         $cond: [
                           {
@@ -977,7 +988,18 @@ router.get("/event-invites-and-capsules/:userId", async (req, res, next) => {
             _id: 1,
             hostName: "$orderEventName",
             eventDate: "$createdAt",
-            externalTemplateImageUrl: "$capsuleBannerImageUrl",
+            externalTemplateImageUrl: {
+              $cond: [
+                {
+                  $and: [
+                    { $ne: ["$selectedForBanner", null] },
+                    { $ne: ["$selectedForBanner", ""] },
+                  ],
+                },
+                "$selectedForBanner",
+                "$capsuleBannerImageUrl",
+              ],
+            },
             eventRole: 1,
             dataType: 1,
             guests: 1,

@@ -781,7 +781,7 @@ router.post('/update_order_status', async (req, res, next) => {
           order.isEmergencyOrder === true &&
           order.status === 0 &&
           emergencyStartTime &&
-          Date.now() - new Date(emergencyStartTime).getTime() >= 10 * 60 * 1000;
+          Date.now() - new Date(emergencyStartTime).getTime() >= 30 * 60 * 1000;
 
       if (isEmergencyExpired) {
           order.order_status = 6;

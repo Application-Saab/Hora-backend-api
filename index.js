@@ -407,7 +407,10 @@ cron.schedule('0 1 * * *', async () => {
   } catch (err) {
     console.error("CRON SYNC ERROR:", err);
   }
-});
+} , {
+    scheduled: true,
+    timezone: "Asia/Kolkata",
+  },);
 
 const getDaysDifference = (fromDate, toDate) => {
   if (!fromDate || !toDate) return -1;

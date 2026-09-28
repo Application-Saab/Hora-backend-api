@@ -327,9 +327,50 @@ async function sendNotificationsInPriority() {
     console.error("Notification Scheduler Error:", error);
   }
 }
+/**
+ * Emergency Orders expire check Cron Function
+ */
+const expireEmergencyOrders = async () => {
+    try {
+        const emergencyOrders = await orderModel.find({
+            isEmergencyOrder: true,
+            status: 0,     
+            order_status: 7,                          
+            processedBy: { $exists: true, $not: { $size: 0 } },
+            isPaymentDone: false
+        });
+
+        const currentTimeMs = Date.now();
+        const EXPIRE_TIME_MS = 30 * 60 * 1000; // 30 Minutes
+
+        let expiredCount = 0;
+
+        for (const order of emergencyOrders) {
+            const firstYesProcessed = order.processedBy?.find(
+                (item) => item?.action === "yes" && item?.time
+            );
+
+            if (firstYesProcessed && firstYesProcessed.time) {
+                const emergencyStartTime = new Date(firstYesProcessed.time).getTime();
+
+                if (currentTimeMs - emergencyStartTime >= EXPIRE_TIME_MS) {
+                    order.order_status = 6; 
+                    await order.save();
+                    expiredCount++;
+                    console.log(`Emergency Order ID #${order.order_id} expired successfully.`);
+                }
+            }
+        }
+
+        console.log(`[Cron] Total emergency orders checked: ${emergencyOrders.length}, Expired: ${expiredCount}`);
+    } catch (error) {
+        console.error('Error while expiring emergency orders:', error);
+    }
+};
 
 
 cron.schedule("*/1 * * * *", async () => {
+  expireEmergencyOrders();
   await sendNotificationsInPriority();
 });
 

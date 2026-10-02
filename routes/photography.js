@@ -377,10 +377,6 @@ const normalizePhotographyName = (name = "") => {
 router.get("/detailsByName/:name", async (req, res, next) => {
   try {
     const requestedName = normalizePhotographyName(req.params.name);
-
-    console.log("Requested name:", req.params.name);
-    console.log("Normalized name:", requestedName);
-
     const allProducts = await photographyModel
       .find({})
       .populate({

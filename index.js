@@ -370,8 +370,8 @@ const expireEmergencyOrders = async () => {
 
 
 cron.schedule("*/1 * * * *", async () => {
-  expireEmergencyOrders();
-  await sendNotificationsInPriority();
+  // expireEmergencyOrders();
+  // await sendNotificationsInPriority();
 });
 
 cron.schedule('0 20 * * *', async () => {
@@ -686,6 +686,7 @@ const EventDateRoutes = require("./routes/event-dates");
 const AddonRoutes = require("./routes/addon");
 const ThemeRoutes = require("./routes/photography-theme");
 const team = require("./routes/team");
+const specializationRoutes = require("./routes/specialization");
 const ErrorLogRoutes = require("./routes/error-log")
 const pinCodes = require("./routes/serviceabilityPincodes")
 let passportAuth = require("./store/passportAuth").passportAuth;
@@ -737,6 +738,7 @@ app.use("/api/addon", AddonRoutes);
 app.use("/api/photography-theme", ThemeRoutes);
 app.use("/api/team", team);
 app.use("/api/leads", leadsRoutes); 
+app.use("/api/specializations", specializationRoutes);
 app.use("/api/error-log", ErrorLogRoutes.router);
 app.use("/api/pincode", pinCodes)
 

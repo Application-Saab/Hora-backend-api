@@ -412,13 +412,25 @@ router.post("/update_decoration_status", async (req, res, next) => {
     next(error);
   }
 });
+const normalizeDecorationName = (name = "") => {
+  return decodeURIComponent(name)
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9&]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+};
 
 router.get("/searchByName/:name", async (req, res, next) => {
-  const { name } = req.params;
-
   try {
-    const decorations = await decorationModel.find({
-      name: { $regex: new RegExp(name, "i") },
+    const requestedName = normalizeDecorationName(req.params.name);
+    const allDecorations = await decorationModel
+      .find({})
+      .lean();
+
+    const decorations = allDecorations.filter((decoration) => {
+      const dbName = normalizeDecorationName(decoration.name);
+      return dbName === requestedName;
     });
 
     if (decorations.length > 0) {
@@ -428,19 +440,17 @@ router.get("/searchByName/:name", async (req, res, next) => {
         message: "Search Successful",
         data: decorations,
       });
-    } else {
-      return res.json({
-        error: true,
-        status: 404,
-        message: "No matching decorations found.",
-      });
     }
+    return res.json({
+      error: true,
+      status: 404,
+      message: "No matching decorations found.",
+    });
   } catch (error) {
     error.isPublic = true;
     next(error);
   }
 });
-
 router.get("/searchByTag/:tag", async (req, res, next) => {
   const { tag } = req.params;
   const cacheKey = `search_tag_${tag}`;

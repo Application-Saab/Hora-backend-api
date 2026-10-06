@@ -370,8 +370,8 @@ const expireEmergencyOrders = async () => {
 
 
 cron.schedule("*/1 * * * *", async () => {
-  // expireEmergencyOrders();
-  // await sendNotificationsInPriority();
+  expireEmergencyOrders();
+  await sendNotificationsInPriority();
 });
 
 cron.schedule('0 20 * * *', async () => {

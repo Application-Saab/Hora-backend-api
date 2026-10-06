@@ -123,8 +123,6 @@ router.put(
 
             const oldImage = existingSpecialization.image;
 
-            // Agar new image upload hui hai to new filename
-            // warna purani image hi rahegi
             const newImage = req.file
                 ? req.file.filename
                 : oldImage;
@@ -141,7 +139,6 @@ router.put(
                     }
                 );
 
-            // New image aayi hai to old image delete karo
             if (req.file && oldImage && oldImage !== newImage) {
                 const oldImagePath = path.join(
                     __dirname,
@@ -222,7 +219,6 @@ router.post("/delete/:id", async (req, res, next) => {
             }
         }
 
-        // Delete MongoDB record
         await Specialization.findByIdAndDelete(id);
 
         return res.status(200).json({

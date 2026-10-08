@@ -2922,5 +2922,3 @@ router.post("/rating-notification", async (req, res, next) => {
 
 module.exports = router;
 
-
-// min/getMultipleUserDetails API IS CALLED WITH DATA:  { ids: [ '699d4eeb8545aa53210d3934', '6958d698a533d6d56bc71

@@ -1061,6 +1061,48 @@ router.post('/acceptOrder', async (req, res, next) => {
     }
 });
 
+const getSupplierPastOrderCount = async (req, res) => {
+    try {
+        const { supplierId } = req.params;
+
+        if (!supplierId) {
+            return res.status(400).json({
+                status: 400,
+                message: "Supplier ID is required"
+            });
+        }
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const count = await orderModel.countDocuments({
+            toId: supplierId,
+            status: 1,
+            order_date: {
+                $lt: today
+            }
+        });
+
+        return res.status(200).json({
+            status: 200,
+            count
+        });
+
+    } catch (error) {
+        console.error("Get Supplier Past Order Count Error:", error);
+
+        return res.status(500).json({
+            status: 500,
+            message: "Something went wrong",
+            error: error.message
+        });
+    }
+};
+router.get(
+    "/supplier/:supplierId/past-order-count",
+    getSupplierPastOrderCount
+);
+
 router.post('/startOrder', async (req, res, next) => {
     const { requestdata } = req.body;
 

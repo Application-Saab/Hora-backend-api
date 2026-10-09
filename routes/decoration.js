@@ -168,29 +168,30 @@ router.post("/edit", upload.array("featured_images", 10), async (req, res, next)
     // -----------------------------
     const updated = await decorationModel.findByIdAndUpdate(
       id,
-      {
-        name: req.body.name,
-        price: req.body.price,
-        tag: req.body.tag
-          ? typeof req.body.tag === "string"
-            ? JSON.parse(req.body.tag)
-            : req.body.tag
-          : [],
-        designType:
-          req.body.designType === "string"
-            ? JSON.parse(req.body.designType)
-            : req.body.designType,
+    {
+      name: req.body.name,
+      price: req.body.price,
+      tag: req.body.tag
+        ? typeof req.body.tag === "string"
+          ? JSON.parse(req.body.tag)
+          : req.body.tag
+        : [],
 
-        inclusion,
-        inclusionVariables:
-          req.body.inclusionVariables === "string"
-            ? JSON.parse(req.body.inclusionVariables)
-            : req.body.inclusionVariables,
+      designType:
+        typeof req.body.designType === "string"
+          ? JSON.parse(req.body.designType)
+          : req.body.designType,
 
-        featured_images: [...existingImages, ...newImages],
-      },
-      { new: true },
-    );
+      inclusion,
+      inclusionVariables:
+        typeof req.body.inclusionVariables === "string"
+          ? JSON.parse(req.body.inclusionVariables)
+          : req.body.inclusionVariables,
+
+      featured_images: [...existingImages, ...newImages],
+    },
+    { new: true },
+  );
 
     return res.json({
       error: false,
@@ -201,99 +202,6 @@ router.post("/edit", upload.array("featured_images", 10), async (req, res, next)
     next(err);
   }
 });
-
-// router.post('/edit', async (req, res) => {
-//     const id = req.body._id;
-//     const updatedData = req.body;
-//     const options = { new: true };
-
-//     try {
-//         const result = await decorationModel.findByIdAndUpdate(id, updatedData, options);
-
-//         if (result) {
-//             // ----- NEW CACHE UPDATE -----
-//             if (updatedData.tag && updatedData.tag.length > 0) {
-//                 const firstTag = updatedData.tag[0];
-//                 // fetch all decorations with this tag
-//                 const decorationsForTag = await decorationModel.find({ tag: { $in: [firstTag] } }).lean();
-//                 const cacheResponse = {
-//                     error: false,
-//                     status: 200,
-//                     message: 'Search Successful',
-//                     data: decorationsForTag
-//                 };
-//                 cache.set(`search_tag_${firstTag}`, cacheResponse);
-//             }
-//             return res.json({
-//                 error: false,
-//                 status: 200,
-//                 message: 'Updated Successfully',
-//                 data: result
-//             });
-//         } else {
-//             return res.json({
-//                 error: true,
-//                 status: 404,
-//                 message: 'Decoration not found.'
-//             });
-//         }
-//     } catch (error) {
-//         return res.status(400).json({
-//             error: true,
-//             message: error.message
-//         });
-//     }
-// });
-
-// router.post('/add', async (req, res) => {
-//     const {
-//         name,
-//         short_link,
-//         featured_image,
-//         caption,
-//         featured_images,
-//         badge,
-//         price,
-//         cost_price,
-//         type,
-//         is_wishlisted,
-//         ratings,
-//         attributes,
-//         inclusion,
-//         tag
-//     } = req.body;
-
-//     const data = new decorationModel({
-//         name: name,
-//         short_link: short_link,
-//         featured_image: featured_image,
-//         caption: caption,
-//         featured_images: featured_images,
-//         badge: badge,
-//         price: price,
-//         cost_price: cost_price,
-//         type: type,
-//         is_wishlisted: is_wishlisted,
-//         ratings: ratings,
-//         attributes: attributes,
-//         inclusion: inclusion,
-//         tag: tag
-//     });
-
-//     try {
-//         // Check if a decoration with the same name and type already exists
-//         const existingDecoration = await decorationModel.findOne({ name: data.name, type: data.type });
-
-//         if (existingDecoration) {
-//             return res.json({ error: true, status: 503, message: 'Decoration already added.' });
-//         } else {
-//             const savedData = await data.save();
-//             return res.json({ error: false, status: 200, message: 'Decoration added successfully.', data: savedData });
-//         }
-//     } catch (error) {
-//         res.status(400).json({ error: true, message: error.message });
-//     }
-// });
 
 router.post("/add", upload.single("featured_image"), async (req, res, next) => {
   try {

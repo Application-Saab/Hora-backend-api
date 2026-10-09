@@ -19,7 +19,6 @@ router.post("/", async (req, res, next) => {
   }
 });
 
-// Get Error Logs List
 router.get("/list", async (req, res, next) => {
   try {
     const {
@@ -31,114 +30,69 @@ router.get("/list", async (req, res, next) => {
       endDate = "",
     } = req.query;
 
-    const skip = (Number(page) - 1) * Number(limit);
+    const currentPage = Math.max(Number(page) || 1, 1);
+    const perPage = Math.min(Math.max(Number(limit) || 10, 1), 100);
 
-    const match = {};
+    const skip = (currentPage - 1) * perPage;
 
-    // Type filter
+    const filter = {};
+
     if (type) {
-      match.type = type;
+      filter.type = type;
     }
 
-    // Date range filter
     if (startDate || endDate) {
-      match.timestamp = {};
+      filter.timestamp = {};
 
       if (startDate) {
-        match.timestamp.$gte = new Date(startDate);
+        const start = new Date(startDate);
+
+        if (!Number.isNaN(start.getTime())) {
+          start.setHours(0, 0, 0, 0);
+          filter.timestamp.$gte = start;
+        }
       }
 
       if (endDate) {
         const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        match.timestamp.$lte = end;
+
+        if (!Number.isNaN(end.getTime())) {
+          end.setHours(23, 59, 59, 999);
+          filter.timestamp.$lte = end;
+        }
+      }
+
+      if (Object.keys(filter.timestamp).length === 0) {
+        delete filter.timestamp;
       }
     }
 
-    const pipeline = [
-      {
-        $match: match,
-      },
-    ];
+    if (search.trim()) {
+      const escapedSearch = search
+        .trim()
+        .replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-    // Search
-    if (search) {
-      pipeline.push({
-        $match: {
-          $or: [
-            {
-              message: {
-                $regex: search,
-                $options: "i",
-              },
-            },
-            {
-              stack: {
-                $regex: search,
-                $options: "i",
-              },
-            },
-            {
-              page: {
-                $regex: search,
-                $options: "i",
-              },
-            },
-            {
-              component: {
-                $regex: search,
-                $options: "i",
-              },
-            },
-            {
-              url: {
-                $regex: search,
-                $options: "i",
-              },
-            },
-            {
-              endpoint: {
-                $regex: search,
-                $options: "i",
-              },
-            },
-            {
-              browser: {
-                $regex: search,
-                $options: "i",
-              },
-            },
-            {
-              device: {
-                $regex: search,
-                $options: "i",
-              },
-            },
-            {
-              userId: {
-                $regex: search,
-                $options: "i",
-              },
-            },
-            {
-              visitorId: {
-                $regex: search,
-                $options: "i",
-              },
-            },
-          ],
-        },
-      });
+      filter.$or = [
+        { message: { $regex: escapedSearch, $options: "i" } },
+        { stack: { $regex: escapedSearch, $options: "i" } },
+        { page: { $regex: escapedSearch, $options: "i" } },
+        { component: { $regex: escapedSearch, $options: "i" } },
+        { url: { $regex: escapedSearch, $options: "i" } },
+        { endpoint: { $regex: escapedSearch, $options: "i" } },
+        { browser: { $regex: escapedSearch, $options: "i" } },
+        { device: { $regex: escapedSearch, $options: "i" } },
+        { userId: { $regex: escapedSearch, $options: "i" } },
+        { visitorId: { $regex: escapedSearch, $options: "i" } },
+      ];
     }
-
-    pipeline.push(
-      {
-        $project: {
+    
+    const [errorLogs, total] = await Promise.all([
+      ErrorLog.find(filter)
+        .select({
           _id: 1,
           timestamp: 1,
           type: 1,
           message: 1,
-          stack: 1,
           page: 1,
           component: 1,
           url: 1,
@@ -146,44 +100,24 @@ router.get("/list", async (req, res, next) => {
           visitorId: 1,
           browser: 1,
           device: 1,
-          payload: 1,
           statusCode: 1,
           endpoint: 1,
-        },
-      },
-      {
-        $sort: {
-          timestamp: -1,
-        },
-      },
-      {
-        $skip: skip,
-      },
-      {
-        $limit: Number(limit),
-      },
-    );
+        })
+        .sort({ timestamp: -1 })
+        .skip(skip)
+        .limit(perPage)
+        .lean(),
 
-    const errorLogs = await ErrorLog.aggregate(pipeline);
-
-    // Total Count
-    const totalPipeline = [...pipeline.slice(0, -3)];
-
-    totalPipeline.push({
-      $count: "total",
-    });
-
-    const totalResult = await ErrorLog.aggregate(totalPipeline);
-
-    const total = totalResult.length ? totalResult[0].total : 0;
+      ErrorLog.countDocuments(filter),
+    ]);
 
     return CustomResponse(res, 200, false, "Error logs fetched successfully", {
       errorLogs,
       pagination: {
         total,
-        page: Number(page),
-        limit: Number(limit),
-        totalPages: Math.ceil(total / Number(limit)),
+        page: currentPage,
+        limit: perPage,
+        totalPages: Math.ceil(total / perPage),
       },
     });
   } catch (err) {

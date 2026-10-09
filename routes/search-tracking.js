@@ -71,7 +71,139 @@ router.post("/", async (req, res, next) => {
   }
 });
 
-// Get Search Tracking List for admin panel
+// // Get Search Tracking List for admin panel
+// router.get("/tracking-list", async (req, res, next) => {
+//   try {
+//     const {
+//       page = 1,
+//       limit = 10,
+//       search = "",
+//       clickedType = "",
+//       startDate = "",
+//       endDate = "",
+//     } = req.query;
+
+//     const skip = (Number(page) - 1) * Number(limit);
+
+//     const match = {};
+
+//     if (clickedType) {
+//       match.clickedType = clickedType;
+//     }
+
+//     if (startDate || endDate) {
+//       match.createdAt = {};
+
+//       if (startDate) {
+//         match.createdAt.$gte = new Date(startDate);
+//       }
+
+//       if (endDate) {
+//         const end = new Date(endDate);
+//         end.setHours(23, 59, 59, 999); // poora end day include hoga
+//         match.createdAt.$lte = end;
+//       }
+//     }
+
+//     const pipeline = [
+//       {
+//         $match: match,
+//       },
+//       {
+//         $lookup: {
+//           from: "users",
+//           localField: "userId",
+//           foreignField: "_id",
+//           as: "user",
+//         },
+//       },
+//       {
+//         $unwind: {
+//           path: "$user",
+//           preserveNullAndEmptyArrays: true,
+//         },
+//       },
+//     ];
+
+//     if (search) {
+//       pipeline.push({
+//         $match: {
+//           $or: [
+//             { searchTerm: { $regex: search, $options: "i" } },
+//             { clickedTitle: { $regex: search, $options: "i" } },
+//             { "user.name": { $regex: search, $options: "i" } },
+//             { "user.phone": { $regex: search, $options: "i" } },
+//           ],
+//         },
+//       });
+//     }
+
+//     pipeline.push(
+//       {
+//         $project: {
+//           searchTerm: 1,
+//           clickedItemId: 1,
+//           clickedTitle: 1,
+//           clickedType: 1,
+//           visitorId: 1,
+//           createdAt: 1,
+//           pageName: 1,
+
+//           user: {
+//             _id: "$user._id",
+//             name: "$user.name",
+//             phone: "$user.phone",
+//           },
+//         },
+//       },
+//       {
+//         $sort: {
+//           createdAt: -1,
+//         },
+//       },
+//       {
+//         $skip: skip,
+//       },
+//       {
+//         $limit: Number(limit),
+//       },
+//     );
+
+//     const trackingList = await SearchTrackings.aggregate(pipeline);
+
+//     const totalPipeline = pipeline.slice(0, pipeline.length - 3);
+//     totalPipeline.push({
+//       $count: "total",
+//     });
+
+//     const totalResult = await SearchTrackings.aggregate(totalPipeline);
+
+//     const total = totalResult.length ? totalResult[0].total : 0;
+
+//     return CustomResponse(
+//       res,
+//       200,
+//       false,
+//       "Search tracking fetched successfully",
+//       {
+//         trackingList,
+//         pagination: {
+//           total,
+//           page: Number(page),
+//           limit: Number(limit),
+//           totalPages: Math.ceil(total / Number(limit)),
+//         },
+//       },
+//     );
+//   } catch (err) {
+//     console.error("Fetch Search Tracking Error:", err);
+//     err.isPublic = true;
+//     next(err);
+//   }
+// });
+
+
+// Get Search Tracking List for admin panel (Lightning Fast)
 router.get("/tracking-list", async (req, res, next) => {
   try {
     const {
@@ -83,102 +215,138 @@ router.get("/tracking-list", async (req, res, next) => {
       endDate = "",
     } = req.query;
 
-    const skip = (Number(page) - 1) * Number(limit);
+    const pageNumber = Math.max(Number(page) || 1, 1);
+    const limitNumber = Math.min(Math.max(Number(limit) || 10, 1), 100);
+    const skip = (pageNumber - 1) * limitNumber;
 
+    // ---------- BASE MATCH ----------
     const match = {};
 
-    if (clickedType) {
-      match.clickedType = clickedType;
+    if (clickedType?.trim()) {
+      match.clickedType = clickedType.trim();
     }
 
     if (startDate || endDate) {
       match.createdAt = {};
 
       if (startDate) {
-        match.createdAt.$gte = new Date(startDate);
+        const start = new Date(startDate);
+        if (!Number.isNaN(start.getTime())) {
+          start.setHours(0, 0, 0, 0);
+          match.createdAt.$gte = start;
+        }
       }
 
       if (endDate) {
         const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999); // poora end day include hoga
-        match.createdAt.$lte = end;
+        if (!Number.isNaN(end.getTime())) {
+          end.setHours(23, 59, 59, 999);
+          match.createdAt.$lte = end;
+        }
+      }
+
+      if (Object.keys(match.createdAt).length === 0) {
+        delete match.createdAt;
       }
     }
 
-    const pipeline = [
-      {
-        $match: match,
-      },
-      {
-        $lookup: {
-          from: "users",
-          localField: "userId",
-          foreignField: "_id",
-          as: "user",
-        },
-      },
-      {
-        $unwind: {
-          path: "$user",
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-    ];
+    const pipeline = [{ $match: match }];
 
-    if (search) {
-      pipeline.push({
-        $match: {
-          $or: [
-            { searchTerm: { $regex: search, $options: "i" } },
-            { clickedTitle: { $regex: search, $options: "i" } },
-            { "user.name": { $regex: search, $options: "i" } },
-            { "user.phone": { $regex: search, $options: "i" } },
-          ],
-        },
-      });
-    }
+    const hasSearch = search.trim().length > 0;
+    const escapedSearch = hasSearch
+      ? search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      : "";
 
-    pipeline.push(
-      {
-        $project: {
-          searchTerm: 1,
-          clickedItemId: 1,
-          clickedTitle: 1,
-          clickedType: 1,
-          visitorId: 1,
-          createdAt: 1,
-          pageName: 1,
-
-          user: {
-            _id: "$user._id",
-            name: "$user.name",
-            phone: "$user.phone",
+    // ---------- SEARCH (lookup only when needed) ----------
+    if (hasSearch) {
+      pipeline.push(
+        {
+          $lookup: {
+            from: "users",
+            localField: "userId",
+            foreignField: "_id",
+            pipeline: [
+              { $project: { _id: 1, name: 1, phone: 1 } },
+            ],
+            as: "user",
           },
         },
-      },
-      {
-        $sort: {
-          createdAt: -1,
+        {
+          $unwind: {
+            path: "$user",
+            preserveNullAndEmptyArrays: true,
+          },
         },
-      },
-      {
-        $skip: skip,
-      },
-      {
-        $limit: Number(limit),
-      },
-    );
+        {
+          $match: {
+            $or: [
+              { searchTerm: { $regex: escapedSearch, $options: "i" } },
+              { clickedTitle: { $regex: escapedSearch, $options: "i" } },
+              { "user.name": { $regex: escapedSearch, $options: "i" } },
+              { "user.phone": { $regex: escapedSearch, $options: "i" } },
+            ],
+          },
+        }
+      );
+    }
 
-    const trackingList = await SearchTrackings.aggregate(pipeline);
+    // ---------- SINGLE AGGREGATION WITH $facet ----------
+    pipeline.push({
+      $facet: {
+        list: [
+          { $sort: { createdAt: -1 } },
+          { $skip: skip },
+          { $limit: limitNumber },
 
-    const totalPipeline = pipeline.slice(0, pipeline.length - 3);
-    totalPipeline.push({
-      $count: "total",
+          // Lookup only for the final page when no search
+          ...(!hasSearch
+            ? [
+                {
+                  $lookup: {
+                    from: "users",
+                    localField: "userId",
+                    foreignField: "_id",
+                    pipeline: [
+                      { $project: { _id: 1, name: 1, phone: 1 } },
+                    ],
+                    as: "user",
+                  },
+                },
+                {
+                  $unwind: {
+                    path: "$user",
+                    preserveNullAndEmptyArrays: true,
+                  },
+                },
+              ]
+            : []),
+
+          {
+            $project: {
+              searchTerm: 1,
+              clickedItemId: 1,
+              clickedTitle: 1,
+              clickedType: 1,
+              visitorId: 1,
+              createdAt: 1,
+              pageName: 1,
+              user: {
+                _id: "$user._id",
+                name: "$user.name",
+                phone: "$user.phone",
+              },
+            },
+          },
+        ],
+
+        total: [{ $count: "count" }],
+      },
     });
 
-    const totalResult = await SearchTrackings.aggregate(totalPipeline);
+    const [result] = await SearchTrackings.aggregate(pipeline).allowDiskUse(true);
 
-    const total = totalResult.length ? totalResult[0].total : 0;
+    const trackingList = result?.list || [];
+    const total = result?.total?.[0]?.count || 0;
 
     return CustomResponse(
       res,
@@ -189,11 +357,11 @@ router.get("/tracking-list", async (req, res, next) => {
         trackingList,
         pagination: {
           total,
-          page: Number(page),
-          limit: Number(limit),
-          totalPages: Math.ceil(total / Number(limit)),
+          page: pageNumber,
+          limit: limitNumber,
+          totalPages: Math.ceil(total / limitNumber) || 1,
         },
-      },
+      }
     );
   } catch (err) {
     console.error("Fetch Search Tracking Error:", err);
@@ -202,10 +370,295 @@ router.get("/tracking-list", async (req, res, next) => {
   }
 });
 
-// Get all stats for search tracking
+// // Get all stats for search tracking
+// router.get("/stats", async (req, res, next) => {
+//   try {
+//     const { startDate, endDate } = req.query;
+
+//     const matchStage = {};
+
+//     if (startDate || endDate) {
+//       matchStage.createdAt = {};
+
+//       if (startDate) {
+//         matchStage.createdAt.$gte = new Date(startDate);
+//       }
+
+//       if (endDate) {
+//         const end = new Date(endDate);
+//         end.setHours(23, 59, 59, 999);
+//         matchStage.createdAt.$lte = end;
+//       }
+//     }
+
+//     const pipeline = [
+//       { $match: matchStage },
+
+//       {
+//         $facet: {
+//           // Basic Stats
+//           totalStats: [
+//             {
+//               $group: {
+//                 _id: null,
+//                 totalSearches: { $sum: 1 },
+//                 totalClicks: {
+//                   $sum: {
+//                     $cond: [{ $ifNull: ["$clickedItemId", false] }, 1, 0],
+//                   },
+//                 },
+//                 uniqueLoggedInUsers: {
+//                   $addToSet: {
+//                     $cond: [{ $ifNull: ["$userId", false] }, "$userId", null],
+//                   },
+//                 },
+//               },
+//             },
+//             {
+//               $project: {
+//                 totalSearches: 1,
+//                 totalClicks: 1,
+//                 uniqueLoggedInUsers: {
+//                   $size: {
+//                     $filter: {
+//                       input: "$uniqueLoggedInUsers",
+//                       cond: { $ne: ["$$this", null] },
+//                     },
+//                   },
+//                 },
+//               },
+//             },
+//           ],
+
+//           // Unique Pure Guest Visitors (never logged in)
+//           uniqueGuestVisitors: [
+//             {
+//               $match: { userId: null },
+//             },
+//             {
+//               $group: {
+//                 _id: "$visitorId",
+//               },
+//             },
+//             {
+//               $count: "count",
+//             },
+//           ],
+
+//           // Total Searches as Guest Only
+//           guestSearches: [
+//             {
+//               $match: { userId: null },
+//             },
+//             {
+//               $group: {
+//                 _id: null,
+//                 totalGuestSearches: { $sum: 1 },
+//                 guestClicks: {
+//                   $sum: {
+//                     $cond: [{ $ifNull: ["$clickedItemId", false] }, 1, 0],
+//                   },
+//                 },
+//               },
+//             },
+//           ],
+
+//           // Top 10 Search Terms (case-insensitive + trimmed)
+//           topSearchTerms: [
+//             {
+//               $group: {
+//                 _id: {
+//                   $trim: {
+//                     input: { $toLower: "$searchTerm" },
+//                   },
+//                 },
+//                 count: { $sum: 1 },
+//               },
+//             },
+//             { $sort: { count: -1 } },
+//             { $limit: 10 },
+//             {
+//               $project: {
+//                 searchTerm: "$_id",
+//                 count: 1,
+//               },
+//             },
+//           ],
+
+//           // Top 10 Clicked by Type (Themes, Products, Categories)
+//           topClickedThemes: [
+//             { $match: { clickedType: "theme", clickedItemId: { $ne: null } } },
+//             {
+//               $group: {
+//                 _id: { id: "$clickedItemId", title: "$clickedTitle" },
+//                 count: { $sum: 1 },
+//               },
+//             },
+//             { $sort: { count: -1 } },
+//             { $limit: 10 },
+//             {
+//               $project: {
+//                 itemId: "$_id.id",
+//                 title: "$_id.title",
+//                 type: "theme",
+//                 count: 1,
+//               },
+//             },
+//           ],
+
+//           topClickedProducts: [
+//             {
+//               $match: { clickedType: "product", clickedItemId: { $ne: null } },
+//             },
+//             {
+//               $group: {
+//                 _id: { id: "$clickedItemId", title: "$clickedTitle" },
+//                 count: { $sum: 1 },
+//               },
+//             },
+//             { $sort: { count: -1 } },
+//             { $limit: 10 },
+//             {
+//               $project: {
+//                 itemId: "$_id.id",
+//                 title: "$_id.title",
+//                 type: "product",
+//                 count: 1,
+//               },
+//             },
+//           ],
+
+//           topClickedCategories: [
+//             {
+//               $match: { clickedType: "category", clickedItemId: { $ne: null } },
+//             },
+//             {
+//               $group: {
+//                 _id: { id: "$clickedItemId", title: "$clickedTitle" },
+//                 count: { $sum: 1 },
+//               },
+//             },
+//             { $sort: { count: -1 } },
+//             { $limit: 10 },
+//             {
+//               $project: {
+//                 itemId: "$_id.id",
+//                 title: "$_id.title",
+//                 type: "category",
+//                 count: 1,
+//               },
+//             },
+//           ],
+
+//           // Top Users (Logged-in)
+//           topUsers: [
+//             { $match: { userId: { $ne: null } } },
+//             {
+//               $group: {
+//                 _id: "$userId",
+//                 totalSearches: { $sum: 1 },
+//                 totalClicks: {
+//                   $sum: {
+//                     $cond: [{ $ifNull: ["$clickedItemId", false] }, 1, 0],
+//                   },
+//                 },
+//               },
+//             },
+//             { $sort: { totalSearches: -1 } },
+//             { $limit: 10 },
+//           ],
+
+//           // Top Visitors
+//           topVisitors: [
+//             {
+//               $group: {
+//                 _id: "$visitorId",
+//                 totalSearches: { $sum: 1 },
+//                 totalClicks: {
+//                   $sum: {
+//                     $cond: [{ $ifNull: ["$clickedItemId", false] }, 1, 0],
+//                   },
+//                 },
+//               },
+//             },
+//             { $sort: { totalSearches: -1 } },
+//             { $limit: 10 },
+//           ],
+
+//           // Top 20 Searches Without Click
+//           topSearchesNoClick: [
+//             { $match: { clickedItemId: null } },
+//             {
+//               $group: {
+//                 _id: {
+//                   $trim: { input: { $toLower: "$searchTerm" } },
+//                 },
+//                 count: { $sum: 1 },
+//               },
+//             },
+//             { $sort: { count: -1 } },
+//             { $limit: 20 },
+//             {
+//               $project: {
+//                 searchTerm: "$_id",
+//                 count: 1,
+//               },
+//             },
+//           ],
+//         },
+//       },
+//     ];
+
+//     const result = await SearchTrackings.aggregate(pipeline);
+//     const data = result[0];
+
+//     const totalStats = data.totalStats[0] || {
+//       totalSearches: 0,
+//       totalClicks: 0,
+//       uniqueLoggedInUsers: 0,
+//     };
+
+//     const guestData = data.guestSearches[0] || {
+//       totalGuestSearches: 0,
+//       guestClicks: 0,
+//     };
+
+//     const uniqueGuestVisitors = data.uniqueGuestVisitors[0]?.count || 0;
+
+//     return CustomResponse(
+//       res,
+//       200,
+//       false,
+//       "Search analytics fetched successfully",
+//       {
+//         totalSearches: totalStats.totalSearches,
+//         totalClicks: totalStats.totalClicks,
+//         uniqueLoggedInUsers: totalStats.uniqueLoggedInUsers,
+//         uniqueGuestVisitors,
+//         totalGuestSearches: guestData.totalGuestSearches,
+
+//         topSearchTerms: data.topSearchTerms,
+//         topClickedThemes: data.topClickedThemes,
+//         topClickedProducts: data.topClickedProducts,
+//         topClickedCategories: data.topClickedCategories,
+
+//         topUsers: data.topUsers,
+//         topVisitors: data.topVisitors,
+//         topSearchesNoClick: data.topSearchesNoClick,
+//       },
+//     );
+//   } catch (err) {
+//     console.error("Search Stats Error:", err);
+//     err.isPublic = true;
+//     next(err);
+//   }
+// });
+
+
+// Get all stats for search tracking (Lightning Fast)
 router.get("/stats", async (req, res, next) => {
   try {
-    const { startDate, endDate } = req.query;
+    const { startDate = "", endDate = "" } = req.query;
 
     const matchStage = {};
 
@@ -213,13 +666,23 @@ router.get("/stats", async (req, res, next) => {
       matchStage.createdAt = {};
 
       if (startDate) {
-        matchStage.createdAt.$gte = new Date(startDate);
+        const start = new Date(startDate);
+        if (!Number.isNaN(start.getTime())) {
+          start.setHours(0, 0, 0, 0);
+          matchStage.createdAt.$gte = start;
+        }
       }
 
       if (endDate) {
         const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        matchStage.createdAt.$lte = end;
+        if (!Number.isNaN(end.getTime())) {
+          end.setHours(23, 59, 59, 999);
+          matchStage.createdAt.$lte = end;
+        }
+      }
+
+      if (Object.keys(matchStage.createdAt).length === 0) {
+        delete matchStage.createdAt;
       }
     }
 
@@ -236,12 +699,12 @@ router.get("/stats", async (req, res, next) => {
                 totalSearches: { $sum: 1 },
                 totalClicks: {
                   $sum: {
-                    $cond: [{ $ifNull: ["$clickedItemId", false] }, 1, 0],
+                    $cond: [{ $ne: ["$clickedItemId", null] }, 1, 0],
                   },
                 },
                 uniqueLoggedInUsers: {
                   $addToSet: {
-                    $cond: [{ $ifNull: ["$userId", false] }, "$userId", null],
+                    $cond: [{ $ne: ["$userId", null] }, "$userId", "$$REMOVE"],
                   },
                 },
               },
@@ -250,59 +713,40 @@ router.get("/stats", async (req, res, next) => {
               $project: {
                 totalSearches: 1,
                 totalClicks: 1,
-                uniqueLoggedInUsers: {
-                  $size: {
-                    $filter: {
-                      input: "$uniqueLoggedInUsers",
-                      cond: { $ne: ["$$this", null] },
-                    },
-                  },
-                },
+                uniqueLoggedInUsers: { $size: "$uniqueLoggedInUsers" },
               },
             },
           ],
 
-          // Unique Pure Guest Visitors (never logged in)
+          // Unique Guest Visitors
           uniqueGuestVisitors: [
-            {
-              $match: { userId: null },
-            },
-            {
-              $group: {
-                _id: "$visitorId",
-              },
-            },
-            {
-              $count: "count",
-            },
+            { $match: { userId: null } },
+            { $group: { _id: "$visitorId" } },
+            { $count: "count" },
           ],
 
-          // Total Searches as Guest Only
+          // Guest Searches + Clicks
           guestSearches: [
-            {
-              $match: { userId: null },
-            },
+            { $match: { userId: null } },
             {
               $group: {
                 _id: null,
                 totalGuestSearches: { $sum: 1 },
                 guestClicks: {
                   $sum: {
-                    $cond: [{ $ifNull: ["$clickedItemId", false] }, 1, 0],
+                    $cond: [{ $ne: ["$clickedItemId", null] }, 1, 0],
                   },
                 },
               },
             },
           ],
 
-          // Top 10 Search Terms (case-insensitive + trimmed)
+          // Top 10 Search Terms
           topSearchTerms: [
             {
               $group: {
                 _id: {
-                  $trim: {
-                    input: { $toLower: "$searchTerm" },
-                  },
+                  $trim: { input: { $toLower: "$searchTerm" } },
                 },
                 count: { $sum: 1 },
               },
@@ -311,18 +755,27 @@ router.get("/stats", async (req, res, next) => {
             { $limit: 10 },
             {
               $project: {
+                _id: 0,
                 searchTerm: "$_id",
                 count: 1,
               },
             },
           ],
 
-          // Top 10 Clicked by Type (Themes, Products, Categories)
+          // Top Clicked by Type
           topClickedThemes: [
-            { $match: { clickedType: "theme", clickedItemId: { $ne: null } } },
+            {
+              $match: {
+                clickedType: "theme",
+                clickedItemId: { $ne: null },
+              },
+            },
             {
               $group: {
-                _id: { id: "$clickedItemId", title: "$clickedTitle" },
+                _id: {
+                  id: "$clickedItemId",
+                  title: "$clickedTitle",
+                },
                 count: { $sum: 1 },
               },
             },
@@ -330,6 +783,7 @@ router.get("/stats", async (req, res, next) => {
             { $limit: 10 },
             {
               $project: {
+                _id: 0,
                 itemId: "$_id.id",
                 title: "$_id.title",
                 type: "theme",
@@ -340,11 +794,17 @@ router.get("/stats", async (req, res, next) => {
 
           topClickedProducts: [
             {
-              $match: { clickedType: "product", clickedItemId: { $ne: null } },
+              $match: {
+                clickedType: "product",
+                clickedItemId: { $ne: null },
+              },
             },
             {
               $group: {
-                _id: { id: "$clickedItemId", title: "$clickedTitle" },
+                _id: {
+                  id: "$clickedItemId",
+                  title: "$clickedTitle",
+                },
                 count: { $sum: 1 },
               },
             },
@@ -352,6 +812,7 @@ router.get("/stats", async (req, res, next) => {
             { $limit: 10 },
             {
               $project: {
+                _id: 0,
                 itemId: "$_id.id",
                 title: "$_id.title",
                 type: "product",
@@ -362,11 +823,17 @@ router.get("/stats", async (req, res, next) => {
 
           topClickedCategories: [
             {
-              $match: { clickedType: "category", clickedItemId: { $ne: null } },
+              $match: {
+                clickedType: "category",
+                clickedItemId: { $ne: null },
+              },
             },
             {
               $group: {
-                _id: { id: "$clickedItemId", title: "$clickedTitle" },
+                _id: {
+                  id: "$clickedItemId",
+                  title: "$clickedTitle",
+                },
                 count: { $sum: 1 },
               },
             },
@@ -374,6 +841,7 @@ router.get("/stats", async (req, res, next) => {
             { $limit: 10 },
             {
               $project: {
+                _id: 0,
                 itemId: "$_id.id",
                 title: "$_id.title",
                 type: "category",
@@ -382,7 +850,7 @@ router.get("/stats", async (req, res, next) => {
             },
           ],
 
-          // Top Users (Logged-in)
+          // Top Users
           topUsers: [
             { $match: { userId: { $ne: null } } },
             {
@@ -391,7 +859,7 @@ router.get("/stats", async (req, res, next) => {
                 totalSearches: { $sum: 1 },
                 totalClicks: {
                   $sum: {
-                    $cond: [{ $ifNull: ["$clickedItemId", false] }, 1, 0],
+                    $cond: [{ $ne: ["$clickedItemId", null] }, 1, 0],
                   },
                 },
               },
@@ -408,7 +876,7 @@ router.get("/stats", async (req, res, next) => {
                 totalSearches: { $sum: 1 },
                 totalClicks: {
                   $sum: {
-                    $cond: [{ $ifNull: ["$clickedItemId", false] }, 1, 0],
+                    $cond: [{ $ne: ["$clickedItemId", null] }, 1, 0],
                   },
                 },
               },
@@ -432,6 +900,7 @@ router.get("/stats", async (req, res, next) => {
             { $limit: 20 },
             {
               $project: {
+                _id: 0,
                 searchTerm: "$_id",
                 count: 1,
               },
@@ -441,21 +910,20 @@ router.get("/stats", async (req, res, next) => {
       },
     ];
 
-    const result = await SearchTrackings.aggregate(pipeline);
-    const data = result[0];
+    const [data] = await SearchTrackings.aggregate(pipeline).allowDiskUse(true);
 
-    const totalStats = data.totalStats[0] || {
+    const totalStats = data?.totalStats?.[0] || {
       totalSearches: 0,
       totalClicks: 0,
       uniqueLoggedInUsers: 0,
     };
 
-    const guestData = data.guestSearches[0] || {
+    const guestData = data?.guestSearches?.[0] || {
       totalGuestSearches: 0,
       guestClicks: 0,
     };
 
-    const uniqueGuestVisitors = data.uniqueGuestVisitors[0]?.count || 0;
+    const uniqueGuestVisitors = data?.uniqueGuestVisitors?.[0]?.count || 0;
 
     return CustomResponse(
       res,
@@ -468,16 +936,17 @@ router.get("/stats", async (req, res, next) => {
         uniqueLoggedInUsers: totalStats.uniqueLoggedInUsers,
         uniqueGuestVisitors,
         totalGuestSearches: guestData.totalGuestSearches,
+        guestClicks: guestData.guestClicks,
 
-        topSearchTerms: data.topSearchTerms,
-        topClickedThemes: data.topClickedThemes,
-        topClickedProducts: data.topClickedProducts,
-        topClickedCategories: data.topClickedCategories,
+        topSearchTerms: data?.topSearchTerms || [],
+        topClickedThemes: data?.topClickedThemes || [],
+        topClickedProducts: data?.topClickedProducts || [],
+        topClickedCategories: data?.topClickedCategories || [],
 
-        topUsers: data.topUsers,
-        topVisitors: data.topVisitors,
-        topSearchesNoClick: data.topSearchesNoClick,
-      },
+        topUsers: data?.topUsers || [],
+        topVisitors: data?.topVisitors || [],
+        topSearchesNoClick: data?.topSearchesNoClick || [],
+      }
     );
   } catch (err) {
     console.error("Search Stats Error:", err);
@@ -485,6 +954,8 @@ router.get("/stats", async (req, res, next) => {
     next(err);
   }
 });
+
+
 
 // Link visitor history with logged-in user
 router.patch("/assign-user", async (req, res, next) => {

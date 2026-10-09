@@ -92,43 +92,70 @@ router.post("/admin_material_list", async (req, res, next) => {
 
     let query = {};
 
-    // search by material name
+    // Search in materialName + type + specs
     if (materialName) {
-      query.materialName = { $regex: materialName, $options: "i" };
+      query.$or = [
+        {
+          materialName: {
+            $regex: materialName,
+            $options: "i",
+          },
+        },
+        {
+          type: {
+            $regex: materialName,
+            $options: "i",
+          },
+        },
+        {
+          specs: {
+            $regex: materialName,
+            $options: "i",
+          },
+        },
+      ];
     }
 
-    // filter by type
+    // Filter by type
     if (type) {
       query.type = type;
     }
 
-    // filter by category
+    // Filter by category
     if (materialCategory) {
       query.materialCategory = materialCategory;
     }
 
-    // filter by specs
+    // Filter by specs
     if (specs) {
-      query.specs = { $regex: specs, $options: "i" };
+      query.specs = {
+        $regex: specs,
+        $options: "i",
+      };
     }
 
-    // filter by status
+    // Filter by status
     if (materialStatus !== undefined && materialStatus !== "") {
       query.materialStatus = parseInt(materialStatus);
     }
 
-    // Common Pagination Function Use
     const { items, paginate } = await getPaginatedData({
       model: MaterialList,
-      query: query,
-      page: page,
-      per_page: per_page,
+      query,
+      page,
+      per_page,
     });
 
-    return CustomResponse(res, 200, false, "Materials fetched successfully", {
-      materials: items,
-      paginate,
-    });
+    return CustomResponse(
+      res,
+      200,
+      false,
+      "Materials fetched successfully",
+      {
+        materials: items,
+        paginate,
+      }
+    );
   } catch (error) {
     next(error);
   }

@@ -2806,32 +2806,75 @@ async function sendRatingNotification(order, rating) {
     msg = `Order #${Number(order.order_id) + 10800} rated ${rate} 😡. Please review the service quality and improve.`;
   }
 
-  if (order.toId) {
+  if (!title || !msg) {
+    throw new Error(`Invalid rating received: ${rate}`);
+  }
 
-    const supplier = await userModel.findById(order.toId);
+  if (!order.toId) {
+    throw new Error(`Supplier ID not found for order: ${order.order_id}`);
+  }
 
-    if (supplier) {
+  const supplier = await userModel.findById(order.toId);
 
-      console.log(`Sending notification to supplier: ${supplier._id}`);
+  if (!supplier) {
+    throw new Error(`Supplier not found: ${order.toId}`);
+  }
 
-      notificationFunction.sendNotifications(
+  if (!supplier.device_token) {
+    throw new Error(`Supplier FCM token missing: ${supplier._id}`);
+  }
+
+  let notificationSent = false;
+  let lastError = null;
+
+  // Retry maximum 3 times
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await notificationFunction.sendNotifications(
         supplier.device_token,
         order.fromId,
         title,
         msg,
-        '',
+        "",
         0,
-        '/past-order'
+        "/past-order"
       );
 
+      notificationSent = true;
+      break;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) {
+        const delay = attempt * 1000;
+        await new Promise((resolve) =>
+          setTimeout(resolve, delay)
+        );
+      }
     }
   }
-    await orderModel.updateOne(
+
+  if (!notificationSent) {
+    console.error(
+      "Rating notification failed after all retry attempts"
+    );
+
+    throw lastError;
+  }
+
+  // ONLY after successful FCM send
+  await orderModel.updateOne(
     { _id: order._id },
-    { $set: { ratingNotificationSent: true } }
+    {
+      $set: {
+        ratingNotificationSent: true,
+      },
+    }
+  );
+
+  console.log(
+    `ratingNotificationSent=true for order ${order.order_id}`
   );
 }
-
 
 router.put("/add-rating-reviews", async (req, res) => {
   try {
@@ -2883,23 +2926,22 @@ router.put("/add-rating-reviews", async (req, res) => {
     });
 
   } catch (error) {
-    error.isPublic = true;
-    next(error);
+    console.error("Error to send notification", error)
   }
 });
 
 router.post("/rating-notification", async (req, res, next) => {
-
   try {
-
     const { orderId, rating } = req.body;
 
-    const order = await orderModel.findOne({ order_id: orderId });
+    const order = await orderModel.findOne({
+      order_id: orderId,
+    });
 
     if (!order) {
       return res.status(404).json({
         error: true,
-        message: "Order not found"
+        message: "Order not found",
       });
     }
 
@@ -2907,18 +2949,13 @@ router.post("/rating-notification", async (req, res, next) => {
 
     return res.json({
       error: false,
-      message: "Notification sent"
+      message: "Notification sent successfully",
     });
 
   } catch (error) {
-    error.isPublic = true;
-    next(error);
+    console.error("Rating notification API error:", error);
   }
 });
-
-
-
-
 
 module.exports = router;
 

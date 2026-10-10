@@ -44,4 +44,10 @@ eventDatesSchema.pre("validate", function () {
   }
 });
 
+eventDatesSchema.index({ "eventDates.date": -1 });
+eventDatesSchema.index({ updatedAt: -1 });
+eventDatesSchema.index({ userId: 1 });
+eventDatesSchema.index({ pincode: 1 });
+eventDatesSchema.index({ "eventDates.eventTitle": 1 });
+
 module.exports = mongoose.model("event-dates", eventDatesSchema);

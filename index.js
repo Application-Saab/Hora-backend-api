@@ -899,7 +899,15 @@ app.post(
   },
 );
 
-app.use("/api/uploads", express.static(path.join(__dirname, "uploads")));
+app.use(
+  "/api/uploads",
+  express.static(path.join(__dirname, "uploads"), {
+    setHeaders: (res) => {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    },
+  })
+);
 
 app.post("/firebase/notification", async (req, res) => {
   try {

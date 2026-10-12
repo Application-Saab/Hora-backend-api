@@ -712,6 +712,7 @@ router.get("/searchByTag/v3/:tag", async (req, res, next) => {
     const page = Math.max(parseInt(req.query.page) || 1, 1);
     const theme = req.query.theme;
     const search = req.query.search?.trim();
+    const designType = req.query.designType?.trim();
 
     // ---- Sort (mirrors SearchSortBar sortOptions) ----
     // popularity | newArrival | lowToHigh | highToLow
@@ -727,8 +728,8 @@ router.get("/searchByTag/v3/:tag", async (req, res, next) => {
         ? Number(req.query.maxPrice)
         : null;
 
-    const cacheKey = `search_${tag}_${limit}_${page}_${minPrice ?? "noMin"}_${maxPrice ?? "noMax"}_${sortBy}_${theme || "all"}_${search || "noSearch"}`;
-
+    // const cacheKey = `search_${tag}_${limit}_${page}_${minPrice ?? "noMin"}_${maxPrice ?? "noMax"}_${sortBy}_${theme || "all"}_${search || "noSearch"}`;
+    const cacheKey = `search_${tag}_${limit}_${page}_${minPrice ?? "noMin"}_${maxPrice ?? "noMax"}_${sortBy}_${theme || "all"}_${search || "noSearch"}_${designType || "allDesigns"}`;
     const cachedData = cache.get(cacheKey);
     if (cachedData) {
       return res.json({ ...cachedData, cached: true });
@@ -776,6 +777,11 @@ router.get("/searchByTag/v3/:tag", async (req, res, next) => {
       } else {
         matchStage.name = searchCond.name;
       }
+    }
+
+    // Design Type filter
+    if (designType) {
+      matchStage[`designType.${designType}`] = true;
     }
 
     // ---- Sort stage ----

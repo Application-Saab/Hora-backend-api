@@ -336,7 +336,6 @@ const expireEmergencyOrders = async () => {
             isEmergencyOrder: true,
             status: 0,     
             order_status: 7,                          
-            processedBy: { $exists: true, $not: { $size: 0 } },
             isPaymentDone: false
         });
 
@@ -357,12 +356,30 @@ const expireEmergencyOrders = async () => {
                     order.order_status = 6; 
                     await order.save();
                     expiredCount++;
-                    console.log(`Emergency Order ID #${order.order_id} expired successfully.`);
+                  console.log(`Emergency Order ID #${order.order_id + 10800} expired successfully at: ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`);
                 }
             }
+            
+          if (
+            Array.isArray(order.processedBy) &&
+            order.processedBy.length === 0 &&
+            order.createdAt
+          ) {
+            const orderCreatedTime = new Date(order.createdAt).getTime();
+
+            if (currentTimeMs - orderCreatedTime >= EXPIRE_TIME_MS) {
+              order.order_status = 6;
+              await order.save();
+              expiredCount++;
+
+              console.log(
+                `Emergency Order ID #${order.order_id + 10800} expired successfully at: ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`
+              );
+            }
+          }
+
         }
 
-        console.log(`[Cron] Total emergency orders checked: ${emergencyOrders.length}, Expired: ${expiredCount}`);
     } catch (error) {
         console.error('Error while expiring emergency orders:', error);
     }
@@ -518,9 +535,7 @@ const processDailyRetentionSequences = async () => {
 
       const hostUploadDate = order.imageUploadCounts.AllImagesUploadedAt;
 
-      const link = order.folderDetails?.shortCode
-        ? `https://horaservices.com/eventcapsule/share/${order.folderDetails.shortCode}`
-        : order.orderWebLink;
+      const link = `https://horaservices.com`;
 
       if (hostPhone && hostUploadDate) {
         const hostDiffDays = getDaysDifference(hostUploadDate, today) + 1;

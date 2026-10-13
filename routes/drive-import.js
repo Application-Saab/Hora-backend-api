@@ -434,7 +434,13 @@ router.post("/add-order-drive-link", async (req, res, next) => {
     }
 
     if (!folder) {
-      folder = new FolderModel({ folderName, customerId, orderId, eventId, status: "processing", shortCode });
+      folder = new FolderModel({
+        folderName, customerId, orderId, eventId, status: "processing", shortCode, viewedBy: [
+          {
+            userId: customerId,
+            viewedAt: new Date()
+          }
+        ] });
       await folder.save();
     }
     else {

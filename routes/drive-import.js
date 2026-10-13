@@ -438,7 +438,7 @@ router.post("/add-order-drive-link", async (req, res, next) => {
         folderName, customerId, orderId, eventId, status: "processing", shortCode, viewedBy: [
           {
             userId: customerId,
-            viewedAt: new Date()
+            viewedAt: null
           }
         ] });
       await folder.save();

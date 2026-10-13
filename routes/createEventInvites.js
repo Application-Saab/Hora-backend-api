@@ -696,6 +696,7 @@ router.get("/event-invites-and-capsules/:userId", async (req, res, next) => {
                       $project: {
                         _id: 0,
                         eventName: 1,
+                        orderWebLink: 1,
                       },
                     },
                   ],
@@ -713,6 +714,12 @@ router.get("/event-invites-and-capsules/:userId", async (req, res, next) => {
                       "",
                     ],
                   },
+                  orderWebLink: {
+                    $ifNull: [
+                      { $arrayElemAt: ["$orderData.orderWebLink", 0] },
+                      "",
+                    ],
+                  },
                 },
               },
 
@@ -725,6 +732,7 @@ router.get("/event-invites-and-capsules/:userId", async (req, res, next) => {
                   customerId: 1,
                   viewedBy: 1,
                   orderEventName: 1,
+                  orderWebLink: 1, 
                   folderName: 1,
                 },
               },
@@ -776,14 +784,7 @@ router.get("/event-invites-and-capsules/:userId", async (req, res, next) => {
 
                       dataType: "capsule",
 
-                      capsuleUrl: {
-                        $concat: [
-                          "https://horaservices.com/weblink-gallery?folderName=",
-                          "$$folder.folderName",
-                          "&customerId=",
-                          "$$folder.customerId",
-                        ],
-                      },
+                      capsuleUrl: "$$folder.orderWebLink",
                     },
                   },
                 },
@@ -878,6 +879,7 @@ router.get("/event-invites-and-capsules/:userId", async (req, res, next) => {
                 $project: {
                   _id: 0,
                   eventName: 1,
+                  orderWebLink: 1,
                 },
               },
             ],
@@ -892,6 +894,12 @@ router.get("/event-invites-and-capsules/:userId", async (req, res, next) => {
                 {
                   $arrayElemAt: ["$orderData.eventName", 0],
                 },
+                "",
+              ],
+            },
+            orderWebLink: {
+              $ifNull: [
+                { $arrayElemAt: ["$orderData.orderWebLink", 0] },
                 "",
               ],
             },
@@ -1004,14 +1012,7 @@ router.get("/event-invites-and-capsules/:userId", async (req, res, next) => {
             dataType: 1,
             guests: 1,
             createdAt: 1,
-            capsuleUrl: {
-              $concat: [
-                "https://horaservices.com/weblink-gallery?folderName=",
-                "$folderName",
-                "&customerId=",
-                "$customerId",
-              ],
-            },
+            capsuleUrl: "$orderWebLink",
           },
         },
       ]),

@@ -604,8 +604,19 @@ const alreadyViewed = folder.viewedBy?.some(
         { new: true }
       );
     } else {
-  updatedFolder = folder;
-}
+      updatedFolder = await Folder.findOneAndUpdate(
+        {
+          _id: mainFolderId,
+          "viewedBy.userId": userId,
+        },
+        {
+          $set: {
+            "viewedBy.$.viewedAt": new Date(),
+          },
+        },
+        { new: true }
+      );
+    }
 
     return res.json({
       success: true,

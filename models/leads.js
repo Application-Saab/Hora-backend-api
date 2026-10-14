@@ -20,7 +20,8 @@ const leadSchema = new mongoose.Schema(
         lastSyncedRow: {
             type: Number,
             default: 0
-        }
+        },
+        agent_phone: { type: String },
     },
     {
         timestamps: true,

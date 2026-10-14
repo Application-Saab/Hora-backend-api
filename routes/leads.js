@@ -57,6 +57,9 @@ async function syncLeadsFromSheet() {
             const rawAgent = row[1] || "";
             const rawSource = row[2] || "";
             const rawDate = row[3] || null;
+            const raweventDate = row[4] || null;
+            const rawOrderSummary = row[5] || "";
+            const rawEventDetails = row[6] || "";
 
             if (!rawPhone && !rawAgent) continue;
 
@@ -65,6 +68,9 @@ async function syncLeadsFromSheet() {
                 agentName: String(rawAgent).trim(),
                 source: String(rawSource).trim(),
                 date: String(rawDate).trim(),
+                eventDate: String(raweventDate).trim(),
+                orderSummary: String(rawOrderSummary).trim(),
+                eventDetails: String(rawEventDetails).trim(),
                 lastSyncedRow: 0
             });
         }
@@ -95,7 +101,73 @@ async function syncLeadsFromSheet() {
 }
 // syncLeadsFromSheet();
 
-const fetchAnalyticsFast = async (groupByField, startDate, endDate) => {
+
+const fetchAnalyticsFast = async (groupByField, startDate, endDate, source) => {
+    const normalize = (value) =>
+        String(value || "")
+            .trim()
+            .toLowerCase()
+            .replace(/\s+/g, " ");
+
+    const parseStartDate = (dateStr) => {
+        if (!dateStr) return null;
+
+        const value = String(dateStr).trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+
+        const date = new Date(`${value}T00:00:00.000Z`);
+        return isNaN(date.getTime()) ? null : date;
+    };
+
+    const parseEndDate = (dateStr) => {
+        if (!dateStr) return null;
+
+        const value = String(dateStr).trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+
+        const date = new Date(`${value}T23:59:59.999Z`);
+        return isNaN(date.getTime()) ? null : date;
+    };
+
+    const parseDDMMYYYY = (dateStr) => {
+        if (!dateStr) return null;
+
+        const parts = String(dateStr).trim().split("/");
+        if (parts.length !== 3) return null;
+
+        const [day, month, year] = parts.map(Number);
+
+        if (!day || !month || !year) return null;
+
+        const date = new Date(Date.UTC(year, month - 1, day));
+
+        if (
+            date.getUTCDate() !== day ||
+            date.getUTCMonth() !== month - 1 ||
+            date.getUTCFullYear() !== year
+        ) {
+            return null;
+        }
+
+        return date;
+    };
+
+    const start = parseStartDate(startDate);
+    const end = parseEndDate(endDate);
+
+    if (startDate && !start) {
+        throw new Error(`Invalid startDate: ${startDate}`);
+    }
+
+    if (endDate && !end) {
+        throw new Error(`Invalid endDate: ${endDate}`);
+    }
+
+    if (start && end && start > end) {
+        throw new Error("startDate cannot be after endDate");
+    }
+
+    // 1. Build Lead query
     const leadQuery = {
         phoneNumber: {
             $exists: true,
@@ -111,31 +183,79 @@ const fetchAnalyticsFast = async (groupByField, startDate, endDate) => {
         }
     };
 
-    if (startDate || endDate) {
-        leadQuery.date = {};
+    // 2. Filter selected sources
+    if (source && groupByField === "source") {
+        const selectedSources = (
+            Array.isArray(source) ? source : [source]
+        )
+            .flatMap((item) => String(item).split(","))
+            .map((item) => item.trim())
+            .filter(Boolean);
 
-        if (startDate) {
-            const start = new Date(startDate);
-            start.setHours(0, 0, 0, 0);
-
-            leadQuery.date.$gte = start;
-        }
-
-        if (endDate) {
-            const end = new Date(endDate);
-            end.setHours(23, 59, 59, 999);
-
-            leadQuery.date.$lte = end;
+        if (selectedSources.length === 1) {
+            leadQuery.source = selectedSources[0];
+        } else if (selectedSources.length > 1) {
+            leadQuery.source = { $in: selectedSources };
         }
     }
 
-    const leads = await Lead.find(
+    // 3. Fetch leads
+    let leads = await Lead.find(
         leadQuery,
         {
-            phoneNumber: 1,
-            [groupByField]: 1
+            agentName: 1,
+            [groupByField]: 1,
+            date: 1
         }
     ).lean();
+
+    // 4. Filter leads by Google Sheet date
+    if (start || end) {
+        leads = leads.filter((lead) => {
+            const leadDate = parseDDMMYYYY(lead.date);
+
+            if (!leadDate) return false;
+            if (start && leadDate < start) return false;
+            if (end && leadDate > end) return false;
+
+            return true;
+        });
+    }
+
+    // 5. Initialize source/field statistics
+    const statsMap = {};
+    let totalLeadsCount = 0;
+
+    // Normalized agent -> source names
+    const agentSources = new Map();
+
+    for (const lead of leads) {
+        const groupName = String(
+            lead[groupByField] || "Unknown"
+        ).trim();
+
+        const sourceKey = normalize(groupName);
+        const agentName = normalize(lead.agentName);
+
+        if (!statsMap[sourceKey]) {
+            statsMap[sourceKey] = {
+                name: groupName,
+                totalLeadsAssigned: 0,
+                orderConfirmed: 0
+            };
+        }
+
+        statsMap[sourceKey].totalLeadsAssigned++;
+        totalLeadsCount++;
+
+        if (agentName) {
+            if (!agentSources.has(agentName)) {
+                agentSources.set(agentName, new Set());
+            }
+
+            agentSources.get(agentName).add(sourceKey);
+        }
+    }
 
     if (!leads.length) {
         return {
@@ -144,79 +264,82 @@ const fetchAnalyticsFast = async (groupByField, startDate, endDate) => {
         };
     }
 
-    const leadPhones = [
-        ...new Set(
-            leads
-                .map((lead) => sanitizePhone(lead.phoneNumber))
-                .filter(Boolean)
-        )
-    ];
+    // 6. Fetch confirmed orders
+    const orderQuery = {
+        order_taken_by: {
+            $exists: true,
+            $nin: ["", null]
+        },
+        status: 1
+    };
+
+    if (start || end) {
+        orderQuery.createdAt = {};
+
+        if (start) {
+            orderQuery.createdAt.$gte = start;
+        }
+
+        if (end) {
+            orderQuery.createdAt.$lte = end;
+        }
+    }
 
     const matchingOrders = await Order.find(
+        orderQuery,
         {
-            phone_no: {
-                $exists: true,
-                $nin: ["", null]
-            }
-        },
-        {
-            phone_no: 1
+            order_taken_by: 1,
+            createdAt: 1
         }
     ).lean();
 
-    const orderPhoneSet = new Set();
-
+    // 7. Match orders with agents
     for (const order of matchingOrders) {
-        const phone = sanitizePhone(order.phone_no);
+        const orderAgent = normalize(order.order_taken_by);
 
-        if (phone && leadPhones.includes(phone)) {
-            orderPhoneSet.add(phone);
+        if (!orderAgent) continue;
+
+        // Exact normalized match first
+        let matchedSources = agentSources.get(orderAgent);
+
+        // Partial match only when exact match is unavailable
+        if (!matchedSources) {
+            const partialSources = new Set();
+
+            for (const [leadAgent, sources] of agentSources) {
+                if (
+                    leadAgent.includes(orderAgent) ||
+                    orderAgent.includes(leadAgent)
+                ) {
+                    for (const sourceKey of sources) {
+                        partialSources.add(sourceKey);
+                    }
+                }
+            }
+
+            matchedSources = partialSources;
+        }
+
+        // Count once per order for each matched source
+        for (const sourceKey of matchedSources) {
+            if (statsMap[sourceKey]) {
+                statsMap[sourceKey].orderConfirmed++;
+            }
         }
     }
 
-    const statsMap = {};
-    let totalLeadsCount = 0;
-
-    for (const lead of leads) {
-        const groupName = lead[groupByField] || "Unknown";
-
-        const cleanLeadPhone = sanitizePhone(
-            lead.phoneNumber
-        );
-
-        if (!statsMap[groupName]) {
-            statsMap[groupName] = {
-                totalLeadsAssigned: 0,
-                orderConfirmed: 0
-            };
-        }
-
-        statsMap[groupName].totalLeadsAssigned += 1;
-        totalLeadsCount += 1;
-
-        if (
-            cleanLeadPhone &&
-            orderPhoneSet.has(cleanLeadPhone)
-        ) {
-            statsMap[groupName].orderConfirmed += 1;
-        }
-    }
-
-    // ================= FINAL RESPONSE =================
+    // 8. Prepare final response
     const resultList = Object.keys(statsMap).map((key) => {
-        const total =
-            statsMap[key].totalLeadsAssigned;
+        const item = statsMap[key];
+        const total = item.totalLeadsAssigned;
+        const confirmed = item.orderConfirmed;
 
-        const confirmed =
-            statsMap[key].orderConfirmed;
-
-        const ratio =
-            total > 0
-                ? ((confirmed / total) * 100).toFixed(2)
-                : "0.00";
+        const ratio = total > 0
+            ? ((confirmed / total) * 100).toFixed(2)
+            : "0.00";
 
         return {
-            name: key,
+            name: item.name,
             totalLeadsAssigned: total,
             orderConfirmed: confirmed,
             conversionRatio: `${ratio}%`
@@ -224,9 +347,7 @@ const fetchAnalyticsFast = async (groupByField, startDate, endDate) => {
     });
 
     resultList.sort(
-        (a, b) =>
-            b.totalLeadsAssigned -
-            a.totalLeadsAssigned
+        (a, b) => b.totalLeadsAssigned - a.totalLeadsAssigned
     );
 
     return {
@@ -234,6 +355,7 @@ const fetchAnalyticsFast = async (groupByField, startDate, endDate) => {
         list: resultList
     };
 };
+
 
 const fetchAgentAnalyticsFast = async (groupByField, startDate, endDate) => {
 
@@ -277,7 +399,8 @@ const fetchAgentAnalyticsFast = async (groupByField, startDate, endDate) => {
         source: { $exists: true, $ne: "SYSTEM_TRACKER" }
     };
 
-    let leads = await Lead.find(leadQuery, { agentName: 1, [groupByField]: 1, date: 1 }).lean();
+    let leads = await Lead.find(leadQuery, {
+        agentName: 1, [groupByField]: 1, date: 1, eventDetails: 1, orderSummary: 1 }).lean();
 
     // In-memory Date range filter for Leads ("DD/MM/YYYY")
     if (start || end) {
@@ -300,9 +423,25 @@ const fetchAgentAnalyticsFast = async (groupByField, startDate, endDate) => {
         const key = normalize(rawName);
 
         if (!statsMap[key]) {
-            statsMap[key] = { displayName: rawName, totalLeadsAssigned: 0, orderConfirmed: 0 };
+            statsMap[key] = {
+                displayName: rawName, totalLeadsAssigned: 0, orderConfirmed: 0, eventDetailsCount: 0, orderSummaryCount: 0 };
         }
         statsMap[key].totalLeadsAssigned++;
+
+
+        if (
+            lead.eventDetails != null &&
+            String(lead.eventDetails).trim() !== ""
+        ) {
+            statsMap[key].eventDetailsCount++;
+        }
+
+        if (
+            lead.orderSummary != null &&
+            String(lead.orderSummary).trim() !== ""
+        ) {
+            statsMap[key].orderSummaryCount++;
+        }
     }
 
     // 4. Fetch Orders
@@ -365,7 +504,9 @@ const fetchAgentAnalyticsFast = async (groupByField, startDate, endDate) => {
             name: data.displayName,
             totalLeadsAssigned: data.totalLeadsAssigned,
             orderConfirmed: data.orderConfirmed,
-            conversionRatio: `${conversionRatio}%`
+            eventDetailsCount: data.eventDetailsCount,
+            orderSummaryCount: data.orderSummaryCount,
+            conversionRatio: `${conversionRatio}%`,
         };
     });
 
@@ -413,12 +554,18 @@ router.get("/agent-analytics",async (req, res) => {
 
 router.get("/source-analytics", async (req, res) => {
     try {
-        const { startDate, endDate } = req.query;
+        const { startDate, endDate, sources, source } = req.query;
+
+
+        const selectedSources = sources || source;
+
+
 
         const analyticsData = await fetchAnalyticsFast(
             "source",
             startDate,
-            endDate
+            endDate,
+            selectedSources,
         );
 
         return res.status(200).json({
@@ -441,6 +588,340 @@ router.get("/source-analytics", async (req, res) => {
         });
     }
 });
+
+router.get("/leads", async (req, res) => {
+    try {
+        const {
+            page = 1,
+            limit = 10,
+            name = "",
+            phoneNumber = "",
+            source = "",
+            sources = "",
+            startDate,
+            endDate,
+            startEventDate,
+            endEventDate
+        } = req.query;
+
+        const currentPage = Math.max(1, parseInt(page, 10) || 1);
+        const pageLimit = Math.min(100, Math.max(1, parseInt(limit, 10) || 10));
+        const skip = (currentPage - 1) * pageLimit;
+
+        const escapeRegex = (value) =>
+            String(value).trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+        const query = {
+            phoneNumber: {
+                $exists: true,
+                $nin: ["", "SYNC_TRACKER_ROW"]
+            },
+            agentName: {
+                $exists: true,
+                $ne: "SYSTEM_TRACKER"
+            },
+            source: {
+                $exists: true,
+                $ne: "SYSTEM_TRACKER"
+            }
+        };
+
+        if (String(name).trim()) {
+            query.agentName = {
+                $regex: escapeRegex(name),
+                $options: "i"
+            };
+        }
+
+        if (String(phoneNumber).trim()) {
+            query.phoneNumber = {
+                $exists: true,
+                $nin: ["", "SYNC_TRACKER_ROW"],
+                $regex: escapeRegex(phoneNumber),
+                $options: "i"
+            };
+        }
+
+        if (String(sources).trim()) {
+            const selectedSourceList = String(sources)
+                .split(",")
+                .map((item) => item.trim())
+                .filter(Boolean);
+
+            if (selectedSourceList.length > 0) {
+                query.source = {
+                    $nin: ["SYSTEM_TRACKER"],
+                    $in: selectedSourceList.map(
+                        (item) => new RegExp(
+                            `^${escapeRegex(item)}$`,
+                            "i"
+                        )
+                    )
+                };
+            }
+        } else if (String(source).trim()) {
+            query.source = {
+                $ne: "SYSTEM_TRACKER",
+                $regex: escapeRegex(source),
+                $options: "i"
+            };
+        }
+
+        const parseDate = (value, endOfDay = false) => {
+            if (!value) return null;
+
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+                return undefined;
+            }
+
+            const date = new Date(
+                `${value}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}Z`
+            );
+
+            if (
+                isNaN(date.getTime()) ||
+                date.toISOString().slice(0, 10) !== value
+            ) {
+                return undefined;
+            }
+
+            return date;
+        };
+
+        const start = parseDate(startDate);
+        const end = parseDate(endDate, true);
+        const eventStart = parseDate(startEventDate);
+        const eventEnd = parseDate(endEventDate, true);
+
+        if (
+            start === undefined ||
+            end === undefined ||
+            eventStart === undefined ||
+            eventEnd === undefined
+        ) {
+            return res.status(400).json({
+                error: true,
+                message: "Invalid date. Use YYYY-MM-DD."
+            });
+        }
+
+        if (start && end && start > end) {
+            return res.status(400).json({
+                error: true,
+                message: "startDate cannot be after endDate."
+            });
+        }
+
+        if (eventStart && eventEnd && eventStart > eventEnd) {
+            return res.status(400).json({
+                error: true,
+                message: "startEventDate cannot be after endEventDate."
+            });
+        }
+
+        const pipeline = [
+            { $match: query }
+        ];
+
+        // Convert date strings from DD/MM/YYYY into MongoDB dates
+        if (start || end || eventStart || eventEnd) {
+            pipeline.push({
+                $addFields: {
+                    parsedLeadDate: {
+                        $dateFromString: {
+                            dateString: "$date",
+                            format: "%d/%m/%Y",
+                            onError: null,
+                            onNull: null
+                        }
+                    },
+                    parsedEventDate: {
+                        $dateFromString: {
+                            dateString: "$eventDate",
+                            format: "%d/%m/%Y",
+                            onError: null,
+                            onNull: null
+                        }
+                    }
+                }
+            });
+
+            const dateConditions = {};
+
+            if (start || end) {
+                dateConditions.parsedLeadDate = {};
+
+                if (start) dateConditions.parsedLeadDate.$gte = start;
+                if (end) dateConditions.parsedLeadDate.$lte = end;
+            }
+
+            if (eventStart || eventEnd) {
+                dateConditions.parsedEventDate = {};
+
+                if (eventStart) {
+                    dateConditions.parsedEventDate.$gte = eventStart;
+                }
+
+                if (eventEnd) {
+                    dateConditions.parsedEventDate.$lte = eventEnd;
+                }
+            }
+
+            pipeline.push({
+                $match: dateConditions
+            });
+        }
+
+        // Pagination and count
+        pipeline.push({
+            $facet: {
+                data: [
+                    { $sort: { _id: -1 } },
+                    { $skip: skip },
+                    { $limit: pageLimit },
+                    {
+                        $project: {
+                            phoneNumber: 1,
+                            agentName: 1,
+                            source: 1,
+                            date: 1,
+                            eventDate: 1,
+                            orderSummary: 1,
+                            eventDetails:1,
+                        }
+                    }
+                ],
+                total: [
+                    { $count: "count" }
+                ]
+            }
+        });
+
+        const [result] = await Lead.aggregate(pipeline);
+
+        const leads = result?.data || [];
+        const totalRecords = result?.total?.[0]?.count || 0;
+
+        const sanitizePhone = (phone) => {
+            const cleaned = String(phone || "").replace(/\D/g, "");
+            return cleaned.length >= 10
+                ? cleaned.slice(-10)
+                : cleaned;
+        };
+
+        const leadPhones = [
+            ...new Set(
+                leads
+                    .map((lead) => sanitizePhone(lead.phoneNumber))
+                    .filter(Boolean)
+            )
+        ];
+
+        const orderedPhones = new Set();
+
+        if (leadPhones.length > 0) {
+            const leadPhoneSet = new Set(leadPhones);
+
+            const matchingOrders = await Order.find({
+                status: 1,
+                phone_no: {
+                    $exists: true,
+                    $nin: ["", null]
+                }
+            })
+                .select("phone_no")
+                .lean();
+
+            for (const order of matchingOrders) {
+                const orderPhone = sanitizePhone(order.phone_no);
+
+                if (orderPhone && leadPhoneSet.has(orderPhone)) {
+                    orderedPhones.add(orderPhone);
+                }
+            }
+        }
+
+        const data = leads.map((lead) => {
+            const phone = sanitizePhone(lead.phoneNumber);
+
+            return {
+                ...lead,
+                orderStatus:
+                    phone && orderedPhones.has(phone) ? "Yes" : "No"
+            };
+        });
+
+        const totalPages = Math.ceil(totalRecords / pageLimit);
+
+        return res.status(200).json({
+            error: false,
+            message: "Leads fetched successfully",
+            pagination: {
+                currentPage,
+                limit: pageLimit,
+                totalRecords,
+                totalPages,
+                hasNextPage: currentPage < totalPages,
+                hasPrevPage: currentPage > 1
+            },
+            data
+        });
+    } catch (error) {
+        console.error("Error fetching leads:", error);
+
+        return res.status(500).json({
+            error: true,
+            message: "Server error fetching leads",
+            details: error.message
+        });
+    }
+});
+
+
+
+router.get("/unique-sources", async (req, res) => {
+    try {
+        const sources = await Lead.aggregate([
+            {
+                $match: {
+                    source: { $exists: true, $ne: null, $ne: "" },
+                },
+            },
+            {
+                $group: {
+                    _id: { $trim: { input: "$source" } },
+                },
+            },
+            {
+                $match: {
+                    _id: { $ne: "" },
+                },
+            },
+            {
+                $sort: { _id: 1 },
+            },
+            {
+                $project: {
+                    _id: 0,
+                    name: "$_id",
+                },
+            },
+        ]);
+
+        return res.status(200).json({
+            error: false,
+            data: sources,
+        });
+    } catch (error) {
+        console.error("Unique sources error:", error);
+        return res.status(500).json({
+            error: true,
+            message: "Failed to fetch unique sources",
+        });
+    }
+});
+
+
 
 module.exports = {
     router,

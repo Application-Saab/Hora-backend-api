@@ -21,6 +21,15 @@ const leadSchema = new mongoose.Schema(
             type: Number,
             default: 0
         },
+        eventDate: {
+            type: String,
+        },
+        orderSummary:{
+            type:String,
+        },
+        eventDetails:{
+            type:String,
+        },
         agent_phone: { type: String },
     },
     {

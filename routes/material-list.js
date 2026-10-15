@@ -84,57 +84,42 @@ router.post("/admin_material_list", async (req, res, next) => {
       page,
       per_page,
       materialName,
-      type,
+      selectedMaterialNames,
+      types,
+      specsList,
       materialCategory,
       materialStatus,
-      specs,
     } = req.body;
 
     let query = {};
 
-    // Search in materialName + type + specs
     if (materialName) {
       query.$or = [
-        {
-          materialName: {
-            $regex: materialName,
-            $options: "i",
-          },
-        },
-        {
-          type: {
-            $regex: materialName,
-            $options: "i",
-          },
-        },
-        {
-          specs: {
-            $regex: materialName,
-            $options: "i",
-          },
-        },
+        { materialName: { $regex: materialName, $options: "i" } },
+        { type: { $regex: materialName, $options: "i" } },
+        { specs: { $regex: materialName, $options: "i" } },
       ];
     }
 
-    // Filter by type
-    if (type) {
-      query.type = type;
+    if (
+      Array.isArray(selectedMaterialNames) &&
+      selectedMaterialNames.length > 0
+    ) {
+      query.materialName = { $in: selectedMaterialNames };
     }
 
-    // Filter by category
+    if (Array.isArray(types) && types.length > 0) {
+      query.type = { $in: types };
+    }
+
+    if (Array.isArray(specsList) && specsList.length > 0) {
+      query.specs = { $in: specsList };
+    }
+
     if (materialCategory) {
       query.materialCategory = materialCategory;
     }
 
-    // Filter by specs
-    if (specs) {
-      query.specs = {
-        $regex: specs,
-        $options: "i",
-      };
-    }
-
-    // Filter by status
     if (materialStatus !== undefined && materialStatus !== "") {
       query.materialStatus = parseInt(materialStatus);
     }
@@ -146,15 +131,33 @@ router.post("/admin_material_list", async (req, res, next) => {
       per_page,
     });
 
+    return CustomResponse(res, 200, false, "Materials fetched successfully", {
+      materials: items,
+      paginate,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/material_filter_options", async (req, res, next) => {
+  try {
+    const [materialNames, types, specsList] = await Promise.all([
+      MaterialList.distinct("materialName", { materialName: { $ne: "" } }),
+      MaterialList.distinct("type", { type: { $ne: "" } }),
+      MaterialList.distinct("specs", { specs: { $ne: "" } }),
+    ]);
+
     return CustomResponse(
       res,
       200,
       false,
-      "Materials fetched successfully",
+      "Filter options fetched successfully",
       {
-        materials: items,
-        paginate,
-      }
+        materialNames: materialNames.filter(Boolean).sort(),
+        types: types.filter(Boolean).sort(),
+        specs: specsList.filter(Boolean).sort(),
+      },
     );
   } catch (error) {
     next(error);

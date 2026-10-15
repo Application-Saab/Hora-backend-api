@@ -339,7 +339,7 @@ router.get("/venue-details/:id", async (req, res, next) => {
     // ✅ Fetch venue
     const venue = await Venues.findById(id)
       .select(
-        "userId venueType venueName location googleMapLink venueImageUrl subFolders createdAt termsAndConditionsHtml",
+        "userId venueType venueName location googleMapLink venueImageUrl subFolders createdAt termsAndConditionsHtml faqs",
       )
       .lean();
 

@@ -776,14 +776,23 @@ router.post('/update_order_status', async (req, res, next) => {
       const firstYesProcessed = order.processedBy?.find((item) => item?.action === "yes" && item?.time); 
       const emergencyStartTime = firstYesProcessed?.time;
 
+
+      const isProcessedByEmpty =
+          Array.isArray(order.processedBy) &&
+          order.processedBy.length === 0;
+
       // Emergency order expiry check
       const isEmergencyExpired =
           order.isEmergencyOrder === true &&
           order.status === 0 &&
-          emergencyStartTime &&
-          Date.now() - new Date(emergencyStartTime).getTime() >= 30 * 60 * 1000;
+        ((emergencyStartTime &&
+          Date.now() - new Date(emergencyStartTime).getTime() >= 30 * 60 * 1000) ||
+        (isProcessedByEmpty &&
+          order.createdAt &&
+              Date.now() - new Date(order.createdAt).getTime() >= 30 * 60 * 1000))
 
       if (isEmergencyExpired) {
+          console.log(`order expire ${order.order_id + 10800}`)
           order.order_status = 6;
           await order.save();
 

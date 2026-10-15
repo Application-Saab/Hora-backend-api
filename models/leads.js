@@ -21,6 +21,7 @@ const leadSchema = new mongoose.Schema(
             type: Number,
             default: 0
         },
+<<<<<<< HEAD
         eventDate: {
             type: String,
         },
@@ -30,6 +31,9 @@ const leadSchema = new mongoose.Schema(
         eventDetails:{
             type:String,
         },
+=======
+        agent_phone: { type: String },
+>>>>>>> a7ba787718885a3261d42ae654558ebe46ab00bd
     },
     {
         timestamps: true,

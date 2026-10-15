@@ -4,6 +4,8 @@ const fs = require("fs");
 const express = require("express");
 const router = express.Router();
 const Order = require("../models/order");
+const CallLog = require('../models/callLogs');
+const Team = require("../models/team");
 
 const credentials = JSON.parse(fs.readFileSync("google-sheet.json", "utf-8"));
 const { client_email, private_key } = credentials;
@@ -50,6 +52,19 @@ async function syncLeadsFromSheet() {
 
         console.log(`[Cron] Found ${newRows.length} new rows. Processing...`);
 
+
+        const teamMembers = await Team.find({})
+            .select("name number")
+            .lean();
+
+        console.log("[Cron] Team members fetched:", teamMembers.length);
+
+        const normalizeName = (name) =>
+            String(name || "")
+                .trim()
+                .toLowerCase()
+                .replace(/\s+/g, " ");
+
         const leadsToInsert = [];
 
         for (const row of newRows) {
@@ -63,21 +78,52 @@ async function syncLeadsFromSheet() {
 
             if (!rawPhone && !rawAgent) continue;
 
+            const agentName = String(rawAgent).trim();
+            const normalizedAgent = normalizeName(agentName);
+
+            // 1. Exact full-name match
+            let teamMember = teamMembers.find(
+                (member) =>
+                    normalizeName(member.name) === normalizedAgent
+            );
+
+            // 2. Partial name match, only if exact match is unavailable
+            if (!teamMember && normalizedAgent) {
+                teamMember = teamMembers.find((member) => {
+                    const teamName = normalizeName(member.name);
+
+                    return (
+                        teamName.startsWith(normalizedAgent + " ") ||
+                        normalizedAgent.startsWith(teamName + " ")
+                    );
+                });
+            }
+
+            const agentPhone =
+                teamMember?.number
+                    ? String(teamMember.number)
+                    : null;
+
             leadsToInsert.push({
                 phoneNumber: sanitizePhone(rawPhone),
-                agentName: String(rawAgent).trim(),
+                agentName,
                 source: String(rawSource).trim(),
                 date: String(rawDate).trim(),
                 eventDate: String(raweventDate).trim(),
                 orderSummary: String(rawOrderSummary).trim(),
                 eventDetails: String(rawEventDetails).trim(),
+                agent_phone: agentPhone,
                 lastSyncedRow: 0
             });
         }
 
+        console.log("[Cron] Prepared leads:", leadsToInsert.length);
+
         if (leadsToInsert.length > 0) {
-            await Lead.insertMany(leadsToInsert);
+            await Lead.insertMany(leadsToInsert, { ordered: false });
+            console.log("[Cron] Leads inserted successfully");
         }
+
 
         const newLastRow = startRow + newRows.length - 1;
 
@@ -589,7 +635,7 @@ router.get("/source-analytics", async (req, res) => {
     }
 });
 
-router.get("/leads", async (req, res) => {
+router.get("/admin-leads", async (req, res) => {
     try {
         const {
             page = 1,
@@ -868,12 +914,110 @@ router.get("/leads", async (req, res) => {
         });
     } catch (error) {
         console.error("Error fetching leads:", error);
+        
 
         return res.status(500).json({
             error: true,
             message: "Server error fetching leads",
             details: error.message
         });
+    }
+});
+
+router.get('/leads', async (req, res) => {
+    try {
+        const { agent_phone } = req.query;
+
+        let query = {};
+        if (agent_phone) {
+            query.agent_phone = agent_phone;
+        }
+
+        const leads = await Lead.find(query).lean();
+
+        const leadsWithHistory = await Promise.all(
+            leads.map(async (lead) => {
+                const logs = await CallLog.find({ lead_id: lead._id })
+                    .sort({ started_at: -1 })
+                    .lean();
+
+                return {
+                    id: lead._id.toString(),
+                    name: lead.name || lead.agentName || "",
+                    phone: lead.phone || lead.phoneNumber || "",
+                    status: lead.status,
+                    source: lead.source,
+                    call_logs: logs.map(log => ({
+                        id: log._id.toString(),
+                        client_call_id: log.client_call_id,
+                        started_at: log.started_at,
+                        duration_seconds: log.duration_seconds,
+                        status: log.status,
+                        direction: log.direction,
+                    }))
+                };
+            })
+        );
+
+        return res.status(200).json({ data: leadsWithHistory });
+    } catch (error) {
+        console.error('Error fetching leads:', error);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+});
+
+
+router.post('/call-logs', async (req, res) => {
+    try {
+        const {
+            client_call_id,
+            agent_id,
+            agent_phone,
+            lead_id,
+            phone,
+            direction,
+            status,
+            started_at,
+            ended_at,
+            duration_seconds,
+            placed_from_app,
+            sim
+        } = req.body;
+
+        const existingLog = await CallLog.findOne({ client_call_id });
+        if (existingLog) {
+            return res.status(409).json({ message: 'Call log already exists' });
+        }
+
+        const newCallLog = new CallLog({
+            client_call_id,
+            agent_id,
+            agent_phone,
+            lead_id,
+            phone,
+            direction,
+            status,
+            started_at,
+            ended_at,
+            duration_seconds,
+            placed_from_app,
+            sim
+        });
+
+        await newCallLog.save();
+
+        return res.status(201).json({
+            success: true,
+            message: 'Call log saved successfully',
+            data: newCallLog
+        });
+
+    } catch (error) {
+        if (error.code === 11000) {
+            return res.status(409).json({ message: 'Duplicate client_call_id' });
+        }
+        console.error('Error saving call log:', error);
+        return res.status(500).json({ message: 'Internal server error' });
     }
 });
 

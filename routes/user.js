@@ -199,7 +199,7 @@ router.post("/otp_generate", async (req, res, next) => {
 });
 
 router.post("/otp_verify", async (req, res, next) => {
-  const { phone, otp, role } = req.body;
+  const { phone, otp, role, isTeamMember = false } = req.body;
 
   if (!phone) {
     return res.json({
@@ -232,6 +232,7 @@ router.post("/otp_verify", async (req, res, next) => {
     // Skip OTP verification
     // For Wonderland International users
     if (user?.fromWonderlandInternational === true) {
+      if(isTeamMember == false) {
       if (role !== user.role) {
         return res.status(503).json({
           error: true,
@@ -241,6 +242,7 @@ router.post("/otp_verify", async (req, res, next) => {
           )} login. Please use a different number.`,
         });
       }
+    }
 
       // Check account blocked
       if (user.status === 0 && user.role !== "supplier") {
@@ -281,6 +283,7 @@ router.post("/otp_verify", async (req, res, next) => {
 
     // MASTER OTP
     if (otp === "1234") {
+      if (isTeamMember == false) {
       if (role !== user.role) {
         return res.status(503).json({
           error: true,
@@ -290,6 +293,7 @@ router.post("/otp_verify", async (req, res, next) => {
           )} login. Please use a different number.`,
         });
       }
+    }
 
       // Check blocked account
       if (user.status === 0 && user.role !== "supplier") {
@@ -327,6 +331,7 @@ router.post("/otp_verify", async (req, res, next) => {
     }
 
     // Role validation
+    if (isTeamMember == false){
     if (role !== user.role) {
       return res.status(503).json({
         error: true,
@@ -336,6 +341,7 @@ router.post("/otp_verify", async (req, res, next) => {
         )} login. Please use a different number.`,
       });
     }
+  }
 
     // Check blocked account
     if (user.status === 0 && user.role !== "supplier") {

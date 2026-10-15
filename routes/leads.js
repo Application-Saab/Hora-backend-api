@@ -1067,6 +1067,213 @@ router.get("/unique-sources", async (req, res) => {
 
 
 
+
+// 1. ADD / CREATE LEAD API
+router.post('/upsert-customer-lead', async (req, res) => {
+    try {
+        const {
+            "customerNumber": customerPhone,
+            "agentName": agentName,
+            "source": source,
+            "customerCreatedDate": customerCreatedDate
+        } = req.body;
+
+        if (!customerPhone) {
+            return res.status(400).json({ success: false, message: "Customer Phone no. is required" });
+        }
+
+        const lead = await Lead.findOneAndUpdate(
+            { phoneNumber: customerPhone }, 
+            {
+                $set: {
+                    phoneNumber: customerPhone,
+                    agentName: agentName,
+                    source: source,
+                    date: customerCreatedDate
+                }
+            },
+            {
+                new: true,         
+                upsert: true,      
+                runValidators: true, 
+                setDefaultsOnInsert: true 
+            }
+        );
+
+        res.status(200).json({
+            success: true,
+            message: "Lead processed successfully (Updated if existed, Created if new)",
+            data: lead
+        });
+
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+
+router.post('/upsert-order-summary', async (req, res) => {
+    try {
+        const {
+            "customerNumber": customerPhone,
+            "orderSummaryStatus": orderSummaryStatus
+        } = req.body;
+
+        if (!customerPhone) {
+            return res.status(400).json({ success: false, message: "Customer Phone no. is required" });
+        }
+
+        const lead = await Lead.findOneAndUpdate(
+            { phoneNumber: customerPhone },
+            {
+                $set: {
+                    phoneNumber: customerPhone,
+                    orderSummary: orderSummaryStatus
+                }
+            },
+            {
+                new: true,                 
+                upsert: true,              
+                runValidators: true,         
+                setDefaultsOnInsert: true    
+            }
+        );
+
+        res.status(200).json({
+            success: true,
+            message: "Order summary status processed successfully (Updated if existed, Created if new)",
+            data: lead
+        });
+
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+
+router.post('/upsert-event-agent-details', async (req, res) => {
+    try {
+        const {
+            customerPhone,
+            eventDate,
+            agentNo,
+            customerCreatedDate
+        } = req.body;
+
+        if (!customerPhone) {
+            return res.status(400).json({ success: false, message: "customerPhone is required" });
+        }
+
+        const lead = await Lead.findOneAndUpdate(
+            { phoneNumber: customerPhone }, 
+            {
+                $set: {
+                    phoneNumber: customerPhone,
+                    eventDate: eventDate,
+                    agent_phone: agentNo,
+                    date: customerCreatedDate
+                }
+            },
+            {
+                new: true,                 
+                upsert: true,              
+                runValidators: true,         
+                setDefaultsOnInsert: true   
+            }
+        );
+
+        res.status(200).json({
+            success: true,
+            message: "Details processed successfully (Updated if existed, Created if new)",
+            data: lead
+        });
+
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+
+router.post('/upsert-order-details', async (req, res) => {
+    try {
+        const {
+            customerPhone,
+            orderDetails
+        } = req.body;
+
+        if (!customerPhone) {
+            return res.status(400).json({ success: false, message: "customerPhone is required" });
+        }
+
+        const lead = await Lead.findOneAndUpdate(
+            { phoneNumber: customerPhone }, 
+            {
+                $set: {
+                    phoneNumber: customerPhone,
+                    eventDetails: orderDetails 
+                }
+            },
+            {
+                new: true,                
+                upsert: true,              
+                runValidators: true,         
+                setDefaultsOnInsert: true    
+            }
+        );
+
+        res.status(200).json({
+            success: true,
+            message: "Order details processed successfully (Updated if existed, Created if new)",
+            data: lead
+        });
+
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+
+router.post('/upsert-source-date', async (req, res) => {
+    try {
+        const {
+            customerPhone,
+            source,
+            customerCreatedDate
+        } = req.body;
+
+        if (!customerPhone) {
+            return res.status(400).json({ success: false, message: "customerPhone is required" });
+        }
+
+        const lead = await Lead.findOneAndUpdate(
+            { phoneNumber: customerPhone },
+            {
+                $set: {
+                    phoneNumber: customerPhone,
+                    source: source,
+                    date: customerCreatedDate
+                }
+            },
+            {
+                new: true,                 
+                upsert: true,              
+                runValidators: true,         
+                setDefaultsOnInsert: true    
+            }
+        );
+
+        res.status(200).json({
+            success: true,
+            message: "Source and date processed successfully (Updated if existed, Created if new)",
+            data: lead
+        });
+
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+
 module.exports = {
     router,
     syncLeadsFromSheet

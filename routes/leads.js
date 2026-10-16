@@ -929,7 +929,8 @@ router.get('/leads', async (req, res) => {
         const { agent_phone } = req.query;
 
         let query = {};
-        if (agent_phone) {
+        // Agar agent_phone present hai aur null/empty nahi hai, tabhi filter lagayein
+        if (agent_phone && agent_phone !== 'null' && agent_phone !== 'undefined') {
             query.agent_phone = agent_phone;
         }
 
@@ -958,6 +959,8 @@ router.get('/leads', async (req, res) => {
                 };
             })
         );
+
+        console.log(leadsWithHistory)
 
         return res.status(200).json({ data: leadsWithHistory });
     } catch (error) {
@@ -1021,6 +1024,22 @@ router.post('/call-logs', async (req, res) => {
     }
 });
 
+
+router.get('/agents', async (req, res) => {
+    try {
+        const rows = await Lead.aggregate([
+            { $match: { agent_phone: { $nin: [null, ''] } } },
+            { $group: { _id: '$agent_phone', name: { $first: '$agentName' } } },
+            { $sort: { name: 1 } },
+        ]);
+        return res.status(200).json({
+            data: rows.map(r => ({ phone: r._id, name: r.name || r._id })),
+        });
+    } catch (error) {
+        console.error('Error fetching agents:', error);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+});
 
 
 router.get("/unique-sources", async (req, res) => {

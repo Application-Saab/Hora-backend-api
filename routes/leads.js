@@ -23,6 +23,19 @@ const sanitizePhone = (phone) => {
     return cleaned.length >= 10 ? cleaned.slice(-10) : cleaned;
 };
 
+
+const getAgentPhone = async (agentName) => {
+    if (!agentName) return "";
+
+    const team = await Team.findOne({
+        name: { $regex: `^${agentName.trim()}$`, $options: "i" }
+    });
+
+    if (!team) return "";
+
+    return team.number || team.alternativeNumber || "";
+};
+
 async function syncLeadsFromSheet() {
     try {
         console.log("[Incremental Sheet Sync Triggered]");
@@ -1082,14 +1095,19 @@ router.post('/upsert-customer-lead', async (req, res) => {
             return res.status(400).json({ success: false, message: "Customer Phone no. is required" });
         }
 
+        const sanitizedPhone = sanitizePhone(customerPhone);
+
+        const agentPhone = await getAgentPhone(agentName);
+
         const lead = await Lead.findOneAndUpdate(
-            { phoneNumber: customerPhone }, 
+            { phoneNumber: sanitizedPhone }, 
             {
                 $set: {
-                    phoneNumber: customerPhone,
+                    phoneNumber: sanitizedPhone,
                     agentName: agentName,
                     source: source,
-                    date: customerCreatedDate
+                    date: customerCreatedDate,
+                    agent_phone: agentPhone,
                 }
             },
             {
@@ -1123,11 +1141,13 @@ router.post('/upsert-order-summary', async (req, res) => {
             return res.status(400).json({ success: false, message: "Customer Phone no. is required" });
         }
 
+        const sanitizedPhone = sanitizePhone(customerPhone);
+
         const lead = await Lead.findOneAndUpdate(
-            { phoneNumber: customerPhone },
+            { phoneNumber: sanitizedPhone },
             {
                 $set: {
-                    phoneNumber: customerPhone,
+                    phoneNumber: sanitizedPhone,
                     orderSummary: orderSummaryStatus
                 }
             },
@@ -1164,11 +1184,13 @@ router.post('/upsert-event-agent-details', async (req, res) => {
             return res.status(400).json({ success: false, message: "customerPhone is required" });
         }
 
+        const sanitizedPhone = sanitizePhone(customerPhone);
+
         const lead = await Lead.findOneAndUpdate(
-            { phoneNumber: customerPhone }, 
+            { phoneNumber: sanitizedPhone }, 
             {
                 $set: {
-                    phoneNumber: customerPhone,
+                    phoneNumber: sanitizedPhone,
                     eventDate: eventDate,
                     agent_phone: agentNo,
                     date: customerCreatedDate
@@ -1205,11 +1227,13 @@ router.post('/upsert-order-details', async (req, res) => {
             return res.status(400).json({ success: false, message: "customerPhone is required" });
         }
 
+        const sanitizedPhone = sanitizePhone(customerPhone);
+
         const lead = await Lead.findOneAndUpdate(
-            { phoneNumber: customerPhone }, 
+            { phoneNumber: sanitizedPhone }, 
             {
                 $set: {
-                    phoneNumber: customerPhone,
+                    phoneNumber: sanitizedPhone,
                     eventDetails: orderDetails 
                 }
             },
@@ -1245,11 +1269,13 @@ router.post('/upsert-source-date', async (req, res) => {
             return res.status(400).json({ success: false, message: "customerPhone is required" });
         }
 
+        const sanitizedPhone = sanitizePhone(customerPhone);
+
         const lead = await Lead.findOneAndUpdate(
-            { phoneNumber: customerPhone },
+            { phoneNumber: sanitizedPhone },
             {
                 $set: {
-                    phoneNumber: customerPhone,
+                    phoneNumber: sanitizedPhone,
                     source: source,
                     date: customerCreatedDate
                 }
@@ -1265,6 +1291,51 @@ router.post('/upsert-source-date', async (req, res) => {
         res.status(200).json({
             success: true,
             message: "Source and date processed successfully (Updated if existed, Created if new)",
+            data: lead
+        });
+
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.post('/upsert-source-date-funnel', async (req, res) => {
+    try {
+        const {
+            customerPhone,
+            source,
+            customerCreatedDate,
+            funnelStage
+        } = req.body;
+
+        if (!customerPhone) {
+            return res.status(400).json({ success: false, message: "customerPhone is required" });
+        }
+
+        const sanitizedPhone = sanitizePhone(customerPhone);
+
+
+        const lead = await Lead.findOneAndUpdate(
+            { phoneNumber: sanitizedPhone },
+            {
+                $set: {
+                    phoneNumber: sanitizedPhone,
+                    source: source,
+                    date: customerCreatedDate,
+                    funnelStage: funnelStage 
+                }
+            },
+            {
+                new: true,
+                upsert: true,
+                runValidators: true,
+                setDefaultsOnInsert: true
+            }
+        );
+
+        res.status(200).json({
+            success: true,
+            message: "Source, date and funnel stage processed successfully (Updated if existed, Created if new)",
             data: lead
         });
 

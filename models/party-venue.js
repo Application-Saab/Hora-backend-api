@@ -19,6 +19,7 @@ const venueSchema = new mongoose.Schema(
     venueImageKey: { type: String, default: "" },
     eventTypes: { type: [String], default: [] }, // e.g., wedding, birthday, corporate
     guestCapacity: { type: Number, default: 0 },
+    minGuestCapacity: { type: Number, default: 0 },
     isParkingAvailable: { type: Boolean, default: false },
     hallType: { type: [String], default: [] }, // e.g., Outdoor, indoor
     foodTypes: { type: [String], default: [] }, // e.g., veg, non-veg, mixed

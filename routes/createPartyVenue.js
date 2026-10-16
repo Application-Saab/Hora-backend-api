@@ -156,11 +156,13 @@ router.post(
         userId,
         venueType,
         venueName,
+        maskName,
         location,
         city,
         googleMapLink,
         eventTypes,
         guestCapacity,
+        minGuestCapacity,
         locality,
         isParkingAvailable,
         hallType,
@@ -193,6 +195,7 @@ router.post(
       foodTypes = foodTypes ? JSON.parse(foodTypes) : [];
 
       guestCapacity = guestCapacity ? Number(guestCapacity) : 0;
+      minGuestCapacity = minGuestCapacity ? Number(minGuestCapacity) : 0;
       startingPrice = startingPrice ? Number(startingPrice) : 0;
       totalRoomsAvailable = totalRoomsAvailable
         ? Number(totalRoomsAvailable)
@@ -208,16 +211,19 @@ router.post(
         userId,
         venueType,
         venueName,
+        maskName,
         location,
         city,
         locality,
         googleMapLink,
         eventTypes,
         guestCapacity,
+        minGuestCapacity,
         isParkingAvailable,
         hallType,
         foodTypes,
         startingPrice,
+        totalRoomsAvailable
       });
 
       // ----------------------------
@@ -693,12 +699,14 @@ router.put(
 
       let {
         venueName,
+        maskName,
         venueType,
         location,
         city,
         googleMapLink,
         eventTypes,
         guestCapacity,
+        minGuestCapacity,
         locality,
         isParkingAvailable,
         hallType,
@@ -711,6 +719,7 @@ router.put(
       // Basic fields
       // ----------------------------
       if (venueName !== undefined) existing.venueName = venueName;
+      if (maskName !== undefined) existing.maskName = maskName;
       // if (venueType !== undefined) existing.venueType = venueType;
       if (location !== undefined) existing.location = location;
       if (city !== undefined) existing.city = city;
@@ -738,6 +747,9 @@ router.put(
       // ----------------------------
       if (guestCapacity !== undefined)
         existing.guestCapacity = Number(guestCapacity || 0);
+
+      if (minGuestCapacity !== undefined)
+        existing.minGuestCapacity = Number(minGuestCapacity || 0);
 
       if (startingPrice !== undefined)
         existing.startingPrice = Number(startingPrice || 0);

@@ -928,41 +928,65 @@ router.get('/leads', async (req, res) => {
     try {
         const { agent_phone } = req.query;
 
+        const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+        const limit = 40;
+        const skip = (page - 1) * limit;
+
         let query = {};
-        // Agar agent_phone present hai aur null/empty nahi hai, tabhi filter lagayein
         if (agent_phone && agent_phone !== 'null' && agent_phone !== 'undefined') {
             query.agent_phone = agent_phone;
         }
 
-        const leads = await Lead.find(query).lean();
+        const [totalLeads, leads] = await Promise.all([
+            Lead.countDocuments(query),
+            Lead.find(query)
+                .sort({ createdAt: -1, _id: -1 }) 
+                .skip(skip)
+                .limit(limit)
+                .lean()
+        ]);
 
-        const leadsWithHistory = await Promise.all(
-            leads.map(async (lead) => {
-                const logs = await CallLog.find({ lead_id: lead._id })
-                    .sort({ started_at: -1 })
-                    .lean();
+        const leadIds = leads.map(lead => lead._id);
+        const allLogs = await CallLog.find({ lead_id: { $in: leadIds } })
+            .sort({ started_at: -1 })
+            .lean();
 
-                return {
-                    id: lead._id.toString(),
-                    name: lead.name || lead.agentName || "",
-                    phone: lead.phone || lead.phoneNumber || "",
-                    status: lead.status,
-                    source: lead.source,
-                    call_logs: logs.map(log => ({
-                        id: log._id.toString(),
-                        client_call_id: log.client_call_id,
-                        started_at: log.started_at,
-                        duration_seconds: log.duration_seconds,
-                        status: log.status,
-                        direction: log.direction,
-                    }))
-                };
-            })
-        );
+        const logsByLead = {};
+        for (const log of allLogs) {
+            const key = log.lead_id.toString();
+            if (!logsByLead[key]) logsByLead[key] = [];
+            logsByLead[key].push(log);
+        }
 
-        console.log(leadsWithHistory)
+        const leadsWithHistory = leads.map(lead => ({
+            id: lead._id.toString(),
+            name: lead.name || lead.agentName || "",
+            phone: lead.phone || lead.phoneNumber || "",
+            status: lead.status,
+            source: lead.source,
+            call_logs: (logsByLead[lead._id.toString()] || []).map(log => ({
+                id: log._id.toString(),
+                client_call_id: log.client_call_id,
+                started_at: log.started_at,
+                duration_seconds: log.duration_seconds,
+                status: log.status,
+                direction: log.direction,
+            }))
+        }));
 
-        return res.status(200).json({ data: leadsWithHistory });
+        const totalPages = Math.ceil(totalLeads / limit);
+
+        return res.status(200).json({
+            data: leadsWithHistory,
+            pagination: {
+                currentPage: page,
+                perPage: limit,
+                totalItems: totalLeads,
+                totalPages,
+                hasNextPage: page < totalPages,
+                hasPrevPage: page > 1,
+            }
+        });
     } catch (error) {
         console.error('Error fetching leads:', error);
         return res.status(500).json({ message: 'Internal server error' });

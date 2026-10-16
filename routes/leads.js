@@ -112,10 +112,9 @@ async function syncLeadsFromSheet() {
                 });
             }
 
-            const agentPhone =
-                teamMember?.number
-                    ? String(teamMember.number)
-                    : null;
+            const agentPhone = teamMember?.number
+                ? sanitizePhone(teamMember.number)
+            : null;
 
             leadsToInsert.push({
                 phoneNumber: sanitizePhone(rawPhone),
@@ -937,60 +936,93 @@ router.get("/admin-leads", async (req, res) => {
     }
 });
 
+const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 router.get('/leads', async (req, res) => {
     try {
         const { agent_phone } = req.query;
+        const search = (req.query.search || '').toString().trim().slice(0, 50);
 
         const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
-        const limit = 40;
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
         const skip = (page - 1) * limit;
 
-        let query = {};
+        const and = [
+            {
+                $or: [
+                    { phone: { $nin: [null, ''] } },
+                    { phoneNumber: { $nin: [null, ''] } },
+                ]
+            },
+        ];
+
         if (agent_phone && agent_phone !== 'null' && agent_phone !== 'undefined') {
-            query.agent_phone = agent_phone;
+            and.push({ agent_phone });
         }
+
+        if (search) {
+            const rx = new RegExp(escapeRegex(search), 'i');
+            const or = [{ name: rx }, { agentName: rx }];
+
+            const digits = search.replace(/\D/g, '');
+            if (digits.length >= 3) {
+                const drx = new RegExp(digits.split('').join('\\D*'));
+                or.push({ phone: drx }, { phoneNumber: drx });
+            }
+            and.push({ $or: or });
+        }
+
+        const query = { $and: and };
 
         const [totalLeads, leads] = await Promise.all([
             Lead.countDocuments(query),
             Lead.find(query)
-                .sort({ createdAt: -1, _id: -1 }) 
+                .sort({ date: -1, _id: -1 })   
                 .skip(skip)
                 .limit(limit)
-                .lean()
+                .select('name agentName phone phoneNumber status source agent_phone date')
+                .lean(),
         ]);
 
-        const leadIds = leads.map(lead => lead._id);
-        const allLogs = await CallLog.find({ lead_id: { $in: leadIds } })
-            .sort({ started_at: -1 })
-            .lean();
+        const leadIds = leads.map((l) => l._id);
+
+        const allLogs = leadIds.length
+            ? await CallLog.find({ lead_id: { $in: leadIds } })
+                .select('lead_id client_call_id started_at duration_seconds status direction')
+                .sort({ started_at: -1 })
+                .lean()
+            : [];
 
         const logsByLead = {};
         for (const log of allLogs) {
             const key = log.lead_id.toString();
-            if (!logsByLead[key]) logsByLead[key] = [];
-            logsByLead[key].push(log);
+            (logsByLead[key] ||= []).push(log);
         }
 
-        const leadsWithHistory = leads.map(lead => ({
+        const data = leads.map((lead) => ({
             id: lead._id.toString(),
-            name: lead.name || lead.agentName || "",
-            phone: lead.phone || lead.phoneNumber || "",
+            name: lead.name || lead.agentName || '',
+            phone: lead.phone || lead.phoneNumber || '',
             status: lead.status,
             source: lead.source,
-            call_logs: (logsByLead[lead._id.toString()] || []).map(log => ({
+            date: lead.date,
+            agent_phone: lead.agent_phone,
+            agentName: lead.agentName || '',
+            call_logs: (logsByLead[lead._id.toString()] || []).map((log) => ({
                 id: log._id.toString(),
                 client_call_id: log.client_call_id,
                 started_at: log.started_at,
                 duration_seconds: log.duration_seconds,
                 status: log.status,
                 direction: log.direction,
-            }))
+            })),
         }));
 
         const totalPages = Math.ceil(totalLeads / limit);
 
+        res.set('Cache-Control', 'no-store');
         return res.status(200).json({
-            data: leadsWithHistory,
+            data,
             pagination: {
                 currentPage: page,
                 perPage: limit,
@@ -998,7 +1030,7 @@ router.get('/leads', async (req, res) => {
                 totalPages,
                 hasNextPage: page < totalPages,
                 hasPrevPage: page > 1,
-            }
+            },
         });
     } catch (error) {
         console.error('Error fetching leads:', error);
@@ -1358,7 +1390,7 @@ router.post('/upsert-customer-lead', async (req, res) => {
 
         const sanitizedPhone = sanitizePhone(customerPhone);
 
-        const agentPhone = await getAgentPhone(agentName);
+        const agentPhone = sanitizePhone(await getAgentPhone(agentName));
 
         const lead = await Lead.findOneAndUpdate(
             { phoneNumber: sanitizedPhone }, 

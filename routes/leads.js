@@ -1479,6 +1479,7 @@ router.post('/upsert-event-agent-details', async (req, res) => {
         }
 
         const sanitizedPhone = sanitizePhone(customerPhone);
+        const sanitizedAgentPhone = sanitizePhone(agentNo);
 
         const lead = await Lead.findOneAndUpdate(
             { phoneNumber: sanitizedPhone }, 
@@ -1486,7 +1487,7 @@ router.post('/upsert-event-agent-details', async (req, res) => {
                 $set: {
                     phoneNumber: sanitizedPhone,
                     eventDate: eventDate,
-                    agent_phone: agentNo,
+                    agent_phone: sanitizedAgentPhone,
                     date: customerCreatedDate
                 }
             },

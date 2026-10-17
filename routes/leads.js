@@ -112,10 +112,9 @@ async function syncLeadsFromSheet() {
                 });
             }
 
-            const agentPhone =
-                teamMember?.number
-                    ? String(teamMember.number)
-                    : null;
+            const agentPhone = teamMember?.number
+                ? sanitizePhone(teamMember.number)
+            : null;
 
             leadsToInsert.push({
                 phoneNumber: sanitizePhone(rawPhone),
@@ -937,42 +936,102 @@ router.get("/admin-leads", async (req, res) => {
     }
 });
 
+const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 router.get('/leads', async (req, res) => {
     try {
         const { agent_phone } = req.query;
+        const search = (req.query.search || '').toString().trim().slice(0, 50);
 
-        let query = {};
-        if (agent_phone) {
-            query.agent_phone = agent_phone;
+        const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+        const skip = (page - 1) * limit;
+
+        const and = [
+            {
+                $or: [
+                    { phone: { $nin: [null, ''] } },
+                    { phoneNumber: { $nin: [null, ''] } },
+                ]
+            },
+        ];
+
+        if (agent_phone && agent_phone !== 'null' && agent_phone !== 'undefined') {
+            and.push({ agent_phone });
         }
 
-        const leads = await Lead.find(query).lean();
+        if (search) {
+            const rx = new RegExp(escapeRegex(search), 'i');
+            const or = [{ name: rx }, { agentName: rx }];
 
-        const leadsWithHistory = await Promise.all(
-            leads.map(async (lead) => {
-                const logs = await CallLog.find({ lead_id: lead._id })
-                    .sort({ started_at: -1 })
-                    .lean();
+            const digits = search.replace(/\D/g, '');
+            if (digits.length >= 3) {
+                const drx = new RegExp(digits.split('').join('\\D*'));
+                or.push({ phone: drx }, { phoneNumber: drx });
+            }
+            and.push({ $or: or });
+        }
 
-                return {
-                    id: lead._id.toString(),
-                    name: lead.name || lead.agentName || "",
-                    phone: lead.phone || lead.phoneNumber || "",
-                    status: lead.status,
-                    source: lead.source,
-                    call_logs: logs.map(log => ({
-                        id: log._id.toString(),
-                        client_call_id: log.client_call_id,
-                        started_at: log.started_at,
-                        duration_seconds: log.duration_seconds,
-                        status: log.status,
-                        direction: log.direction,
-                    }))
-                };
-            })
-        );
+        const query = { $and: and };
 
-        return res.status(200).json({ data: leadsWithHistory });
+        const [totalLeads, leads] = await Promise.all([
+            Lead.countDocuments(query),
+            Lead.find(query)
+                .sort({ date: -1, _id: -1 })   
+                .skip(skip)
+                .limit(limit)
+                .select('name agentName phone phoneNumber status source agent_phone date')
+                .lean(),
+        ]);
+
+        const leadIds = leads.map((l) => l._id);
+
+        const allLogs = leadIds.length
+            ? await CallLog.find({ lead_id: { $in: leadIds } })
+                .select('lead_id client_call_id started_at duration_seconds status direction')
+                .sort({ started_at: -1 })
+                .lean()
+            : [];
+
+        const logsByLead = {};
+        for (const log of allLogs) {
+            const key = log.lead_id.toString();
+            (logsByLead[key] ||= []).push(log);
+        }
+
+        const data = leads.map((lead) => ({
+            id: lead._id.toString(),
+            name: lead.name || lead.agentName || '',
+            phone: lead.phone || lead.phoneNumber || '',
+            status: lead.status,
+            source: lead.source,
+            date: lead.date,
+            agent_phone: lead.agent_phone,
+            agentName: lead.agentName || '',
+            call_logs: (logsByLead[lead._id.toString()] || []).map((log) => ({
+                id: log._id.toString(),
+                client_call_id: log.client_call_id,
+                started_at: log.started_at,
+                duration_seconds: log.duration_seconds,
+                status: log.status,
+                direction: log.direction,
+            })),
+        }));
+
+        const totalPages = Math.ceil(totalLeads / limit);
+
+        res.set('Cache-Control', 'no-store');
+        return res.status(200).json({
+            data,
+            pagination: {
+                currentPage: page,
+                perPage: limit,
+                totalItems: totalLeads,
+                totalPages,
+                hasNextPage: page < totalPages,
+                hasPrevPage: page > 1,
+            },
+        });
     } catch (error) {
         console.error('Error fetching leads:', error);
         return res.status(500).json({ message: 'Internal server error' });
@@ -1035,6 +1094,22 @@ router.post('/call-logs', async (req, res) => {
 });
 
 
+router.get('/agents', async (req, res) => {
+    try {
+        const rows = await Lead.aggregate([
+            { $match: { agent_phone: { $nin: [null, ''] } } },
+            { $group: { _id: '$agent_phone', name: { $first: '$agentName' } } },
+            { $sort: { name: 1 } },
+        ]);
+        return res.status(200).json({
+            data: rows.map(r => ({ phone: r._id, name: r.name || r._id })),
+        });
+    } catch (error) {
+        console.error('Error fetching agents:', error);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+});
+
 
 router.get("/unique-sources", async (req, res) => {
     try {
@@ -1078,6 +1153,225 @@ router.get("/unique-sources", async (req, res) => {
     }
 });
 
+router.get("/reports/dashboard", async (req, res) => {
+    try {
+        const { from, to } = req.query;
+
+        const getDayTimestamp = (value) => {
+            if (!value) return null;
+            const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value).trim());
+            if (!m) return null;
+
+            const year = Number(m[1]);
+            const month = Number(m[2]);
+            const day = Number(m[3]);
+
+            const ts = Date.UTC(year, month - 1, day);
+            const d = new Date(ts);
+
+            if (
+                d.getUTCFullYear() !== year ||
+                d.getUTCMonth() !== month - 1 ||
+                d.getUTCDate() !== day
+            ) {
+                return null;
+            }
+            return ts;
+        };
+
+        const parseLeadDate = (value) => {
+            if (!value) return null;
+            const parts = String(value).trim().split("/");
+            if (parts.length !== 3) return null;
+
+            const [day, month, year] = parts.map(Number);
+            if (!day || !month || !year) return null;
+
+            const ts = Date.UTC(year, month - 1, day);
+            const d = new Date(ts);
+
+            if (
+                d.getUTCDate() !== day ||
+                d.getUTCMonth() !== month - 1 ||
+                d.getUTCFullYear() !== year
+            ) {
+                return null;
+            }
+            return ts;
+        };
+
+        const normalizePhone = (value) =>
+            String(value || "").replace(/\D/g, "").slice(-10);
+
+        // ---------- validate dates ----------
+        const fromTs = from ? getDayTimestamp(from) : null;
+        const toTs = to ? getDayTimestamp(to) : null;
+
+        if (from && fromTs === null) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid from date. Use YYYY-MM-DD.",
+            });
+        }
+        if (to && toTs === null) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid to date. Use YYYY-MM-DD.",
+            });
+        }
+        if (fromTs !== null && toTs !== null && fromTs > toTs) {
+            return res.status(400).json({
+                success: false,
+                message: "'from' date cannot be after 'to' date.",
+            });
+        }
+
+        const start = fromTs !== null ? fromTs : -Infinity;
+        const end = toTs !== null ? toTs + 24 * 60 * 60 * 1000 - 1 : Infinity;
+
+        const [teams, allLeads] = await Promise.all([
+            Team.find().lean(),
+            Lead.find(
+                {
+                    phoneNumber: { $exists: true, $nin: ["", "SYNC_TRACKER_ROW"] },
+                    agentName: { $ne: "SYSTEM_TRACKER" },
+                    source: { $ne: "SYSTEM_TRACKER" },
+                },
+                {
+                    phoneNumber: 1,
+                    agentName: 1,
+                    agent_phone: 1,
+                    source: 1,
+                    date: 1,
+                    eventDate: 1,
+                    orderSummary: 1,
+                    eventDetails: 1,
+                    createdAt: 1,
+                }
+            ).lean(),
+        ]);
+
+        const leads = allLeads.filter((lead) => {
+            if (!from && !to) return true;
+
+            const ts = parseLeadDate(lead.date);
+            if (ts === null) return false;
+            if (ts < start) return false;
+            if (ts > end) return false;
+            return true;
+        });
+
+        const teamByPhone = new Map();
+        teams.forEach((t) => {
+            const p = normalizePhone(t.number);
+            if (p) teamByPhone.set(p, t);
+        });
+
+        const leadIds = leads.map((l) => l._id);
+
+        const callLogs = leadIds.length
+            ? await CallLog.find({ lead_id: { $in: leadIds } }).lean()
+            : [];
+
+        const callsByLead = new Map();
+        callLogs.forEach((call) => {
+            const key = String(call.lead_id);
+            if (!callsByLead.has(key)) callsByLead.set(key, []);
+            callsByLead.get(key).push(call);
+        });
+
+        const leadPhoneSet = new Set(
+            leads.map((l) => normalizePhone(l.phoneNumber)).filter(Boolean)
+        );
+
+        const convertedPhones = new Set();
+
+        if (leadPhoneSet.size > 0) {
+            const orders = await Order.find({
+                status: 1,
+                phone_no: { $exists: true, $nin: ["", null] },
+            })
+                .select("phone_no")
+                .lean();
+
+            for (const o of orders) {
+                const p = normalizePhone(o.phone_no);
+                if (p && leadPhoneSet.has(p)) convertedPhones.add(p);
+            }
+        }
+
+        const data = leads.map((lead) => {
+            const phone = normalizePhone(lead.phoneNumber);
+            const leadAgent = teamByPhone.get(normalizePhone(lead.agent_phone));
+
+            const ts = parseLeadDate(lead.date);
+            const createdAt = ts !== null
+                ? new Date(ts).toISOString()
+                : lead.createdAt
+                    ? new Date(lead.createdAt).toISOString()
+                    : undefined;
+
+            const leadCalls = callsByLead.get(String(lead._id)) || [];
+
+            return {
+                id: String(lead._id),
+                name: lead.phoneNumber || "Unknown", 
+                phone: lead.phoneNumber || "",
+                source: lead.source || "Unknown",
+                status: convertedPhones.has(phone) ? "Converted" : "",
+                created_at: createdAt,
+                lead_date: lead.date || "",
+
+                assigned_agent_id: leadAgent ? String(leadAgent._id) : undefined,
+                assigned_agent_name: leadAgent?.name || lead.agentName || undefined,
+
+                event_date: lead.eventDate || "",
+                order_summary: lead.orderSummary || "",
+                event_details: lead.eventDetails || "",
+
+                call_logs: leadCalls.map((c) => {
+                    const callAgent = teamByPhone.get(normalizePhone(c.agent_phone));
+
+                    return {
+                        id: String(c._id),
+                        client_call_id: c.client_call_id,
+                        agent_id: callAgent ? String(callAgent._id) : c.agent_id,
+                        agent_name: callAgent?.name,
+                        started_at: c.started_at,
+                        ended_at: c.ended_at,
+                        duration_seconds: c.duration_seconds,
+                        status: c.status,
+                        direction: c.direction,
+                        placed_from_app: c.placed_from_app,
+                    };
+                }),
+            };
+        });
+
+        const agents = teams.map((t) => ({
+            id: String(t._id),
+            name: t.name,
+            phone: String(t.number || ""),
+        }));
+
+        return res.status(200).json({
+            success: true,
+            total: data.length,
+            agents,
+            data,
+        });
+    } catch (error) {
+        console.error("Reports dashboard API error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Failed to fetch dashboard reports.",
+            error: error.message,
+        });
+    }
+});
+
+
+
 
 
 
@@ -1097,7 +1391,7 @@ router.post('/upsert-customer-lead', async (req, res) => {
 
         const sanitizedPhone = sanitizePhone(customerPhone);
 
-        const agentPhone = await getAgentPhone(agentName);
+        const agentPhone = sanitizePhone(await getAgentPhone(agentName));
 
         const lead = await Lead.findOneAndUpdate(
             { phoneNumber: sanitizedPhone }, 

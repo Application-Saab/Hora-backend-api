@@ -455,20 +455,20 @@ cron.schedule('0 20 * * *', async () => {
   }
 });
 
-cron.schedule('0 1 * * *', async () => {
-  try {
-    if (typeof syncLeadsFromSheet === 'function') {
-      await syncLeadsFromSheet();
-    } else {
-      console.error("ERROR: syncLeadsFromSheet is not a function! Check require/export path.");
-    }
-  } catch (err) {
-    console.error("CRON SYNC ERROR:", err);
-  }
-} , {
-    scheduled: true,
-    timezone: "Asia/Kolkata",
-  },);
+// cron.schedule('0 1 * * *', async () => {
+//   try {
+//     if (typeof syncLeadsFromSheet === 'function') {
+//       await syncLeadsFromSheet();
+//     } else {
+//       console.error("ERROR: syncLeadsFromSheet is not a function! Check require/export path.");
+//     }
+//   } catch (err) {
+//     console.error("CRON SYNC ERROR:", err);
+//   }
+// } , {
+//     scheduled: true,
+//     timezone: "Asia/Kolkata",
+//   },);
 
 const getDaysDifference = (fromDate, toDate) => {
   if (!fromDate || !toDate) return -1;

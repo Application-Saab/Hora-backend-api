@@ -704,6 +704,7 @@ const team = require("./routes/team");
 const specializationRoutes = require("./routes/specialization");
 const ErrorLogRoutes = require("./routes/error-log")
 const pinCodes = require("./routes/serviceabilityPincodes")
+const venueSuggestion = require("./routes/venue-suggestion")
 let passportAuth = require("./store/passportAuth").passportAuth;
 
 app.get("/api/check-token-health", passportAuth, async (req, res) => {
@@ -754,8 +755,9 @@ app.use("/api/photography-theme", ThemeRoutes);
 app.use("/api/team", team);
 app.use("/api/leads", leadsRoutes); 
 app.use("/api/specializations", specializationRoutes);
-app.use("/api/error-log", ErrorLogRoutes.router);
 app.use("/api/pincode", pinCodes)
+app.use("/api/venue-suggestion", venueSuggestion)
+app.use("/api/error-log", ErrorLogRoutes.router);
 
 const notificationFunction = require("./store/notifications");
 const UserModel = require("./models/user");

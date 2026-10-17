@@ -27,11 +27,28 @@ const venuePackagesSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
-    packageItems: {
+    // packageItems: {
+    //   type: [
+    //     {
+    //       type: mongoose.Schema.Types.ObjectId,
+    //       ref: "venue-package-items",
+    //     },
+    //   ],
+    //   default: [],
+    // },
+        packageItems: {
       type: [
         {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "venue-package-items",
+          itemId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "venue-package-items",
+            required: true,
+          },
+          categoryId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "venue-package-categories",
+            required: true,
+          },
         },
       ],
       default: [],

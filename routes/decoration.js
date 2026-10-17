@@ -4,7 +4,7 @@ const router = express.Router();
 const AddressModel = require("../models/address");
 const decorationModel = require("../models/decoration");
 const NodeCache = require("node-cache");
-const cache = new NodeCache({ stdTTL: 60 * 10 }); // Cache TTL: 10 minutes
+const cache = new NodeCache({ stdTTL: 60 * 10 }); // 10 minutes TTL
 const path = require("path");
 const fs = require("fs");
 const mongoose = require("mongoose");
@@ -14,6 +14,16 @@ const multer = require("multer");
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 const sharp = require("sharp");
+
+// Helper function to invalidate tag caches
+const clearTagCaches = (tags = []) => {
+  if (!Array.isArray(tags)) return;
+  tags.forEach((t) => {
+    if (t) {
+      cache.del(`search_tag_${t}`);
+    }
+  });
+};
 
 const deleteFileIfExists = (filePath) => {
   try {
@@ -42,38 +52,25 @@ const compressImageToWebP = async (buffer, outputPath, targetMaxKB = 40) => {
     quality -= step;
   }
 
-  // Final attempt with lowest quality
   const fallbackBuffer = await sharp(buffer).webp({ quality: 5 }).toBuffer();
   fs.writeFileSync(outputPath, fallbackBuffer);
   return false;
 };
 
-
-
 const normalizeInclusion = (inclusion) => {
   if (!inclusion) return [];
 
   try {
-    // Case 1:
-    // '["<div>...</div>"]'
     if (typeof inclusion === "string" && inclusion.startsWith("[")) {
       inclusion = JSON.parse(inclusion);
     }
 
-    // Case 2:
-    // "<div>...</div>"
     if (typeof inclusion === "string") {
       return [inclusion];
     }
 
-    // Case 3:
-    // ["<div>...</div>"]
     if (Array.isArray(inclusion)) {
-      return [
-        inclusion
-          .filter(Boolean)
-          .join("")
-      ];
+      return [inclusion.filter(Boolean).join("")];
     }
 
     return [];
@@ -87,122 +84,130 @@ router.post("/edit", upload.array("featured_images", 10), async (req, res, next)
   try {
     const id = req.body._id;
 
-      const existing = await decorationModel.findById(id);
+    const existing = await decorationModel.findById(id);
 
-      if (!existing) {
-        return res.status(404).json({
-          error: true,
-          message: "Decoration not found",
-        });
+    if (!existing) {
+      return res.status(404).json({
+        error: true,
+        message: "Decoration not found",
+      });
+    }
+
+    let existingImages = existing.featured_images || [];
+    const oldTags = Array.isArray(existing.tag) ? existing.tag : [];
+
+    // -----------------------------
+    // REMOVE IMAGES HANDLING
+    // -----------------------------
+    let removedImages = [];
+
+    if (req.body.removedImages) {
+      try {
+        removedImages =
+          typeof req.body.removedImages === "string"
+            ? JSON.parse(req.body.removedImages)
+            : req.body.removedImages;
+      } catch (e) {
+        removedImages = [];
       }
 
-      let existingImages = existing.featured_images || [];
-
-      // -----------------------------
-      // REMOVE IMAGES HANDLING
-      // -----------------------------
-      let removedImages = [];
-
-      if (req.body.removedImages) {
-        try {
-          removedImages =
-            typeof req.body.removedImages === "string"
-              ? JSON.parse(req.body.removedImages)
-              : req.body.removedImages;
-        } catch (e) {
-          removedImages = [];
-        }
-
-        removedImages.forEach((img) => {
-          const filePath = path.join(
-            __dirname,
-            "../uploads/compressed_webp",
-            img.fileName,
-          );
-
-          if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-          }
-        });
-
-        existingImages = existingImages.filter(
-          (img) => !removedImages.some((r) => r.fileName === img.fileName),
-        );
-      }
-
-      // -----------------------------
-      // NEW IMAGES UPLOAD
-      // -----------------------------
-      let newImages = [];
-
-      if (req.files && req.files.length > 0) {
-        const outputFolder = path.resolve(
+      removedImages.forEach((img) => {
+        const filePath = path.join(
           __dirname,
           "../uploads/compressed_webp",
+          img.fileName
         );
 
-        if (!fs.existsSync(outputFolder)) {
-          fs.mkdirSync(outputFolder, { recursive: true });
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
         }
+      });
 
-        newImages = await Promise.all(
-          req.files.map(async (file) => {
-            const fileName = `${Date.now()}-${path.parse(file.originalname).name}.webp`;
-            const outputPath = path.join(outputFolder, fileName);
+      existingImages = existingImages.filter(
+        (img) => !removedImages.some((r) => r.fileName === img.fileName)
+      );
+    }
 
-            await compressImageToWebP(file.buffer, outputPath);
+    // -----------------------------
+    // NEW IMAGES UPLOAD
+    // -----------------------------
+    let newImages = [];
 
-            return {
-              fileName,
-              url: `/uploads/compressed_webp/${fileName}`, // 👈 as per schema
-              createdAt: new Date(),
-            };
-          }),
-        );
-      }
-
-      const inclusion = normalizeInclusion(req.body.inclusion);
-
-      // -----------------------------
-      // UPDATE DB
-      // -----------------------------
-      const updated = await decorationModel.findByIdAndUpdate(
-        id,
-        {
-          name: req.body.name,
-          price: req.body.price,
-          tag: req.body.tag
-            ? typeof req.body.tag === "string"
-              ? JSON.parse(req.body.tag)
-              : req.body.tag
-            : [],
-
-          designType:
-            typeof req.body.designType === "string"
-              ? JSON.parse(req.body.designType)
-              : req.body.designType,
-
-          inclusion,
-          inclusionVariables:
-            typeof req.body.inclusionVariables === "string"
-              ? JSON.parse(req.body.inclusionVariables)
-              : req.body.inclusionVariables,
-
-          featured_images: [...existingImages, ...newImages],
-        },
-        { new: true },
+    if (req.files && req.files.length > 0) {
+      const outputFolder = path.resolve(
+        __dirname,
+        "../uploads/compressed_webp"
       );
 
-      return res.json({
-        error: false,
-        message: "Updated successfully",
-        data: updated,
-      });
-    } catch (err) {
-      next(err);
+      if (!fs.existsSync(outputFolder)) {
+        fs.mkdirSync(outputFolder, { recursive: true });
+      }
+
+      newImages = await Promise.all(
+        req.files.map(async (file) => {
+          const fileName = `${Date.now()}-${path.parse(file.originalname).name}.webp`;
+          const outputPath = path.join(outputFolder, fileName);
+
+          await compressImageToWebP(file.buffer, outputPath);
+
+          return {
+            fileName,
+            url: `/uploads/compressed_webp/${fileName}`,
+            createdAt: new Date(),
+          };
+        })
+      );
     }
-  },
-);
+
+    const inclusion = normalizeInclusion(req.body.inclusion);
+
+    let parsedTags = [];
+    if (req.body.tag) {
+      parsedTags =
+        typeof req.body.tag === "string"
+          ? JSON.parse(req.body.tag)
+          : req.body.tag;
+    }
+
+    // -----------------------------
+    // UPDATE DB
+    // -----------------------------
+    const updated = await decorationModel.findByIdAndUpdate(
+      id,
+      {
+        name: req.body.name,
+        price: req.body.price,
+        tag: parsedTags,
+        designType:
+          typeof req.body.designType === "string"
+            ? JSON.parse(req.body.designType)
+            : req.body.designType,
+        inclusion,
+        inclusionVariables:
+          typeof req.body.inclusionVariables === "string"
+            ? JSON.parse(req.body.inclusionVariables)
+            : req.body.inclusionVariables,
+        featured_images: [...existingImages, ...newImages],
+      },
+      { new: true }
+    );
+
+    // -----------------------------
+    // CACHE INVALIDATION
+    // -----------------------------
+    // Purane aur naye dono tags ki keys delete karo taaki fresh data load ho
+    const combinedTags = Array.from(new Set([...oldTags, ...parsedTags]));
+    clearTagCaches(combinedTags);
+
+    return res.json({
+      error: false,
+      message: "Updated successfully",
+      data: updated,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.post("/add", upload.single("featured_image"), async (req, res, next) => {
   try {
@@ -212,8 +217,7 @@ router.post("/add", upload.single("featured_image"), async (req, res, next) => {
       return res.status(400).json({ error: true, message: "Image required" });
     }
 
-    // folder create
-    const outputFolder = "../uploads/compressed_webp";
+    const outputFolder = path.resolve(__dirname, "../uploads/compressed_webp");
     if (!fs.existsSync(outputFolder)) {
       fs.mkdirSync(outputFolder, { recursive: true });
     }
@@ -222,7 +226,6 @@ router.post("/add", upload.single("featured_image"), async (req, res, next) => {
     const fileName = `${originalName}-${Date.now()}.webp`;
     const outputPath = path.join(outputFolder, fileName);
 
-    // compress + save
     await compressImageToWebP(file.buffer, outputPath);
 
     const {
@@ -256,7 +259,7 @@ router.post("/add", upload.single("featured_image"), async (req, res, next) => {
     const data = new decorationModel({
       name,
       short_link,
-      featured_image: fileName, // 👈 now from upload
+      featured_image: fileName,
       caption,
       badge,
       price,
@@ -270,6 +273,11 @@ router.post("/add", upload.single("featured_image"), async (req, res, next) => {
     });
 
     const savedData = await data.save();
+
+    if (tag) {
+      const tagsList = typeof tag === "string" ? JSON.parse(tag) : tag;
+      clearTagCaches(tagsList);
+    }
 
     return res.json({
       error: false,
@@ -297,13 +305,14 @@ router.post("/update_decoration_status", async (req, res, next) => {
     const decoration = await decorationModel.findById(_id);
 
     if (decoration) {
-      const update = {
-        status: status,
-      };
-
-      const result = await decorationModel.findByIdAndUpdate(_id, {
-        $set: update,
+      await decorationModel.findByIdAndUpdate(_id, {
+        $set: { status: status },
       });
+
+      // Status badalne par bhi related tags cache se hata do
+      if (decoration.tag) {
+        clearTagCaches(decoration.tag);
+      }
 
       return res.json({
         error: false,
@@ -321,6 +330,7 @@ router.post("/update_decoration_status", async (req, res, next) => {
     next(error);
   }
 });
+
 const normalizeDecorationName = (name = "") => {
   return decodeURIComponent(name)
     .toLowerCase()
@@ -358,6 +368,7 @@ router.get("/searchByName/:name", async (req, res, next) => {
     next(error);
   }
 });
+
 router.get("/searchByTag/:tag", async (req, res, next) => {
   const { tag } = req.params;
   const cacheKey = `search_tag_${tag}`;

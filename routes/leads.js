@@ -1320,6 +1320,7 @@ router.get("/reports/dashboard", async (req, res) => {
                 source: lead.source || "Unknown",
                 status: convertedPhones.has(phone) ? "Converted" : "",
                 created_at: createdAt,
+                lead_date: lead.date || "",
 
                 assigned_agent_id: leadAgent ? String(leadAgent._id) : undefined,
                 assigned_agent_name: leadAgent?.name || lead.agentName || undefined,

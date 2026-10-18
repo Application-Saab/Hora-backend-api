@@ -134,6 +134,23 @@ const FolderSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+
+    galleryFolders: [
+      {
+        galleryId: {
+          type: String,
+          required: true,
+        },
+        orderId:{
+          type: String,
+          default: "",
+        },
+        bannerImageUrl: {
+          type: String,
+          default: "",
+        },
+      },
+    ],
   },
   { timestamps: true }
 );

@@ -376,7 +376,16 @@ router.post("/adminOrderList", async (req, res, next) => {
     if (order_status) finder.order_status = order_status;
     if (status) finder.status = status;
     if (phone_no) finder.phone_no = phone_no;
-    if (order_taken_by) finder.order_taken_by = order_taken_by;
+    if (order_taken_by) {
+      const nameParts = order_taken_by.trim().split(/\s+/);
+
+      finder.order_taken_by = {
+        $regex: nameParts
+          .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+          .join("|"),
+        $options: "i",
+      };
+    }
     if (online_phone_no) finder.online_phone_no = online_phone_no;
     if (order_locality) finder.order_locality = order_locality;
     if (toId) finder.toId = toId;

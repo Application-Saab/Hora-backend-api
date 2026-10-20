@@ -36,6 +36,20 @@ const getAgentPhone = async (agentName) => {
     return team.number || team.alternativeNumber || "";
 };
 
+
+async function upsertLead(filter, update) {
+    const options = { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true };
+    try {
+        return await Lead.findOneAndUpdate(filter, update, options);
+    } catch (err) {
+        if (err.code === 11000) {
+            // doosri request ne abhi insert kiya, ab sirf update karo
+            return await Lead.findOneAndUpdate(filter, update, { ...options, upsert: false });
+        }
+        throw err;
+    }
+}
+
 async function syncLeadsFromSheet() {
     try {
         console.log("[Incremental Sheet Sync Triggered]");
@@ -232,11 +246,9 @@ const fetchAnalyticsFast = async (groupByField, startDate, endDate, source) => {
             $nin: ["", "SYNC_TRACKER_ROW"]
         },
         agentName: {
-            $exists: true,
             $ne: "SYSTEM_TRACKER"
         },
         source: {
-            $exists: true,
             $ne: "SYSTEM_TRACKER"
         }
     };
@@ -263,7 +275,11 @@ const fetchAnalyticsFast = async (groupByField, startDate, endDate, source) => {
         {
             agentName: 1,
             [groupByField]: 1,
-            date: 1
+            date: 1,
+            phoneNumber: 1,
+            eventDate: 1,
+            eventDetails: 1,
+            orderSummary: 1
         }
     ).lean();
 
@@ -280,12 +296,22 @@ const fetchAnalyticsFast = async (groupByField, startDate, endDate, source) => {
         });
     }
 
-    // 5. Initialize source/field statistics
     const statsMap = {};
     let totalLeadsCount = 0;
 
-    // Normalized agent -> source names
-    const agentSources = new Map();
+    const normalizePhone = (phone) => {
+        if (!phone) return "";
+
+        const cleaned = String(phone).replace(/\D/g, "");
+
+        if (cleaned.length === 12 && cleaned.startsWith("91")) {
+            return cleaned.slice(2);
+        }
+
+        return cleaned;
+    };
+
+    const phoneSources = new Map();
 
     for (const lead of leads) {
         const groupName = String(
@@ -293,25 +319,48 @@ const fetchAnalyticsFast = async (groupByField, startDate, endDate, source) => {
         ).trim();
 
         const sourceKey = normalize(groupName);
-        const agentName = normalize(lead.agentName);
+        const phone = normalizePhone(lead.phoneNumber);
 
         if (!statsMap[sourceKey]) {
             statsMap[sourceKey] = {
                 name: groupName,
                 totalLeadsAssigned: 0,
-                orderConfirmed: 0
+                orderConfirmed: 0,
+                eventDateCount: 0,
+                eventDetailsCount: 0,
+                orderSummaryCount: 0
             };
         }
 
         statsMap[sourceKey].totalLeadsAssigned++;
         totalLeadsCount++;
 
-        if (agentName) {
-            if (!agentSources.has(agentName)) {
-                agentSources.set(agentName, new Set());
+
+        const hasValue = (value) => {
+            const normalizedValue = String(value ?? "").trim();
+
+            return normalizedValue !== "" &&
+                normalizedValue.toUpperCase() !== "#N/A";
+        };
+
+        if (hasValue(lead.eventDate)) {
+            statsMap[sourceKey].eventDateCount++;
+        }
+
+        if (hasValue(lead.eventDetails)) {
+            statsMap[sourceKey].eventDetailsCount++;
+        }
+
+        if (hasValue(lead.orderSummary)) {
+            statsMap[sourceKey].orderSummaryCount++;
+        }
+
+        if (phone) {
+            if (!phoneSources.has(phone)) {
+                phoneSources.set(phone, new Set());
             }
 
-            agentSources.get(agentName).add(sourceKey);
+            phoneSources.get(phone).add(sourceKey);
         }
     }
 
@@ -322,9 +371,9 @@ const fetchAnalyticsFast = async (groupByField, startDate, endDate, source) => {
         };
     }
 
-    // 6. Fetch confirmed orders
+    // 6. Fetch confirmed orders by status
     const orderQuery = {
-        order_taken_by: {
+        phone_no: {
             $exists: true,
             $nin: ["", null]
         },
@@ -334,51 +383,28 @@ const fetchAnalyticsFast = async (groupByField, startDate, endDate, source) => {
     if (start || end) {
         orderQuery.createdAt = {};
 
-        if (start) {
-            orderQuery.createdAt.$gte = start;
-        }
-
-        if (end) {
-            orderQuery.createdAt.$lte = end;
-        }
+        if (start) orderQuery.createdAt.$gte = start;
+        if (end) orderQuery.createdAt.$lte = end;
     }
 
     const matchingOrders = await Order.find(
         orderQuery,
         {
-            order_taken_by: 1,
+            phone_no: 1,
             createdAt: 1
         }
     ).lean();
 
-    // 7. Match orders with agents
+    // 7. Match orders using phone number
     for (const order of matchingOrders) {
-        const orderAgent = normalize(order.order_taken_by);
+        const phone = normalizePhone(order.phone_no);
 
-        if (!orderAgent) continue;
+        if (!phone) continue;
 
-        // Exact normalized match first
-        let matchedSources = agentSources.get(orderAgent);
+        const matchedSources = phoneSources.get(phone);
 
-        // Partial match only when exact match is unavailable
-        if (!matchedSources) {
-            const partialSources = new Set();
+        if (!matchedSources) continue;
 
-            for (const [leadAgent, sources] of agentSources) {
-                if (
-                    leadAgent.includes(orderAgent) ||
-                    orderAgent.includes(leadAgent)
-                ) {
-                    for (const sourceKey of sources) {
-                        partialSources.add(sourceKey);
-                    }
-                }
-            }
-
-            matchedSources = partialSources;
-        }
-
-        // Count once per order for each matched source
         for (const sourceKey of matchedSources) {
             if (statsMap[sourceKey]) {
                 statsMap[sourceKey].orderConfirmed++;
@@ -400,6 +426,9 @@ const fetchAnalyticsFast = async (groupByField, startDate, endDate, source) => {
             name: item.name,
             totalLeadsAssigned: total,
             orderConfirmed: confirmed,
+            eventDateCount: item.eventDateCount,
+            eventDetailsCount: item.eventDetailsCount,
+            orderSummaryCount: item.orderSummaryCount,
             conversionRatio: `${ratio}%`
         };
     });
@@ -458,7 +487,7 @@ const fetchAgentAnalyticsFast = async (groupByField, startDate, endDate) => {
     };
 
     let leads = await Lead.find(leadQuery, {
-        agentName: 1, [groupByField]: 1, date: 1, eventDetails: 1, orderSummary: 1 }).lean();
+        agentName: 1, [groupByField]: 1, date: 1, eventDetails: 1, orderSummary: 1, eventDate: 1 }).lean();
 
     // In-memory Date range filter for Leads ("DD/MM/YYYY")
     if (start || end) {
@@ -482,23 +511,33 @@ const fetchAgentAnalyticsFast = async (groupByField, startDate, endDate) => {
 
         if (!statsMap[key]) {
             statsMap[key] = {
-                displayName: rawName, totalLeadsAssigned: 0, orderConfirmed: 0, eventDetailsCount: 0, orderSummaryCount: 0 };
+                displayName: rawName, totalLeadsAssigned: 0, orderConfirmed: 0, eventDetailsCount: 0, orderSummaryCount: 0, eventDateCount: 0 };
         }
         statsMap[key].totalLeadsAssigned++;
 
 
         if (
             lead.eventDetails != null &&
-            String(lead.eventDetails).trim() !== ""
+            String(lead.eventDetails).trim() !== "" &&
+            String(lead.eventDetails).trim() !== "#N/A"
         ) {
             statsMap[key].eventDetailsCount++;
         }
 
         if (
             lead.orderSummary != null &&
-            String(lead.orderSummary).trim() !== ""
+            String(lead.orderSummary).trim() !== "" &&
+            String(lead.orderSummary).trim() !== "#N/A"
         ) {
             statsMap[key].orderSummaryCount++;
+        }
+
+        if (
+            lead.eventDate != null &&
+            String(lead.eventDate).trim() !== "" &&
+            String(lead.eventDate).trim() !== "#N/A"
+        ) {
+            statsMap[key].eventDateCount++;
         }
     }
 
@@ -565,6 +604,7 @@ const fetchAgentAnalyticsFast = async (groupByField, startDate, endDate) => {
             eventDetailsCount: data.eventDetailsCount,
             orderSummaryCount: data.orderSummaryCount,
             conversionRatio: `${conversionRatio}%`,
+            eventDateCount: data.eventDateCount,
         };
     });
 
@@ -675,11 +715,9 @@ router.get("/admin-leads", async (req, res) => {
                 $nin: ["", "SYNC_TRACKER_ROW"]
             },
             agentName: {
-                $exists: true,
                 $ne: "SYSTEM_TRACKER"
             },
             source: {
-                $exists: true,
                 $ne: "SYSTEM_TRACKER"
             }
         };
@@ -940,7 +978,7 @@ const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 router.get('/leads', async (req, res) => {
     try {
-        const { agent_phone } = req.query;
+        const agentName = req.query.agent_name || req.query.agentName;
         const search = (req.query.search || '').toString().trim().slice(0, 50);
 
         const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
@@ -956,8 +994,13 @@ router.get('/leads', async (req, res) => {
             },
         ];
 
-        if (agent_phone && agent_phone !== 'null' && agent_phone !== 'undefined') {
-            and.push({ agent_phone });
+        if (agentName && agentName !== 'null' && agentName !== 'undefined') {
+            and.push({
+                agentName: {
+                    $regex: `^${escapeRegex(agentName.trim())}$`,
+                    $options: 'i',
+                },
+            });
         }
 
         if (search) {
@@ -1097,16 +1140,38 @@ router.post('/call-logs', async (req, res) => {
 router.get('/agents', async (req, res) => {
     try {
         const rows = await Lead.aggregate([
-            { $match: { agent_phone: { $nin: [null, ''] } } },
-            { $group: { _id: '$agent_phone', name: { $first: '$agentName' } } },
+            {
+                $match: {
+                    agentName: { $nin: [null, ''] },
+                },
+            },
+            {
+                $addFields: {
+                    normalizedName: {
+                        $toLower: {
+                            $trim: { input: '$agentName' },
+                        },
+                    },
+                },
+            },
+            {
+                $group: {
+                    _id: '$normalizedName',
+                    name: { $first: { $trim: { input: '$agentName' } } },
+                },
+            },
             { $sort: { name: 1 } },
         ]);
         return res.status(200).json({
-            data: rows.map(r => ({ phone: r._id, name: r.name || r._id })),
+            data: rows.map((r) => ({
+                name: r.name,
+            })),
         });
     } catch (error) {
         console.error('Error fetching agents:', error);
-        return res.status(500).json({ message: 'Internal server error' });
+        return res.status(500).json({
+            message: 'Internal server error',
+        });
     }
 });
 
@@ -1393,8 +1458,8 @@ router.post('/upsert-customer-lead', async (req, res) => {
 
         const agentPhone = sanitizePhone(await getAgentPhone(agentName));
 
-        const lead = await Lead.findOneAndUpdate(
-            { phoneNumber: sanitizedPhone }, 
+        const lead = await upsertLead(
+            { phoneNumber: sanitizedPhone },
             {
                 $set: {
                     phoneNumber: sanitizedPhone,
@@ -1403,12 +1468,6 @@ router.post('/upsert-customer-lead', async (req, res) => {
                     date: customerCreatedDate,
                     agent_phone: agentPhone,
                 }
-            },
-            {
-                new: true,         
-                upsert: true,      
-                runValidators: true, 
-                setDefaultsOnInsert: true 
             }
         );
 
@@ -1437,19 +1496,13 @@ router.post('/upsert-order-summary', async (req, res) => {
 
         const sanitizedPhone = sanitizePhone(customerPhone);
 
-        const lead = await Lead.findOneAndUpdate(
+        const lead = await upsertLead(
             { phoneNumber: sanitizedPhone },
             {
                 $set: {
                     phoneNumber: sanitizedPhone,
                     orderSummary: orderSummaryStatus
                 }
-            },
-            {
-                new: true,                 
-                upsert: true,              
-                runValidators: true,         
-                setDefaultsOnInsert: true    
             }
         );
 
@@ -1479,22 +1532,17 @@ router.post('/upsert-event-agent-details', async (req, res) => {
         }
 
         const sanitizedPhone = sanitizePhone(customerPhone);
+        const sanitizedAgentPhone = sanitizePhone(agentNo);
 
-        const lead = await Lead.findOneAndUpdate(
-            { phoneNumber: sanitizedPhone }, 
+        const lead = await upsertLead(
+            { phoneNumber: sanitizedPhone },
             {
                 $set: {
                     phoneNumber: sanitizedPhone,
                     eventDate: eventDate,
-                    agent_phone: agentNo,
+                    agent_phone: sanitizedAgentPhone,
                     date: customerCreatedDate
                 }
-            },
-            {
-                new: true,                 
-                upsert: true,              
-                runValidators: true,         
-                setDefaultsOnInsert: true   
             }
         );
 
@@ -1523,19 +1571,13 @@ router.post('/upsert-order-details', async (req, res) => {
 
         const sanitizedPhone = sanitizePhone(customerPhone);
 
-        const lead = await Lead.findOneAndUpdate(
-            { phoneNumber: sanitizedPhone }, 
+        const lead = await upsertLead(
+            { phoneNumber: sanitizedPhone },
             {
                 $set: {
                     phoneNumber: sanitizedPhone,
-                    eventDetails: orderDetails 
+                    eventDetails: orderDetails
                 }
-            },
-            {
-                new: true,                
-                upsert: true,              
-                runValidators: true,         
-                setDefaultsOnInsert: true    
             }
         );
 
@@ -1565,7 +1607,7 @@ router.post('/upsert-source-date', async (req, res) => {
 
         const sanitizedPhone = sanitizePhone(customerPhone);
 
-        const lead = await Lead.findOneAndUpdate(
+        const lead = await upsertLead(
             { phoneNumber: sanitizedPhone },
             {
                 $set: {
@@ -1573,12 +1615,6 @@ router.post('/upsert-source-date', async (req, res) => {
                     source: source,
                     date: customerCreatedDate
                 }
-            },
-            {
-                new: true,                 
-                upsert: true,              
-                runValidators: true,         
-                setDefaultsOnInsert: true    
             }
         );
 
@@ -1609,21 +1645,15 @@ router.post('/upsert-source-date-funnel', async (req, res) => {
         const sanitizedPhone = sanitizePhone(customerPhone);
 
 
-        const lead = await Lead.findOneAndUpdate(
+        const lead = await upsertLead(
             { phoneNumber: sanitizedPhone },
             {
                 $set: {
                     phoneNumber: sanitizedPhone,
                     source: source,
                     date: customerCreatedDate,
-                    funnelStage: funnelStage 
+                    funnelStage: funnelStage
                 }
-            },
-            {
-                new: true,
-                upsert: true,
-                runValidators: true,
-                setDefaultsOnInsert: true
             }
         );
 

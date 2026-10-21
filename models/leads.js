@@ -47,6 +47,14 @@ leadSchema.index(
     { sparse: true }
 );
 
+leadSchema.index(
+    { phoneNumber: 1 },
+    {
+        unique: true,
+        partialFilterExpression: { createdAt: { $gte: new Date("2026-10-19T18:30:00Z") } }
+    }
+);
+
 const Lead = mongoose.model('lead', leadSchema);
 
 module.exports = Lead;

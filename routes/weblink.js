@@ -3,6 +3,7 @@ const router = express.Router();
 const WebLink = require("../models/weblink-images");
 const Order = require("../models/order");
 const Folder = require("../models/folder");
+const FolderModel = require("../models/folder");
 const User = require("../models/user");
 const Users = require("../models/user");
 const mongoose = require("mongoose");
@@ -18,6 +19,7 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 const { s3, S3_BUCKET } = require("../utils/awsConfigs");
 const { generateThumbnail } = require("../store/multerS3Config");
+const axios = require("axios");
 
 
 async function deleteFromS3(key) {
@@ -1419,5 +1421,407 @@ router.post(
   upload.single("leftImage"),
   handleFolderBannerCreation
 );
+
+router.post("/create-capsule", async (req, res, next) => {
+  try {
+    const { name, orderIds } = req.body;
+
+    if (
+      !name?.trim() ||
+      !Array.isArray(orderIds) ||
+      orderIds.length === 0
+    ) {
+      return res.status(400).json({
+        message: "name and orderIds are required",
+      });
+    }
+
+    const uniqueOrderIds = [
+      ...new Set(orderIds.map((id) => String(id).trim())),
+    ];
+
+    if (
+      uniqueOrderIds.some(
+        (id) => !id || !Number.isFinite(Number(id))
+      )
+    ) {
+      return res.status(400).json({
+        message: "Invalid order ID",
+      });
+    }
+    const dbOrderIds = uniqueOrderIds.map(
+      (id) => String(Number(id) - 10800)
+    );
+
+    const folders = await FolderModel.find({
+      orderId: { $in: dbOrderIds },
+    })
+      .select(
+        "_id orderId customerId capsuleBannerImageUrl selectedForBanner"
+      )
+      .lean();
+
+    const folderMap = new Map(
+      folders.map((folder) => [
+        String(Number(folder.orderId) + 10800),
+        folder,
+      ])
+    );
+
+    const missingOrderIds = uniqueOrderIds.filter(
+      (id) => !folderMap.has(id)
+    );
+
+    if (missingOrderIds.length > 0) {
+      return res.status(404).json({
+        message: "Some orders do not have an existing gallery",
+        missingOrderIds,
+      });
+    }
+
+    const customerIds = [
+      ...new Set(
+        folders
+          .map((folder) => folder.customerId)
+          .filter(Boolean)
+          .map((id) => String(id))
+      ),
+    ];
+
+    const galleryFolders = uniqueOrderIds.map((orderId) => {
+      const folder = folderMap.get(orderId);
+
+      return {
+        orderId,
+        galleryId: String(folder._id),
+        bannerImageUrl: folder.capsuleBannerImageUrl || "",
+        selectedForBanner: folder.selectedForBanner || "",
+      };
+    });
+
+    const capsule = await FolderModel.create({
+      folderName: name.trim(),
+      galleryFolders,
+      customerId: customerIds[0] || null,
+    });
+
+    const savedCapsule = await FolderModel.findById(capsule._id)
+      .select("folderName customerId galleryFolders")
+      .lean();
+
+    return res.status(201).json({
+      message: "Capsule created successfully",
+      capsuleId: savedCapsule._id,
+      folderName: savedCapsule.folderName,
+      galleryFolders: savedCapsule.galleryFolders,
+    });
+  } catch (error) {
+    console.error("CREATE CAPSULE ERROR:", error);
+    next(error);
+  }
+});
+
+router.post("/edit-capsule", async (req, res, next) => {
+  try {
+    const { capsuleId, name, orderIds } = req.body;
+
+    if (
+      !capsuleId ||
+      !name?.trim() ||
+      !Array.isArray(orderIds) ||
+      orderIds.length === 0
+    ) {
+      return res.status(400).json({
+        message: "capsuleId, name and minimum one orderId are required",
+      });
+    }
+
+    const uniqueOrderIds = [
+      ...new Set(orderIds.map((id) => String(id).trim())),
+    ];
+
+    if (
+      uniqueOrderIds.some(
+        (id) => !id || !Number.isFinite(Number(id))
+      )
+    ) {
+      return res.status(400).json({
+        message: "Invalid Order ID",
+      });
+    }
+
+    const capsule = await FolderModel.findById(capsuleId);
+
+    if (!capsule) {
+      return res.status(404).json({
+        message: "Capsule not found",
+      });
+    }
+
+    const dbOrderIds = uniqueOrderIds.map(
+      (id) => String(Number(id) - 10800)
+    );
+
+    const folders = await FolderModel.find({
+      orderId: { $in: dbOrderIds },
+    })
+      .select(
+        "_id orderId customerId capsuleBannerImageUrl selectedForBanner"
+      )
+      .lean();
+
+    const folderMap = new Map(
+      folders.map((folder) => [
+        String(Number(folder.orderId) + 10800),
+        folder,
+      ])
+    );
+
+
+    const missingOrderIds = uniqueOrderIds.filter(
+      (id) => !folderMap.has(id)
+    );
+
+    if (missingOrderIds.length > 0) {
+
+      return res.status(404).json({
+        message: "Some orders do not have an existing gallery",
+        missingOrderIds,
+      });
+    }
+
+    capsule.folderName = name.trim();
+
+    const updatedGalleryFolders = uniqueOrderIds.map((orderId) => {
+      const folder = folderMap.get(orderId);
+
+      return {
+        orderId,
+        galleryId: String(folder._id),
+        bannerImageUrl: folder.capsuleBannerImageUrl || "",
+        selectedForBanner: folder.selectedForBanner || "",
+      };
+    });
+
+    capsule.galleryFolders = updatedGalleryFolders;
+
+    await capsule.save();
+
+
+    const savedCapsule = await FolderModel.findById(capsuleId)
+      .select("folderName galleryFolders")
+      .lean();
+
+    return res.status(200).json({
+      message: "Capsule updated successfully",
+      capsuleId: savedCapsule._id,
+      folderName: savedCapsule.folderName,
+      galleryFolders: savedCapsule.galleryFolders,
+    });
+  } catch (error) {
+    console.error("EDIT CAPSULE ERROR:", error);
+    next(error);
+  }
+});
+
+router.get("/get-capsules", async (req, res, next) => {
+  try {
+    const capsules = await FolderModel.find({
+      "galleryFolders.0": { $exists: true },
+    })
+      .sort({ updatedAt: -1 })
+      .select("_id folderName customerId galleryFolders createdAt updatedAt")
+      .lean();
+
+    return res.status(200).json({
+      capsules,
+      count: capsules.length,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/capsule-thumbnails", async (req, res, next) => {
+  try {
+    const { capsuleId, page, limit, subFolderId } = req.query;
+
+    if (!capsuleId) {
+      return res.status(400).json({
+        message: "capsuleId is required.",
+      });
+    }
+
+    const capsule = await FolderModel.findById(capsuleId).lean();
+
+    if (!capsule) {
+      return res.status(404).json({
+        message: "Capsule not found.",
+      });
+    }
+
+    const reversedGalleryFolders = [...(capsule.galleryFolders || [])].reverse();
+
+    const sortedGalleryFolders = [
+      ...(capsule.galleryFolders || []),
+    ].reverse();
+
+    const firstGallery = sortedGalleryFolders[0];
+
+    if (!firstGallery?.galleryId) {
+      return res.status(404).json({
+        message: "No gallery found in this capsule.",
+      });
+    }
+
+    const galleryId = String(firstGallery.galleryId);
+
+    const query = {
+      mainFolderId: galleryId,
+    };
+
+    if (subFolderId) {
+      query.folderIds = { $in: [subFolderId] };
+    }
+
+    const hasPagination = page !== undefined && limit !== undefined;
+
+    let imagesQuery = WebLink.find(query).sort({ createdAt: -1 });
+
+    let totalCount = 0;
+    let pageNumber;
+    let limitNumber;
+
+    if (hasPagination) {
+      pageNumber = parseInt(page, 10);
+      limitNumber = parseInt(limit, 10);
+
+      if (
+        !Number.isInteger(pageNumber) ||
+        !Number.isInteger(limitNumber) ||
+        pageNumber < 1 ||
+        limitNumber < 1
+      ) {
+        return res.status(400).json({
+          message: "page and limit must be positive integers.",
+        });
+      }
+
+      const skip = (pageNumber - 1) * limitNumber;
+
+      totalCount = await WebLink.countDocuments(query);
+
+      imagesQuery = imagesQuery.skip(skip).limit(limitNumber);
+    }
+
+    const thumbnails = await imagesQuery.lean();
+
+    const responsePayload = {
+      capsule,
+      galleryId,
+      gallery: firstGallery,
+      thumbnails,
+    };
+
+    if (hasPagination) {
+      responsePayload.pagination = {
+        currentPage: pageNumber,
+        totalPages: Math.ceil(totalCount / limitNumber),
+        totalItems: totalCount,
+        limit: limitNumber,
+      };
+    }
+
+    return res.status(200).json(responsePayload);
+  } catch (error) {
+    console.error("Error fetching capsule thumbnails:", error);
+    next(error);
+  }
+});
+
+router.get("/imageby-galleryId", async (req, res, next) => {
+  try {
+    const { folderName, galleryId, subFolderId, page, limit } = req.query;
+
+    if (!folderName && !galleryId) {
+      return res.status(400).json({
+        message: "Either folderName or galleryId is required.",
+      });
+    }
+
+    const queryFilter = {};
+
+    if (galleryId) {
+      queryFilter._id = galleryId;
+    } else if (folderName) {
+      const folderNames = folderName.split(",").map((name) => name.trim());
+      queryFilter.folderName = { $in: folderNames };
+    }
+
+    const folders = await FolderModel.find(queryFilter).lean();
+    if (!folders.length) {
+      return res.status(404).json({
+        message: "No folders found.",
+      });
+    }
+
+
+
+    const folderIds = folders.map((f) => f._id);
+
+    let query = {
+      mainFolderId: { $in: folderIds },
+    };
+
+    if (subFolderId) {
+      query.folderIds = { $in: [subFolderId] };
+    }
+
+    const hasPagination = page && limit;
+    let imagesQuery = WebLink.find(query).sort({ createdAt: -1 });
+    let totalCount = 0;
+    let pageNumber, limitNumber;
+
+    if (hasPagination) {
+      pageNumber = parseInt(page);
+      limitNumber = parseInt(limit);
+      const skip = (pageNumber - 1) * limitNumber;
+
+      totalCount = await WebLink.countDocuments(query);
+
+      imagesQuery = imagesQuery.skip(skip).limit(limitNumber);
+    }
+
+    const images = await imagesQuery.lean();
+
+    const thumbnails = images.map((img) => ({
+      ...img,
+    }));
+
+    /* =========================
+           Final Response
+        ========================= */
+    const responsePayload = {
+      thumbnails
+    };
+
+    if (hasPagination) {
+      responsePayload.pagination = {
+        currentPage: pageNumber,
+        totalPages: Math.ceil(totalCount / limitNumber),
+        totalItems: totalCount,
+        limit: limitNumber,
+      };
+    }
+
+    res.status(200).json(responsePayload);
+  } catch (error) {
+    console.error("Error fetching thumbnails:", error);
+    error.isPublic = true;
+    next(error);
+  }
+});
+
+
 
 module.exports = router;

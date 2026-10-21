@@ -19,6 +19,7 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 const { s3, S3_BUCKET } = require("../utils/awsConfigs");
 const { generateThumbnail } = require("../store/multerS3Config");
+const axios = require("axios");
 
 
 async function deleteFromS3(key) {
@@ -1436,40 +1437,39 @@ router.post("/create-capsule", async (req, res, next) => {
     }
 
     const uniqueOrderIds = [
-      ...new Set(orderIds.map(id => String(id).trim()))
+      ...new Set(orderIds.map((id) => String(id).trim())),
     ];
 
-    if (uniqueOrderIds.some(id => !id)) {
+    if (
+      uniqueOrderIds.some(
+        (id) => !id || !Number.isFinite(Number(id))
+      )
+    ) {
       return res.status(400).json({
         message: "Invalid order ID",
       });
     }
-
-
-
-
-    // Selected orders ki existing galleries find karo
-    const dbOrderIds = uniqueOrderIds.map(id => String(Number(id) - 10800));
+    const dbOrderIds = uniqueOrderIds.map(
+      (id) => String(Number(id) - 10800)
+    );
 
     const folders = await FolderModel.find({
       orderId: { $in: dbOrderIds },
-    }).select("_id orderId customerId");
-
-
-    const customerIds = [
-      ...new Set(folders.map(folder => String(folder.customerId)))
-    ];
+    })
+      .select(
+        "_id orderId customerId capsuleBannerImageUrl selectedForBanner"
+      )
+      .lean();
 
     const folderMap = new Map(
-      folders.map(folder => [
+      folders.map((folder) => [
         String(Number(folder.orderId) + 10800),
         folder,
       ])
     );
 
-    // Kisi order ki gallery nahi mili toh create mat karo
     const missingOrderIds = uniqueOrderIds.filter(
-      id => !folderMap.has(id)
+      (id) => !folderMap.has(id)
     );
 
     if (missingOrderIds.length > 0) {
@@ -1479,71 +1479,47 @@ router.post("/create-capsule", async (req, res, next) => {
       });
     }
 
-    // Main capsule mein gallery references store karo
-    const galleryFolders = uniqueOrderIds.map(orderId => ({
-      orderId,
-      galleryId: String(folderMap.get(orderId)._id),
-      bannerImageUrl: "",
-    }));
+    const customerIds = [
+      ...new Set(
+        folders
+          .map((folder) => folder.customerId)
+          .filter(Boolean)
+          .map((id) => String(id))
+      ),
+    ];
+
+    const galleryFolders = uniqueOrderIds.map((orderId) => {
+      const folder = folderMap.get(orderId);
+
+      return {
+        orderId,
+        galleryId: String(folder._id),
+        bannerImageUrl: folder.capsuleBannerImageUrl || "",
+        selectedForBanner: folder.selectedForBanner || "",
+      };
+    });
 
     const capsule = await FolderModel.create({
       folderName: name.trim(),
       galleryFolders,
-      customerId: customerIds[0],
+      customerId: customerIds[0] || null,
     });
+
+    const savedCapsule = await FolderModel.findById(capsule._id)
+      .select("folderName customerId galleryFolders")
+      .lean();
 
     return res.status(201).json({
       message: "Capsule created successfully",
-      capsuleId: capsule._id,
-      folderName: capsule.folderName,
-      galleryFolders: capsule.galleryFolders,
+      capsuleId: savedCapsule._id,
+      folderName: savedCapsule.folderName,
+      galleryFolders: savedCapsule.galleryFolders,
     });
   } catch (error) {
+    console.error("CREATE CAPSULE ERROR:", error);
     next(error);
   }
 });
-
-router.post(
-  "/remove-capsule-gallery",
-  async (req, res, next) => {
-    try {
-      const { capsuleId, galleryId } = req.body;
-
-      if (!capsuleId || !galleryId) {
-        return res.status(400).json({
-          message: "capsuleId and galleryId are required",
-        });
-      }
-
-      const capsule = await FolderModel.findByIdAndUpdate(
-        capsuleId,
-        {
-          $pull: {
-            galleryFolders: {
-              galleryId: galleryId,
-            },
-          },
-        },
-        { new: true }
-      );
-
-      if (!capsule) {
-        return res.status(404).json({
-          message: "Capsule not found",
-        });
-      }
-
-      return res.status(200).json({
-        message: "Gallery removed from capsule successfully",
-        galleryFolders: capsule.galleryFolders,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-
 
 router.post("/edit-capsule", async (req, res, next) => {
   try {
@@ -1582,16 +1558,18 @@ router.post("/edit-capsule", async (req, res, next) => {
       });
     }
 
-    // Frontend Order ID se 10800 minus karke database mein search karo
     const dbOrderIds = uniqueOrderIds.map(
       (id) => String(Number(id) - 10800)
     );
 
     const folders = await FolderModel.find({
       orderId: { $in: dbOrderIds },
-    }).select("_id orderId customerId");
+    })
+      .select(
+        "_id orderId customerId capsuleBannerImageUrl selectedForBanner"
+      )
+      .lean();
 
-    // Original frontend Order ID ko key rakho
     const folderMap = new Map(
       folders.map((folder) => [
         String(Number(folder.orderId) + 10800),
@@ -1599,57 +1577,52 @@ router.post("/edit-capsule", async (req, res, next) => {
       ])
     );
 
+
     const missingOrderIds = uniqueOrderIds.filter(
       (id) => !folderMap.has(id)
     );
 
     if (missingOrderIds.length > 0) {
+
       return res.status(404).json({
         message: "Some orders do not have an existing gallery",
         missingOrderIds,
       });
     }
 
-    const customerIds = [
-      ...new Set(folders.map((folder) => String(folder.customerId))),
-    ];
-
-    if (
-      customerIds.length !== 1 ||
-      customerIds[0] !== String(capsule.customerId)
-    ) {
-      return res.status(400).json({
-        message: "All orders must belong to this capsule's customer",
-      });
-    }
-
     capsule.folderName = name.trim();
 
-    capsule.galleryFolders = uniqueOrderIds.map((orderId) => {
-      const existingEntry = capsule.galleryFolders.find(
-        (item) => String(item.orderId) === orderId
-      );
+    const updatedGalleryFolders = uniqueOrderIds.map((orderId) => {
+      const folder = folderMap.get(orderId);
 
       return {
-        orderId, // Original frontend Order ID save hogi
-        galleryId: String(folderMap.get(orderId)._id),
-        bannerImageUrl: existingEntry?.bannerImageUrl || "",
+        orderId,
+        galleryId: String(folder._id),
+        bannerImageUrl: folder.capsuleBannerImageUrl || "",
+        selectedForBanner: folder.selectedForBanner || "",
       };
     });
 
+    capsule.galleryFolders = updatedGalleryFolders;
+
     await capsule.save();
+
+
+    const savedCapsule = await FolderModel.findById(capsuleId)
+      .select("folderName galleryFolders")
+      .lean();
 
     return res.status(200).json({
       message: "Capsule updated successfully",
-      capsuleId: capsule._id,
-      folderName: capsule.folderName,
-      galleryFolders: capsule.galleryFolders,
+      capsuleId: savedCapsule._id,
+      folderName: savedCapsule.folderName,
+      galleryFolders: savedCapsule.galleryFolders,
     });
   } catch (error) {
+    console.error("EDIT CAPSULE ERROR:", error);
     next(error);
   }
 });
-
 
 router.get("/get-capsules", async (req, res, next) => {
   try {
@@ -1669,7 +1642,6 @@ router.get("/get-capsules", async (req, res, next) => {
   }
 });
 
-
 router.get("/capsule-thumbnails", async (req, res, next) => {
   try {
     const { capsuleId, page, limit, subFolderId } = req.query;
@@ -1680,7 +1652,6 @@ router.get("/capsule-thumbnails", async (req, res, next) => {
       });
     }
 
-    // 1. Main capsule fetch karo
     const capsule = await FolderModel.findById(capsuleId).lean();
 
     if (!capsule) {
@@ -1689,8 +1660,13 @@ router.get("/capsule-thumbnails", async (req, res, next) => {
       });
     }
 
-    // 2. Pehli gallery ka ID nikalo
-    const firstGallery = capsule.galleryFolders?.[0];
+    const reversedGalleryFolders = [...(capsule.galleryFolders || [])].reverse();
+
+    const sortedGalleryFolders = [
+      ...(capsule.galleryFolders || []),
+    ].reverse();
+
+    const firstGallery = sortedGalleryFolders[0];
 
     if (!firstGallery?.galleryId) {
       return res.status(404).json({
@@ -1700,7 +1676,6 @@ router.get("/capsule-thumbnails", async (req, res, next) => {
 
     const galleryId = String(firstGallery.galleryId);
 
-    // 3. WebLink documents mein mainFolderId match karo
     const query = {
       mainFolderId: galleryId,
     };
@@ -1741,7 +1716,6 @@ router.get("/capsule-thumbnails", async (req, res, next) => {
 
     const thumbnails = await imagesQuery.lean();
 
-    // 4. Capsule data + first gallery + thumbnails return karo
     const responsePayload = {
       capsule,
       galleryId,
@@ -1764,6 +1738,90 @@ router.get("/capsule-thumbnails", async (req, res, next) => {
     next(error);
   }
 });
+
+router.get("/imageby-galleryId", async (req, res, next) => {
+  try {
+    const { folderName, galleryId, subFolderId, page, limit } = req.query;
+
+    if (!folderName && !galleryId) {
+      return res.status(400).json({
+        message: "Either folderName or galleryId is required.",
+      });
+    }
+
+    const queryFilter = {};
+
+    if (galleryId) {
+      queryFilter._id = galleryId;
+    } else if (folderName) {
+      const folderNames = folderName.split(",").map((name) => name.trim());
+      queryFilter.folderName = { $in: folderNames };
+    }
+
+    const folders = await FolderModel.find(queryFilter).lean();
+    if (!folders.length) {
+      return res.status(404).json({
+        message: "No folders found.",
+      });
+    }
+
+
+
+    const folderIds = folders.map((f) => f._id);
+
+    let query = {
+      mainFolderId: { $in: folderIds },
+    };
+
+    if (subFolderId) {
+      query.folderIds = { $in: [subFolderId] };
+    }
+
+    const hasPagination = page && limit;
+    let imagesQuery = WebLink.find(query).sort({ createdAt: -1 });
+    let totalCount = 0;
+    let pageNumber, limitNumber;
+
+    if (hasPagination) {
+      pageNumber = parseInt(page);
+      limitNumber = parseInt(limit);
+      const skip = (pageNumber - 1) * limitNumber;
+
+      totalCount = await WebLink.countDocuments(query);
+
+      imagesQuery = imagesQuery.skip(skip).limit(limitNumber);
+    }
+
+    const images = await imagesQuery.lean();
+
+    const thumbnails = images.map((img) => ({
+      ...img,
+    }));
+
+    /* =========================
+           Final Response
+        ========================= */
+    const responsePayload = {
+      thumbnails
+    };
+
+    if (hasPagination) {
+      responsePayload.pagination = {
+        currentPage: pageNumber,
+        totalPages: Math.ceil(totalCount / limitNumber),
+        totalItems: totalCount,
+        limit: limitNumber,
+      };
+    }
+
+    res.status(200).json(responsePayload);
+  } catch (error) {
+    console.error("Error fetching thumbnails:", error);
+    error.isPublic = true;
+    next(error);
+  }
+});
+
 
 
 module.exports = router;

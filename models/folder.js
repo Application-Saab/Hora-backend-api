@@ -149,6 +149,10 @@ const FolderSchema = new mongoose.Schema(
           type: String,
           default: "",
         },
+        selectedForBanner:{
+          type: String,
+          default: "",
+        }
       },
     ],
   },

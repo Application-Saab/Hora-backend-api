@@ -6,6 +6,12 @@ const router = express.Router();
 const Order = require("../models/order");
 const CallLog = require('../models/callLogs');
 const Team = require("../models/team");
+const {
+    computePriority,
+    comparePriority,
+    TAGS,
+} = require("../utils/priority");
+
 
 const credentials = JSON.parse(fs.readFileSync("google-sheet.json", "utf-8"));
 const { client_email, private_key } = credentials;
@@ -1705,6 +1711,412 @@ router.post('/upsert-callback-requested', async (req, res) => {
     } catch (error) {
         return res.status(500).json({
             success: false,
+            error: error.message,
+        });
+    }
+});
+
+router.get("/priority/leads", async (req, res) => {
+    try {
+        const agentName = String(
+            req.query.agent_name || req.query.agentName || ""
+        ).trim();
+
+        const search = String(req.query.search || "")
+            .trim()
+            .slice(0, 50);
+
+        const requestedTag = String(req.query.tag || "")
+            .trim()
+            .toLowerCase();
+
+        const page = Math.max(
+            parseInt(req.query.page, 10) || 1,
+            1
+        );
+
+        const limit = Math.min(
+            Math.max(parseInt(req.query.limit, 10) || 20, 1),
+            100
+        );
+
+        const skip = (page - 1) * limit;
+
+        // Validate tag filter against senior's original TAGS.
+        const validTags = new Set(TAGS.map((tag) => tag.key));
+
+        if (requestedTag && !validTags.has(requestedTag)) {
+            return res.status(400).json({
+                message: "Invalid priority tag.",
+                allowedTags: TAGS.map((tag) => tag.key),
+            });
+        }
+
+        // Keep existing agent and search filters.
+        const and = [
+            {
+                $or: [
+                    { phone: { $nin: [null, ""] } },
+                    { phoneNumber: { $nin: [null, ""] } },
+                ],
+            },
+        ];
+
+        if (agentName) {
+            and.push({
+                agentName: {
+                    $regex: `^${escapeRegex(agentName)}$`,
+                    $options: "i",
+                },
+            });
+        }
+
+        if (search) {
+            const regex = new RegExp(escapeRegex(search), "i");
+
+            const or = [
+                { name: regex },
+                { agentName: regex },
+                { phone: regex },
+                { phoneNumber: regex },
+            ];
+
+            const digits = search.replace(/\D/g, "");
+
+            if (digits.length >= 3) {
+                const digitRegex = new RegExp(
+                    digits.split("").join("\\D*")
+                );
+
+                or.push(
+                    { phone: digitRegex },
+                    { phoneNumber: digitRegex }
+                );
+            }
+
+            and.push({ $or: or });
+        }
+
+        const query = { $and: and };
+
+        // Required to support global priority sorting and tag filtering.
+        // Fetch only the fields required for priority calculation.
+        const leads = await Lead.find(query)
+            .select(
+                [
+                    "name",
+                    "agentName",
+                    "phone",
+                    "phoneNumber",
+                    "status",
+                    "source",
+                    "agent_phone",
+                    "date",
+                    "eventDate",
+                    "event_date_at",
+                    "event_details_at",
+                    "order_summary_at",
+                    "callback_requested_at",
+                    "eventDetails",
+                    "orderSummary",
+                    "funnelStage",
+                    "createdAt",
+                ].join(" ")
+            )
+            .sort({ date: -1, _id: -1 })
+            .lean();
+
+        const now = Date.now();
+
+        const toMillis = (value) => {
+            if (!value) return undefined;
+
+            const result = new Date(value).getTime();
+
+            return Number.isFinite(result) ? result : undefined;
+        };
+
+        const normalizePhone = (value) => {
+            const digits = String(value || "").replace(/\D/g, "");
+
+            return digits.length > 10
+                ? digits.slice(-10)
+                : digits;
+        };
+
+        const leadPhoneNumbers = [
+            ...new Set(
+                leads
+                    .map((lead) =>
+                        normalizePhone(lead.phoneNumber || lead.phone)
+                    )
+                    .filter((phone) => phone.length === 10)
+            ),
+        ];
+
+        // Find active orders with status === 1.
+        // Support common phone formats, including +91 and 91 prefixes.
+        const orderPhoneCandidates = [
+            ...new Set(
+                leadPhoneNumbers.flatMap((phone) => [
+                    phone,
+                    `91${phone}`,
+                    `+91${phone}`,
+                    `0${phone}`,
+                ])
+            ),
+        ];
+
+        const [allLogs, matchingOrders] = await Promise.all([
+            leads.length
+                ? CallLog.find({
+                    lead_id: { $in: leads.map((lead) => lead._id) },
+                })
+                    .select(
+                        "lead_id client_call_id started_at duration_seconds status direction"
+                    )
+                    .sort({ started_at: 1 })
+                    .lean()
+                : [],
+
+            orderPhoneCandidates.length
+                ? Order.find({
+                    status: 1,
+                    phone_no: { $in: orderPhoneCandidates },
+                })
+                    .select("phone_no status")
+                    .lean()
+                : [],
+        ]);
+
+        const logsByLead = new Map();
+
+        for (const log of allLogs) {
+            const key = String(log.lead_id);
+
+            if (!logsByLead.has(key)) {
+                logsByLead.set(key, []);
+            }
+
+            logsByLead.get(key).push(log);
+        }
+
+        const convertedPhones = new Set(
+            matchingOrders
+                .map((order) => normalizePhone(order.phone_no))
+                .filter((phone) => phone.length === 10)
+        );
+
+        const evaluatedLeads = leads.map((lead) => {
+            const id = String(lead._id);
+
+            const phone = lead.phone || lead.phoneNumber || "";
+            const normalizedPhone = normalizePhone(
+                lead.phoneNumber || lead.phone
+            );
+
+            const logs = logsByLead.get(id) || [];
+
+            const isConverted =
+                normalizedPhone.length === 10 &&
+                convertedPhones.has(normalizedPhone);
+
+            // Converted takes precedence over expired.
+            const eventDate = String(lead.eventDate || "");
+            const eventDateMatch =
+                /^(\d{4})-(\d{2})-(\d{2})$/.exec(eventDate);
+
+            let isExpired = false;
+
+            if (!isConverted && eventDateMatch) {
+                const [, year, month, day] = eventDateMatch;
+
+                const eventDay = Math.floor(
+                    Date.UTC(
+                        Number(year),
+                        Number(month) - 1,
+                        Number(day)
+                    ) / 86400000
+                );
+
+                // Match senior's India timezone logic.
+                const todayIndia = Math.floor(
+                    (now + 330 * 60000) / 86400000
+                );
+
+                isExpired = eventDay < todayIndia;
+            }
+
+            // Convert call logs to the exact PriorityCall input shape.
+            const calls = logs
+                .filter((log) => toMillis(log.started_at) !== undefined)
+                .map((log) => ({
+                    at: toMillis(log.started_at),
+                    outgoing: log.direction === "outgoing",
+                    connected: log.status === "connected",
+                    durationSeconds: Number(log.duration_seconds || 0),
+                }));
+
+            // Keep the senior's priority logic.
+            // No callbackAt is passed, so no scheduled-callback time is assumed.
+            const priority = computePriority(
+                {
+                    createdAt: toMillis(lead.createdAt),
+                    status: isConverted
+                        ? "converted"
+                        : lead.status || undefined,
+                    eventDate: lead.eventDate || undefined,
+                    eventDateAt: toMillis(lead.event_date_at),
+                    eventDetailsAt: toMillis(lead.event_details_at),
+                    orderSummaryAt: toMillis(lead.order_summary_at),
+                    callbackRequestedAt: toMillis(
+                        lead.callback_requested_at
+                    ),
+                    calls,
+                },
+                now
+            );
+
+            const status = isConverted
+                ? "converted"
+                : isExpired
+                    ? "expired"
+                    : "open";
+
+            // Backend-only override for converted/expired leads.
+            const finalPriority = isConverted || isExpired
+                ? {
+                    ...priority,
+                    tag: "closed",
+                    label: "Closed",
+                    tone: "muted",
+                    rank: 12,
+                    actionable: false,
+                    reason: isConverted
+                        ? "Matching converted order found"
+                        : "Event date has passed",
+                    overdue: false,
+                }
+                : priority;
+
+            return {
+                id,
+                name: lead.name || lead.agentName || "",
+                phone,
+                phoneNumber: lead.phoneNumber || "",
+                status,
+                source: lead.source || "",
+                date: lead.date || "",
+                eventDate: lead.eventDate || "",
+                agent_phone: lead.agent_phone || "",
+                agentName: lead.agentName || "",
+                orderSummary: lead.orderSummary || "",
+                eventDetails: lead.eventDetails || "",
+
+                // Full priority object from the senior's function.
+                priority: finalPriority,
+                priorityTag: finalPriority.tag,
+
+                call_logs: logs.map((log) => ({
+                    id: String(log._id),
+                    client_call_id: log.client_call_id,
+                    started_at: log.started_at,
+                    duration_seconds: log.duration_seconds,
+                    status: log.status,
+                    direction: log.direction,
+                })),
+            };
+        });
+
+        // Count all matching leads before applying the tag filter.
+        const priorityCounts = Object.fromEntries(
+            TAGS.map((tag) => [tag.key, 0])
+        );
+
+        const statusCounts = {
+            converted: 0,
+            expired: 0,
+            open: 0,
+        };
+
+        for (const lead of evaluatedLeads) {
+            priorityCounts[lead.priorityTag] =
+                (priorityCounts[lead.priorityTag] || 0) + 1;
+
+            statusCounts[lead.status]++;
+        }
+
+        // Converted first, expired second; all other leads use senior's sorter.
+        // evaluatedLeads.sort((a, b) => {
+        //     const statusRank = {
+        //         converted: 0,
+        //         expired: 1,
+        //         open: 2,
+        //     };
+
+        //     const difference =
+        //         statusRank[a.status] - statusRank[b.status];
+
+        //     if (difference !== 0) return difference;
+
+        //     return comparePriority(a.priority, b.priority);
+        // });
+
+        // evaluatedLeads.sort((a, b) => {
+        //     const statusRank = {
+        //         converted: 0,
+        //         expired: 1,
+        //         open: 2,
+        //     };
+
+        //     const difference =
+        //         statusRank[a.status] - statusRank[b.status];
+
+        //     if (difference !== 0) return difference;
+
+        //     return comparePriority(a.priority, b.priority);
+        // });
+
+
+        evaluatedLeads.sort((a, b) => {
+            return comparePriority(a.priority, b.priority);
+        });
+
+
+        // Tag filter works with ?tag=hot, ?tag=callback, etc.
+        const filteredLeads = requestedTag
+            ? evaluatedLeads.filter(
+                (lead) => lead.priorityTag === requestedTag
+            )
+            : evaluatedLeads;
+
+        const totalItems = filteredLeads.length;
+        const totalPages = Math.ceil(totalItems / limit);
+
+        const data = filteredLeads.slice(skip, skip + limit);
+
+        res.set("Cache-Control", "no-store");
+
+        return res.status(200).json({
+            data,
+            counts: {
+                priorities: priorityCounts,
+                statuses: statusCounts,
+            },
+            pagination: {
+                currentPage: page,
+                perPage: limit,
+                totalItems,
+                totalPages,
+                hasNextPage: page < totalPages,
+                hasPrevPage: page > 1,
+            },
+        });
+    } catch (error) {
+        console.error("GET /leads error:", error);
+
+        return res.status(500).json({
+            message: "Failed to fetch leads.",
             error: error.message,
         });
     }

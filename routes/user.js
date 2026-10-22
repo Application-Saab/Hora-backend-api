@@ -1267,4 +1267,25 @@ router.get("/supplier-order-count-by-date", async (req, res, next) => {
   }
 });
 
+
+router.get("/get-suppliers", async (req, res) => {
+  try {
+    const suppliers = await UserModel.find({ role: "supplier" })
+      .select("_id name firstName lastName avatar phone")
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      data: suppliers
+    });
+  } catch (error) {
+    console.error("Get suppliers error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error"
+    });
+  }
+});
+
 module.exports = router;

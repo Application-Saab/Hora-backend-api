@@ -216,6 +216,27 @@ function computePriority(input, now, customRules = {}) {
 
   const days = daysUntil(input.eventDate, now, rules);
 
+  const indiaTime = new Date(
+    now + rules.tzOffsetMinutes * MIN
+  );
+
+  const indiaHour = indiaTime.getUTCHours();
+
+
+  const hotNearEvent =
+    days !== undefined &&
+    days >= 0 &&
+    days <= 2;
+
+  const hotTimeAllowed =
+    hotNearEvent ||
+    (
+      days !== undefined &&
+      days > 2 &&
+      indiaHour >= 11 &&
+      indiaHour < 13
+    );
+
   const since = timestamp =>
     timestamp === undefined ? Infinity : now - timestamp;
 
@@ -226,7 +247,8 @@ function computePriority(input, now, customRules = {}) {
 
   const pendingCallback =
     input.callbackRequestedAt !== undefined &&
-    !spokeAfter(input.callbackRequestedAt);
+    !spokeAfter(input.callbackRequestedAt) &&
+    since(input.callbackRequestedAt) < DAY;
 
   // Score
   let score = 0;
@@ -378,6 +400,36 @@ function computePriority(input, now, customRules = {}) {
   }
 
   // 3. Never called
+
+
+
+  // 3. Hot: order summary sent
+  if (
+    input.orderSummaryAt !== undefined &&
+    hotTimeAllowed
+  ) {
+    if (
+      hotNearEvent &&
+      lastAttempt !== undefined &&
+      since(lastAttempt) < 30 * MIN
+    ) {
+      const next = lastAttempt + 30 * MIN;
+
+      return result(
+        'waiting',
+        `Recently called. Hot lead will be available again at ${clockAt(next, now, rules)}`,
+        next
+      );
+    }
+
+    return result(
+      'hot',
+      `Order summary sent ${ago(since(input.orderSummaryAt))} ago`,
+      input.orderSummaryAt
+    );
+  }
+
+  // 4. Never called
   if (!outgoing.length) {
     const age = input.createdAt !== undefined
       ? since(input.createdAt)
@@ -390,14 +442,14 @@ function computePriority(input, now, customRules = {}) {
     return result(
       'new',
       age !== undefined
-        ? `Arrived ${ ago(age) } ago, not called yet`
+        ? `Arrived ${ago(age)} ago, not called yet`
         : 'Not called yet',
       input.createdAt,
       overdue
     );
   }
 
-  // 4. Daily cap and hold after a call attempt
+  // 5. Daily cap
   if (attemptsToday >= rules.maxAttemptsPerDay) {
     const next =
       (today + 1) * DAY -
@@ -406,21 +458,18 @@ function computePriority(input, now, customRules = {}) {
 
     return result(
       'waiting',
-      `${ attemptsToday } calls today.Try again ${ clockAt(next, now, rules) } `,
+      `${attemptsToday} calls today. Try again ${clockAt(next, now, rules)}`,
       next
     );
   }
 
+  // 6. Normal 120-minute hold
   if (since(lastAttempt) < rules.holdMinutes * MIN) {
     const next = lastAttempt + rules.holdMinutes * MIN;
 
     return result(
       'waiting',
-      `Called ${ ago(since(lastAttempt)) } ago${
-    connected.length && lastConnected === lastAttempt
-        ? ''
-        : ', no answer'
-}. Next try ${ clockAt(next, now, rules) } `,
+      `Called ${ago(since(lastAttempt))} ago. Next try ${clockAt(next, now, rules)}`,
       next
     );
   }
@@ -429,21 +478,7 @@ function computePriority(input, now, customRules = {}) {
     !spokeAfter(timestamp) ||
     since(lastConnected) >= rules.recontactHours * HOUR;
 
-  // 5. Order summary sent
-  if (
-    input.orderSummaryAt !== undefined &&
-    stale(input.orderSummaryAt)
-  ) {
-    return result(
-      'hot',
-      `Order summary sent ${ ago(since(input.orderSummaryAt)) } ago, ${
-    spokeAfter(input.orderSummaryAt)
-        ? spoke
-        : 'no conversation since'
-} `,
-      input.orderSummaryAt
-    );
-  }
+
 
   // 6. Event is close
   if (

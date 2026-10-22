@@ -32,6 +32,10 @@ const leadSchema = new mongoose.Schema(
         },
         agent_phone: { type: String },
         funnelStage : { type: String },
+        event_date_at: { type: Date, default: null },
+        event_details_at: { type: Date, default: null },
+        order_summary_at: { type: Date, default: null },
+        callback_requested_at: { type: Date, default: null },
     },
     {
         timestamps: true,

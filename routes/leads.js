@@ -1447,7 +1447,8 @@ router.post('/upsert-customer-lead', async (req, res) => {
             "customerNumber": customerPhone,
             "agentName": agentName,
             "source": source,
-            "customerCreatedDate": customerCreatedDate
+            "customerCreatedDate": customerCreatedDate,
+            "funnelStage": funnelStage
         } = req.body;
 
         if (!customerPhone) {
@@ -1467,6 +1468,7 @@ router.post('/upsert-customer-lead', async (req, res) => {
                     source: source,
                     date: customerCreatedDate,
                     agent_phone: agentPhone,
+                    funnelStage: funnelStage,
                 }
             }
         );
@@ -1501,7 +1503,8 @@ router.post('/upsert-order-summary', async (req, res) => {
             {
                 $set: {
                     phoneNumber: sanitizedPhone,
-                    orderSummary: orderSummaryStatus
+                    orderSummary: orderSummaryStatus,
+                    order_summary_at: new Date(),
                 }
             }
         );
@@ -1541,7 +1544,8 @@ router.post('/upsert-event-agent-details', async (req, res) => {
                     phoneNumber: sanitizedPhone,
                     eventDate: eventDate,
                     agent_phone: sanitizedAgentPhone,
-                    date: customerCreatedDate
+                    date: customerCreatedDate,
+                    event_date_at: new Date(),
                 }
             }
         );
@@ -1576,7 +1580,8 @@ router.post('/upsert-order-details', async (req, res) => {
             {
                 $set: {
                     phoneNumber: sanitizedPhone,
-                    eventDetails: orderDetails
+                    eventDetails: orderDetails,
+                    event_details_at: new Date(),
                 }
             }
         );
@@ -1668,6 +1673,42 @@ router.post('/upsert-source-date-funnel', async (req, res) => {
     }
 });
 
+
+router.post('/upsert-callback-requested', async (req, res) => {
+    try {
+        const { customerNumber, callbackRequestedAt } = req.body;
+
+        if (!customerNumber) {
+            return res.status(400).json({
+                success: false,
+                message: "Customer Phone no. is required",
+            });
+        }
+
+        const sanitizedPhone = sanitizePhone(customerNumber);
+
+        const lead = await upsertLead(
+            { phoneNumber: sanitizedPhone },
+            {
+                $set: {
+                    phoneNumber: sanitizedPhone,
+                    callback_requested_at: new Date(),
+                },
+            }
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "Callback request timestamp stored successfully",
+            data: lead,
+        });
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            error: error.message,
+        });
+    }
+});
 
 module.exports = {
     router,

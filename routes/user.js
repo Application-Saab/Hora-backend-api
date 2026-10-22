@@ -1270,12 +1270,18 @@ router.get("/supplier-order-count-by-date", async (req, res, next) => {
 
 router.get("/get-suppliers", async (req, res) => {
   try {
-    const suppliers = await UserModel.find({ role: "supplier" })
+    const suppliers = await UserModel.find({
+      role: "supplier",
+      job_profile: "Photography",
+      order_type: "8",
+      status: { $ne: 2 },
+    })
       .select("_id name firstName lastName avatar phone")
       .lean();
 
     return res.status(200).json({
       success: true,
+      total: suppliers.length,
       data: suppliers
     });
   } catch (error) {

@@ -1,5 +1,14 @@
 const mongoose = require("mongoose");
 
+const inactivePeriodSchema = new mongoose.Schema(
+    {
+        from: { type: String, required: true }, // YYYY-MM-DD
+        to: { type: String, default: "" },      // "" = abhi bhi inactive (open-ended)
+        reason: { type: String, default: "" },
+    },
+    { _id: true }
+);
+
 const teamSchema = new mongoose.Schema(
     {
         name: {
@@ -30,6 +39,9 @@ const teamSchema = new mongoose.Schema(
             type: String,
             default: "",
         },
+
+        isActive: { type: Boolean, default: true },
+        inactivePeriods: { type: [inactivePeriodSchema], default: [] },
     },
     { timestamps: true }
 );

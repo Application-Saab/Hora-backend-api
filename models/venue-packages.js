@@ -27,16 +27,7 @@ const venuePackagesSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
-    // packageItems: {
-    //   type: [
-    //     {
-    //       type: mongoose.Schema.Types.ObjectId,
-    //       ref: "venue-package-items",
-    //     },
-    //   ],
-    //   default: [],
-    // },
-        packageItems: {
+    packageItems: {
       type: [
         {
           itemId: {

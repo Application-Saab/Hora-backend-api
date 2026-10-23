@@ -1,481 +1,3 @@
-// const mongoose = require("mongoose");
-// const Venues = require("../models/party-venue");
-// const VenuePackage = require("../models/venue-packages");
-// const PackageItem = require("../models/venue-package-items");
-// const PackageCategory = require("../models/venue-package-categories");
-
-// const fs = require("fs");
-// const { google } = require("googleapis");
-
-// const credentials = JSON.parse(fs.readFileSync("google-sheet.json", "utf-8"));
-// const { client_email, private_key } = credentials;
-// const spreadsheetId = "1Cw6xjR-f4qmngZcuprrRz6LgyIZtSoqiEjuNIiGbTZA";
-
-// const auth = new google.auth.JWT({
-//   email: client_email,
-//   key: private_key,
-//   scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-// });
-// // ================== SUMMARY COUNTERS ==================
-// const stats = {
-//   packages: {
-//     loaded: 0,
-//     created: 0,
-//     skipped: 0,
-//     errors: 0,
-//     venueNotFound: 0,
-//   },
-//   items: {
-//     loaded: 0,
-//     created: 0,
-//     updated: 0,
-//     errors: 0,
-//   },
-//   categories: {
-//     created: 0,
-//     updated: 0,
-//   },
-//   addons: {
-//     loaded: 0,
-//   },
-//   tags: {
-//     loaded: 0,
-//   },
-//   // NEW: missing venues list
-//   missingVenues: new Set(),
-// };
-
-// function printSummary() {
-//   console.log("\n" + "=".repeat(50));
-//   console.log("           PACKAGE SYNC SUMMARY");
-//   console.log("=".repeat(50));
-
-//   console.log("\n📦 PACKAGES:");
-//   console.log(`   Loaded from sheet      : ${stats.packages.loaded}`);
-//   console.log(`   Created                : ${stats.packages.created}`);
-//   console.log(`   Skipped (already exist): ${stats.packages.skipped}`);
-//   console.log(`   Venue Not Found        : ${stats.packages.venueNotFound}`);
-//   console.log(`   Errors                 : ${stats.packages.errors}`);
-
-//   // ===== Missing Venues List =====
-//   if (stats.missingVenues.size > 0) {
-//     console.log("\n❌ VENUES NOT FOUND IN DB:");
-//     [...stats.missingVenues].forEach((venue, index) => {
-//       console.log(`   ${index + 1}. ${venue}`);
-//     });
-//   }
-
-//   console.log("\n🍽️  ITEMS:");
-//   console.log(`   Loaded from sheet      : ${stats.items.loaded}`);
-//   console.log(`   Created                : ${stats.items.created}`);
-//   console.log(`   Updated                : ${stats.items.updated}`);
-//   console.log(`   Errors                 : ${stats.items.errors}`);
-
-//   console.log("\n🏷️  CATEGORIES:");
-//   console.log(`   Created                : ${stats.categories.created}`);
-//   console.log(`   Updated (casing)       : ${stats.categories.updated}`);
-
-//   console.log("\n➕ ADDONS:");
-//   console.log(`   Loaded                 : ${stats.addons.loaded}`);
-
-//   console.log("\n🔖 TAGS:");
-//   console.log(`   Loaded                 : ${stats.tags.loaded}`);
-
-//   console.log("\n" + "=".repeat(50));
-// }
-
-// // Normalization functions
-// function normalize(value) {
-//   return String(value || "").trim();
-// }
-
-// function normalizeForDb(title) {
-//   return normalize(title).toLowerCase();
-// }
-
-// function toTitleCase(str) {
-//   return normalize(str)
-//     .split(/\s+/)
-//     .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-//     .join(" ");
-// }
-
-// async function getSheetData(range) {
-//   const sheets = google.sheets({ version: "v4", auth });
-
-//   const response = await sheets.spreadsheets.values.get({
-//     spreadsheetId,
-//     range,
-//   });
-
-//   const rows = response.data.values || [];
-//   if (!rows.length) return [];
-
-//   const headers = rows[0];
-//   const data = rows.slice(1).map((row) => {
-//     const obj = {};
-//     headers.forEach((header, i) => {
-//       obj[header] = row[i] || "";
-//     });
-//     return obj;
-//   });
-
-//   return data;
-// }
-
-// async function getPackagesRows() {
-//   return getSheetData("Packages <>Venue List!A:J");
-// }
-
-// async function getPackageItems() {
-//   const rows = await getSheetData("Package<>DIsh<>Venue List!A:E");
-//   const map = new Map();
-
-//   for (const row of rows) {
-//     const key = `${normalize(row.venueName)}|${normalize(row.packageName)}`;
-//     if (!map.has(key)) map.set(key, []);
-
-//     map.get(key).push({
-//       itemTitle: normalize(row.itemTitle),
-//       categoryTitle: normalize(row.categoryTitle),
-//       foodType: normalize(row.foodType || "veg"),
-//     });
-//     stats.items.loaded++;
-//   }
-
-//   return map;
-// }
-
-// async function getPackageAddons() {
-//   const rows = await getSheetData("Package<>Addons<>Venue List!A:C");
-//   const map = new Map();
-
-//   for (const row of rows) {
-//     const key = `${normalize(row.venueName)}|${normalize(row.packageName)}`;
-//     if (!map.has(key)) map.set(key, []);
-//     map.get(key).push(normalize(row.addonTitle));
-//     stats.addons.loaded++;
-//   }
-
-//   return map;
-// }
-
-// async function getPackageCategoryTags() {
-//   const rows = await getSheetData("Package<>Category Tags<>Venue List!A:D");
-//   const map = new Map();
-
-//   for (const row of rows) {
-//     const key = `${normalize(row.venueName)}|${normalize(row.packageName)}`;
-//     if (!map.has(key)) map.set(key, {});
-
-//     const category = await getOrCreateCategory(normalize(row.categoryTitle));
-//     if (category) {
-//       map.get(key)[category._id.toString()] = normalize(row.tagValue);
-//       stats.tags.loaded++;
-//     }
-//   }
-
-//   return map;
-// }
-
-// async function getOrCreateCategory(categoryTitle) {
-//   const originalTitle = normalize(categoryTitle);
-//   if (!originalTitle) return null;
-
-//   const searchTitle = normalizeForDb(categoryTitle);
-
-//   let category = await PackageCategory.findOne({
-//     title: { $regex: new RegExp(`^${searchTitle}$`, "i") },
-//   });
-
-//   if (!category) {
-//     category = await PackageCategory.create({
-//       title: toTitleCase(originalTitle),
-//     });
-//     stats.categories.created++;
-//   } else if (category.title !== toTitleCase(originalTitle)) {
-//     category.title = toTitleCase(originalTitle);
-//     await category.save();
-//     stats.categories.updated++;
-//   }
-
-//   return category;
-// }
-
-// async function getOrCreateItem(itemTitle, categoryTitle, foodType) {
-//   const originalTitle = normalize(itemTitle);
-//   if (!originalTitle) {
-//     console.log(`   ⚠️  Empty item title skipped`);
-//     return null;
-//   }
-
-//   try {
-//     const searchTitle = normalizeForDb(originalTitle);
-
-//     let item = await PackageItem.findOne({
-//       title: { $regex: new RegExp(`^${searchTitle}$`, "i") },
-//     });
-
-//     const category = categoryTitle
-//       ? await getOrCreateCategory(categoryTitle)
-//       : null;
-
-//     if (!item) {
-//       item = await PackageItem.create({
-//         title: toTitleCase(originalTitle),
-//         foodType: normalize(foodType || "veg").toLowerCase(),
-//         categoryIds: category ? [category._id] : [],
-//       });
-//       stats.items.created++;
-//       console.log(`   ➕ Created Item: ${item.title}`);
-//       return item;
-//     }
-
-//     // Update existing item
-//     let updated = false;
-
-//     if (
-//       category &&
-//       !item.categoryIds.some((id) => id.toString() === category._id.toString())
-//     ) {
-//       item.categoryIds.push(category._id);
-//       updated = true;
-//     }
-
-//     const newFoodType = normalize(foodType || "veg").toLowerCase();
-    
-//     // Schema me enum: ["veg", "non-veg", "mixed"]
-//     // if (!["veg", "non-veg", "mixed"].includes(newFoodType)) {
-//     //   console.log(`   ⚠️  Invalid foodType "${newFoodType}" for item "${item.title}" → keeping old`);
-//     // } else 
-//     if (item.foodType !== newFoodType) {
-//       item.foodType = newFoodType;
-//       updated = true;
-//     }
-
-//     if (updated) {
-//       await item.save();
-//       stats.items.updated++;
-//       console.log(`   🔄 Updated Item: ${item.title}`);
-//     }
-
-//     return item;
-//   } catch (err) {
-//     stats.items.errors++;
-//     console.error(`   ❌ Item error "${itemTitle}":`, err.message);
-//     return null;
-//   }
-// }
-
-// async function syncPackages() {
-//   console.log("\n===== PACKAGE SYNC STARTED =====\n");
-
-//   const packageRows = await getPackagesRows();
-//   const itemsMap = await getPackageItems();
-//   const addonsMap = await getPackageAddons();
-//   const tagsMap = await getPackageCategoryTags();
-
-//   stats.packages.loaded = packageRows.length;
-
-//   console.log(`Packages loaded from sheet : ${packageRows.length}`);
-//   console.log(`Items loaded from sheet    : ${stats.items.loaded}`);
-//   console.log(`Addons loaded              : ${stats.addons.loaded}`);
-//   console.log(`Tags loaded                : ${stats.tags.loaded}\n`);
-
-//   for (const row of packageRows) {
-//     try {
-//       const venueName = normalize(row.venueName);
-//       const packageName = normalize(row.title);
-
-//       const venue = await Venues.findOne({ venueName });
-
-//       if (!venue) {
-//         stats.packages.venueNotFound++;
-//         stats.missingVenues.add(venueName);
-//         continue;
-//       }
-
-//       let existing = await VenuePackage.findOne({
-//         venueId: venue._id,
-//         title: packageName,
-//       });
-
-//       // ========== ITEMS PROCESS (hamesha) ==========
-//       const itemData = itemsMap.get(`${venueName}|${packageName}`) || [];
-//       const packageItems = [];
-
-//       console.log(`\n→ Processing Package: "${packageName}" | Venue: "${venueName}" | Items in sheet: ${itemData.length}`);
-
-//       for (const it of itemData) {
-//         const item = await getOrCreateItem(
-//           it.itemTitle,
-//           it.categoryTitle,
-//           it.foodType,
-//         );
-//         if (item) {
-//           packageItems.push(item._id);
-//         } else {
-//           console.log(`   ⚠️  Item failed: "${it.itemTitle}"`);
-//         }
-//       }
-
-//       // Addons
-//       const packageAddons = addonsMap.get(`${venueName}|${packageName}`) || [];
-
-//       // Category Tags
-//       const packageCategoriesTags =
-//         tagsMap.get(`${venueName}|${packageName}`) || {};
-
-//       if (existing) {
-//         // ===== EXISTING PACKAGE → UPDATE ITEMS =====
-//         existing.packageItems = packageItems;
-//         existing.packageAddons = packageAddons;
-//         existing.packageCategoriesTags = packageCategoriesTags;
-//         existing.subTitle = normalize(row.subTitle);
-//         existing.actualPrice = typeof row.actualPrice === "number" ? Number(row.actualPrice || 0) : 0;
-//         existing.discountedPrice = typeof row.discountedPrice === "number" ? Number(row.discountedPrice || 0) : 0;
-//         existing.maxGuests = typeof row.maxGuests === "number" ? Number(row.maxGuests || 0) : 0;
-//         existing.tag = normalize(row.tag);
-
-//         await existing.save();
-//         stats.packages.skipped++; // already existed, but updated
-//         console.log(`   ✅ Updated existing package`);
-//       } else {
-//         // ===== NEW PACKAGE → CREATE =====
-//         await VenuePackage.create({
-//           venueId: venue._id,
-//           title: packageName,
-//           subTitle: normalize(row.subTitle),
-//           actualPrice: typeof row.actualPrice === "number" ? Number(row.actualPrice || 0) : 0,
-//           discountedPrice: typeof row.discountedPrice === "number" ? Number(row.discountedPrice || 0) : 0,
-//           maxGuests: typeof row.maxGuests === "number" ? Number(row.maxGuests || 0) : 0,
-//           tag: normalize(row.tag),
-//           packageItems,
-//           packageAddons,
-//           packageCategoriesTags,
-//           packageImageUrl: "",
-//           packageImageKey: "",
-//           packageStatus: 1,
-//         });
-
-//         stats.packages.created++;
-//         console.log(`   ✅ Created new package`);
-//       }
-//     } catch (error) {
-//       stats.packages.errors++;
-//       console.error(`\n❌ Package error "${row.title}":`, error.message);
-//       console.error(error);
-//     }
-//   }
-// }
-
-// // ================== SYNC MASTER SHEETS ==================
-
-// async function syncCategoriesSheet() {
-//   const sheets = google.sheets({ version: "v4", auth });
-//   const categories = await PackageCategory.find({
-//     categoriesStatus: { $ne: 3 },
-//   }).lean();
-
-//   const values = [
-//     ["categoryId", "categoryName"],
-//     ...categories.map((cat) => [cat._id.toString(), cat.title]),
-//   ];
-
-//   await sheets.spreadsheets.values.clear({
-//     spreadsheetId,
-//     range: "Categories",
-//   });
-//   await sheets.spreadsheets.values.update({
-//     spreadsheetId,
-//     range: "Categories!A1",
-//     valueInputOption: "RAW",
-//     requestBody: { values },
-//   });
-// }
-
-// async function syncItemsSheet() {
-//   const sheets = google.sheets({ version: "v4", auth });
-//   const items = await PackageItem.find({
-//     itemsStatus: { $ne: 3 },
-//   })
-//     .populate("categoryIds", "title")
-//     .lean();
-
-//   const values = [
-//     ["itemId", "itemName", "foodType", "categories"],
-//     ...items.map((item) => [
-//       item._id.toString(),
-//       item.title,
-//       item.foodType,
-//       item.categoryIds.map((c) => c.title).join(" | "),
-//     ]),
-//   ];
-
-//   await sheets.spreadsheets.values.clear({
-//     spreadsheetId,
-//     range: "Master Dump",
-//   });
-//   await sheets.spreadsheets.values.update({
-//     spreadsheetId,
-//     range: "Master Dump!A1",
-//     valueInputOption: "RAW",
-//     requestBody: { values },
-//   });
-// }
-
-// // ================== MAIN RUNNER ==================
-// let isSyncRunning = false;
-
-// async function runPackageSync() {
-//   if (isSyncRunning) {
-//     console.log("\n⏳ Sync already running... Skipping this run.\n");
-//     return;
-//   }
-
-//   isSyncRunning = true;
-//   console.log("\n🔒 Sync started...\n");
-
-//   try {
-//     await syncPackages();
-//     await syncCategoriesSheet();
-//     await syncItemsSheet();
-
-//     printSummary();
-//     console.log("\n✅ All Sync Completed Successfully!");
-//   } catch (error) {
-//     console.error("Major Error:", error.message);
-//     printSummary();
-//   } finally {
-//     isSyncRunning = false;
-//     console.log("🔓 Sync finished.\n");
-//   }
-// }
-
-// module.exports = { runPackageSync };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// Is script me humne ye change kiya hai ki agar koi Item, Addon ya Category Tag process hone aaya 
-// lekin uska (Package + Venue) "Packages <>Venue List" wali sheet me missing hai:
-// 1. Pehle MongoDB me check karega.
-// 2. Agar DB me package mila, to Item / Addon / Tag ko update/process karega (existing data ko preserve karte hue).
-// 3. Us package ko wapas "Packages <>Venue List" sheet me sync/append kar dega.
-
 const mongoose = require("mongoose");
 const Venues = require("../models/party-venue");
 const VenuePackage = require("../models/venue-packages");
@@ -487,7 +9,7 @@ const { google } = require("googleapis");
 
 const credentials = JSON.parse(fs.readFileSync("google-sheet.json", "utf-8"));
 const { client_email, private_key } = credentials;
-const spreadsheetId = "1mnv6n455-LYVNKYA_WtHg0anZYvEYMoBF3QnpMp28dE";
+const spreadsheetId = "1Cw6xjR-f4qmngZcuprrRz6LgyIZtSoqiEjuNIiGbTZA";
 
 const auth = new google.auth.JWT({
   email: client_email,
@@ -500,10 +22,9 @@ const stats = {
   packages: {
     loaded: 0,
     created: 0,
-    updated: 0,
+    skippedExisting: 0,
     errors: 0,
     venueNotFound: 0,
-    recoveredFromDb: 0, // Jo Packages sheet me nahi the lekin DB me the
   },
   items: {
     loaded: 0,
@@ -524,7 +45,6 @@ const stats = {
     processed: 0,
   },
   missingVenues: new Set(),
-  skippedBecauseNotInDb: new Set(), // Jo na sheet me the na DB me
 };
 
 function printSummary() {
@@ -534,9 +54,8 @@ function printSummary() {
 
   console.log("\n📦 PACKAGES:");
   console.log(`   Loaded from sheet       : ${stats.packages.loaded}`);
-  console.log(`   Created                 : ${stats.packages.created}`);
-  console.log(`   Updated (already exist) : ${stats.packages.updated}`);
-  console.log(`   Recovered from DB       : ${stats.packages.recoveredFromDb}`);
+  console.log(`   Created (New)           : ${stats.packages.created}`);
+  console.log(`   Skipped (Already in DB) : ${stats.packages.skippedExisting}`);
   console.log(`   Venue Not Found         : ${stats.packages.venueNotFound}`);
   console.log(`   Errors                  : ${stats.packages.errors}`);
 
@@ -544,13 +63,6 @@ function printSummary() {
     console.log("\n❌ VENUES NOT FOUND IN DB:");
     [...stats.missingVenues].forEach((venue, index) => {
       console.log(`   ${index + 1}. ${venue}`);
-    });
-  }
-
-  if (stats.skippedBecauseNotInDb.size > 0) {
-    console.log("\n⚠️  SKIPPED (na Packages sheet me the, na DB me):");
-    [...stats.skippedBecauseNotInDb].forEach((key, index) => {
-      console.log(`   ${index + 1}. ${key}`);
     });
   }
 
@@ -566,11 +78,11 @@ function printSummary() {
 
   console.log("\n➕ ADDONS:");
   console.log(`   Loaded from sheet       : ${stats.addons.loaded}`);
-  console.log(`   Processed into packages : ${stats.addons.processed}`);
+  console.log(`   Processed into new pkgs : ${stats.addons.processed}`);
 
   console.log("\n🔖 TAGS:");
   console.log(`   Loaded from sheet       : ${stats.tags.loaded}`);
-  console.log(`   Processed into packages : ${stats.tags.processed}`);
+  console.log(`   Processed into new pkgs : ${stats.tags.processed}`);
 
   console.log("\n" + "=".repeat(50));
 }
@@ -612,19 +124,6 @@ async function getSheetData(range) {
   });
 
   return data;
-}
-
-async function appendToSheet(range, values) {
-  if (!values || !values.length) return;
-
-  const sheets = google.sheets({ version: "v4", auth });
-  await sheets.spreadsheets.values.append({
-    spreadsheetId,
-    range,
-    valueInputOption: "RAW",
-    insertDataOption: "INSERT_ROWS",
-    requestBody: { values },
-  });
 }
 
 async function getPackagesRows() {
@@ -680,13 +179,13 @@ async function getPackageCategoryTags() {
     if (!venueName || !packageName) continue;
 
     const key = `${venueName}|${packageName}`;
-    if (!map.has(key)) map.set(key, {});
+    if (!map.has(key)) map.set(key, []);
 
-    const category = await getOrCreateCategory(normalize(row.categoryTitle));
-    if (category) {
-      map.get(key)[category._id.toString()] = normalize(row.tagValue);
-      stats.tags.loaded++;
-    }
+    map.get(key).push({
+      categoryTitle: normalize(row.categoryTitle),
+      tagValue: normalize(row.tagValue),
+    });
+    stats.tags.loaded++;
   }
   return map;
 }
@@ -774,115 +273,81 @@ async function getOrCreateItem(itemTitle, categoryTitle, foodType) {
   }
 }
 
-// ========== Process one package (shared logic) ==========
-async function processOnePackage({
+// create new package
+async function createNewPackage({
   venue,
   venueName,
   packageName,
-  rowData, // null if recovered from DB
-  existingPackage, // null if newly created from sheet
+  rowData,
   itemsMap,
   addonsMap,
   tagsMap,
-  isRecovered = false,
 }) {
   const key = `${venueName}|${packageName}`;
   const itemData = itemsMap.get(key) || [];
   const addonData = addonsMap.get(key) || [];
-  const tagData = tagsMap.get(key) || null;
+  const tagList = tagsMap.get(key) || [];
 
   console.log(
-    `\n→ Processing Package: "${packageName}" | Venue: "${venueName}" | Items: ${itemData.length} | Addons: ${addonData.length}${
-      isRecovered ? " (Recovered from DB)" : ""
-    }`
+    `\n→ Creating NEW Package: "${packageName}" | Venue: "${venueName}" | Items: ${itemData.length} | Addons: ${addonData.length}`
   );
 
-  // 1. Process Items (agar sheet me diye hain to)
+  // 1. Process Items
   let packageItems = [];
-  if (itemData.length > 0) {
-    for (const it of itemData) {
-      const result = await getOrCreateItem(
-        it.itemTitle,
-        it.categoryTitle,
-        it.foodType
+  for (const it of itemData) {
+    const result = await getOrCreateItem(
+      it.itemTitle,
+      it.categoryTitle,
+      it.foodType
+    );
+
+    if (result && result.item && result.category) {
+      packageItems.push({
+        itemId: result.item._id,
+        categoryId: result.category._id,
+      });
+    } else if (result && result.item) {
+      console.log(
+        `   ⚠️  Item "${it.itemTitle}" found/created but category missing → skipped from package`
       );
-
-      if (result && result.item && result.category) {
-        packageItems.push({
-          itemId: result.item._id,
-          categoryId: result.category._id,
-        });
-      } else if (result && result.item) {
-        console.log(
-          `   ⚠️  Item "${it.itemTitle}" created/found but category missing → skipped`
-        );
-      } else {
-        console.log(`   ⚠️  Item failed: "${it.itemTitle}"`);
-      }
     }
   }
 
-  // 2. Addons & Tags resolution
-  // Agar sheet me items/addons/tags provide nahi kiye aur existing package DB me pehle se hai, 
-  // to existing data preserve rahega, overwrite ho kar empty nahi hoga.
-  const finalItems = itemData.length > 0 
-    ? packageItems 
-    : (existingPackage ? existingPackage.packageItems : []);
-
-  const finalAddons = addonData.length > 0 
-    ? addonData 
-    : (existingPackage ? existingPackage.packageAddons : []);
-
-  const finalTags = tagData 
-    ? { ...(existingPackage?.packageCategoriesTags || {}), ...tagData }
-    : (existingPackage ? existingPackage.packageCategoriesTags : {});
-
-  if (addonData.length > 0) stats.addons.processed += addonData.length;
-  if (tagData && Object.keys(tagData).length > 0) {
-    stats.tags.processed += Object.keys(tagData).length;
+  // 2. Process Addons
+  const finalAddons = addonData;
+  if (addonData.length > 0) {
+    stats.addons.processed += addonData.length;
   }
 
-  if (existingPackage) {
-    // Update existing package in DB
-    existingPackage.packageItems = finalItems;
-    existingPackage.packageAddons = finalAddons;
-    existingPackage.packageCategoriesTags = finalTags;
-
-    if (rowData) {
-      existingPackage.subTitle = normalize(rowData.subTitle);
-      existingPackage.actualPrice =
-        Number(rowData.actualPrice) || Number(existingPackage.actualPrice) || 0;
-      existingPackage.discountedPrice =
-        Number(rowData.discountedPrice) || Number(existingPackage.discountedPrice) || 0;
-      existingPackage.maxGuests =
-        Number(rowData.maxGuests) || Number(existingPackage.maxGuests) || 0;
-      existingPackage.tag = normalize(rowData.tag) || existingPackage.tag;
+  // 3. Process Tags
+  const finalTags = {};
+  for (const t of tagList) {
+    const category = await getOrCreateCategory(t.categoryTitle);
+    if (category) {
+      finalTags[category._id.toString()] = t.tagValue;
+      stats.tags.processed++;
     }
-
-    await existingPackage.save();
-    stats.packages.updated++;
-    console.log(`   ✅ Updated existing package in DB`);
-  } else {
-    // Create brand new package (only when rowData from Packages sheet exists)
-    await VenuePackage.create({
-      venueId: venue._id,
-      title: packageName,
-      subTitle: normalize(rowData?.subTitle || ""),
-      actualPrice: Number(rowData?.actualPrice) || 0,
-      discountedPrice: Number(rowData?.discountedPrice) || 0,
-      maxGuests: Number(rowData?.maxGuests) || 0,
-      tag: normalize(rowData?.tag || ""),
-      packageItems: finalItems,
-      packageAddons: finalAddons,
-      packageCategoriesTags: finalTags,
-      packageImageUrl: "",
-      packageImageKey: "",
-      packageStatus: 1,
-    });
-
-    stats.packages.created++;
-    console.log(`   ✅ Created new package in DB`);
   }
+
+  // 4. Create in DB
+  await VenuePackage.create({
+    venueId: venue._id,
+    title: packageName,
+    subTitle: normalize(rowData?.subTitle || ""),
+    actualPrice: Number(rowData?.actualPrice) || 0,
+    discountedPrice: Number(rowData?.discountedPrice) || 0,
+    maxGuests: Number(rowData?.maxGuests) || 0,
+    tag: normalize(rowData?.tag || ""),
+    packageItems: packageItems,
+    packageAddons: finalAddons,
+    packageCategoriesTags: finalTags,
+    packageImageUrl: "",
+    packageImageKey: "",
+    packageStatus: 1,
+  });
+
+  stats.packages.created++;
+  console.log(`   ✅ Created new package successfully in DB`);
 }
 
 async function syncPackages() {
@@ -900,28 +365,6 @@ async function syncPackages() {
   console.log(`Addons loaded              : ${stats.addons.loaded}`);
   console.log(`Tags loaded                : ${stats.tags.loaded}\n`);
 
-  // ========== 1. Set of packages that exist in "Packages <>Venue List" ==========
-  const packagesInSheet = new Set();
-  const packageRowMap = new Map();
-
-  for (const row of packageRows) {
-    const venueName = normalize(row.venueName);
-    const packageName = normalize(row.title);
-    if (!venueName || !packageName) continue;
-
-    const key = `${venueName}|${packageName}`;
-    packagesInSheet.add(key);
-    packageRowMap.set(key, row);
-  }
-
-  // ========== 2. Collect ALL unique keys from Items, Addons, & Category Tags ==========
-  const allKeysFromOtherSheets = new Set([
-    ...itemsMap.keys(),
-    ...addonsMap.keys(),
-    ...tagsMap.keys(),
-  ]);
-
-  // ========== 3. Process packages that ARE present in Packages sheet ==========
   for (const row of packageRows) {
     try {
       const venueName = normalize(row.venueName);
@@ -930,113 +373,40 @@ async function syncPackages() {
       if (!venueName || !packageName) continue;
 
       const venue = await Venues.findOne({ venueName });
-
       if (!venue) {
         stats.packages.venueNotFound++;
         stats.missingVenues.add(venueName);
         continue;
       }
 
+      // Check DB: if package exist, will not process
       const existing = await VenuePackage.findOne({
         venueId: venue._id,
         title: packageName,
       });
 
-      await processOnePackage({
+      if (existing) {
+        stats.packages.skippedExisting++;
+        console.log(
+          `⏭️  SKIP: Package "${packageName}" already exists in DB for venue "${venueName}". No updates made.`
+        );
+        continue;
+      }
+
+      //If not exist create new
+      await createNewPackage({
         venue,
         venueName,
         packageName,
         rowData: row,
-        existingPackage: existing,
         itemsMap,
         addonsMap,
         tagsMap,
-        isRecovered: false,
       });
     } catch (error) {
       stats.packages.errors++;
       console.error(`\n❌ Package error "${row.title}":`, error.message);
     }
-  }
-
-  // ========== 4. Handle packages that are MISSING in Packages sheet ==========
-  // Chahe vo Item se aaye hon, Addon se, ya Category Tag se
-  const recoveredRowsToAppend = [];
-
-  for (const key of allKeysFromOtherSheets) {
-    if (packagesInSheet.has(key)) continue; // Already processed in Step 3
-
-    const [venueName, packageName] = key.split("|");
-
-    try {
-      const venue = await Venues.findOne({ venueName });
-
-      if (!venue) {
-        stats.packages.venueNotFound++;
-        stats.missingVenues.add(venueName);
-        continue;
-      }
-
-      // Check DB for the package
-      const existing = await VenuePackage.findOne({
-        venueId: venue._id,
-        title: packageName,
-      });
-
-      if (!existing) {
-        // Na Packages sheet me hai, na DB me → skip
-        stats.skippedBecauseNotInDb.add(key);
-        console.log(
-          `\n⚠️  Skipped (not in Packages sheet & not in DB): ${venueName} | ${packageName}`
-        );
-        continue;
-      }
-
-      // Package DB me mila → process karo (item/addon/tag merge karo) aur sheet me sync karo
-      console.log(
-        `\n🔄 Recovering package from DB → Sheet: ${venueName} | ${packageName}`
-      );
-
-      await processOnePackage({
-        venue,
-        venueName,
-        packageName,
-        rowData: null, // Row missing in sheet
-        existingPackage: existing,
-        itemsMap,
-        addonsMap,
-        tagsMap,
-        isRecovered: true,
-      });
-
-      stats.packages.recoveredFromDb++;
-
-      // Row prepare karo taaki sheet me append kar sakein
-      recoveredRowsToAppend.push([
-        venueName,
-        packageName,
-        normalize(existing.subTitle || ""),
-        existing.actualPrice || 0,
-        existing.discountedPrice || 0,
-        existing.maxGuests || 0,
-        normalize(existing.tag || ""),
-        "",
-        "",
-        "",
-      ]);
-    } catch (error) {
-      stats.packages.errors++;
-      console.error(`\n❌ Recover error "${key}":`, error.message);
-    }
-  }
-
-  // ========== 5. Append recovered packages to "Packages <>Venue List" sheet ==========
-  if (recoveredRowsToAppend.length > 0) {
-    console.log(
-      `\n📤 Appending ${recoveredRowsToAppend.length} recovered packages to "Packages <>Venue List"...`
-    );
-    await appendToSheet("Packages <>Venue List!A:J", recoveredRowsToAppend);
-    console.log(`   ✅ Appended successfully`);
   }
 }
 

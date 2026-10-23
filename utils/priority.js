@@ -152,17 +152,26 @@ function clockAt(t, now, rules) {
 }
 
 function daysUntil(eventDate, now, rules) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(
-    eventDate || ''
-  );
+  const value = String(eventDate || '').trim();
 
-  if (!match) return undefined;
+  let match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  let year, month, day;
+
+  if (match) {
+    [, year, month, day] = match;
+  } else {
+    match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(value);
+
+    if (!match) return undefined;
+
+    [, day, month, year] = match;
+  }
 
   const eventDay = Math.floor(
     Date.UTC(
-      Number(match[1]),
-      Number(match[2]) - 1,
-      Number(match[3])
+      Number(year),
+      Number(month) - 1,
+      Number(day)
     ) / DAY
   );
 

@@ -244,6 +244,104 @@ router.patch("/add-date", async (req, res, next) => {
   }
 });
 
+// Update existing Event Date
+router.patch("/update-date", async (req, res, next) => {
+  try {
+    const { userId, visitorId, eventId, date, eventTitle } = req.body;
+
+    if (!date) {
+      return CustomResponse(res, 400, true, "date is required");
+    }
+
+    if (!userId && !visitorId) {
+      return CustomResponse(
+        res,
+        400,
+        true,
+        "Either userId or visitorId is required"
+      );
+    }
+
+    if (isNaN(new Date(date).getTime())) {
+      return CustomResponse(res, 400, true, "Invalid date format");
+    }
+
+    const eventDate = new Date(date);
+    eventDate.setUTCHours(0, 0, 0, 0);
+
+    let query = {};
+    if (userId) {
+      if (!mongoose.Types.ObjectId.isValid(userId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid userId",
+        });
+      }
+      query.userId = new mongoose.Types.ObjectId(userId);
+    } else {
+      query.visitorId = visitorId;
+    }
+
+    let updateQuery = {};
+
+    // Case A: Agar frontend se specific subdocument eventId mila hai
+    if (eventId && mongoose.Types.ObjectId.isValid(eventId)) {
+      query["eventDates._id"] = new mongoose.Types.ObjectId(eventId);
+      updateQuery = {
+        $set: {
+          "eventDates.$.date": eventDate,
+          ...(eventTitle !== undefined && { "eventDates.$.eventTitle": eventTitle || "" }),
+        },
+      };
+    } else {
+      // Case B: Fallback agar eventId nahi mila, to array ke last item ko update karein
+      // (MongoDB arrayFilters or fallback logic)
+      const doc = await EventDates.findOne(query);
+      if (!doc || !doc.eventDates?.length) {
+        return CustomResponse(
+          res,
+          404,
+          true,
+          "No event found to update"
+        );
+      }
+      const lastIndex = doc.eventDates.length - 1;
+      query["_id"] = doc._id;
+      updateQuery = {
+        $set: {
+          [`eventDates.${lastIndex}.date`]: eventDate,
+          ...(eventTitle !== undefined && { [`eventDates.${lastIndex}.eventTitle`]: eventTitle || "" }),
+        },
+      };
+    }
+
+    const updatedEntry = await EventDates.findOneAndUpdate(query, updateQuery, {
+      new: true,
+    });
+
+    if (!updatedEntry) {
+      return CustomResponse(
+        res,
+        404,
+        true,
+        "No entry found matching the criteria"
+      );
+    }
+
+    return CustomResponse(
+      res,
+      200,
+      false,
+      "Event date updated successfully",
+      updatedEntry
+    );
+  } catch (err) {
+    console.error("Update Event Date Error:", err);
+    err.isPublic = true;
+    next(err);
+  }
+});
+
 // Get Event Dates, and city by userId or visitorId
 router.get("/my-events", async (req, res, next) => {
   try {
@@ -478,6 +576,7 @@ router.get("/list", async (req, res, next) => {
     next(error);
   }
 });
+
 // Create / Update User City
 router.post("/user-city", async (req, res, next) => {
   try {

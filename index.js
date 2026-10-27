@@ -701,6 +701,7 @@ const EventDateRoutes = require("./routes/event-dates");
 const AddonRoutes = require("./routes/addon");
 const ThemeRoutes = require("./routes/photography-theme");
 const team = require("./routes/team");
+const holidaysRoutes = require("./routes/holidays")
 const specializationRoutes = require("./routes/specialization");
 const ErrorLogRoutes = require("./routes/error-log")
 const pinCodes = require("./routes/serviceabilityPincodes")
@@ -753,6 +754,7 @@ app.use("/eventcapsule/share", ShareCapsule);
 app.use("/api/addon", AddonRoutes);
 app.use("/api/photography-theme", ThemeRoutes);
 app.use("/api/team", team);
+app.use("/api/holidays", holidaysRoutes);
 app.use("/api/leads", leadsRoutes); 
 app.use("/api/specializations", specializationRoutes);
 app.use("/api/pincode", pinCodes)

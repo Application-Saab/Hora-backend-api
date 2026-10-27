@@ -526,8 +526,16 @@ router.post("/adminOrderList", async (req, res, next) => {
     const basePipeline = [{ $match: finder }];
 
     if (useDriveFilter) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
       basePipeline.push(
-        { $match: { type: 8 } },
+        {
+          $match: {
+            type: 8,
+            createdAt: { $lt: today },
+          },
+        },
         ...buildDriveStatusStages(),
         { $match: { driveLinkStatus } }
       );

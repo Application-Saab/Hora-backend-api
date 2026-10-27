@@ -17,6 +17,7 @@ router.put("/edit/:id", async (req, res, next) => {
       eventId,
       productId,
       categoryType,
+      description,
     } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -261,6 +262,7 @@ router.put("/edit/:id", async (req, res, next) => {
         eventId: newEventIds,
         productId: newProductIds,
         categoryType: newCategoryTypes,
+        description,
       },
       { new: true }
     );

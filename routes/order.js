@@ -728,6 +728,11 @@ router.post('/edit', async (req, res, next) => {
     const updatedData = { ...req.body };
     console.log("updatedData:", updatedData);
 
+      if (updatedData.toId) {
+          updatedData.acceptedAt = new Date();
+          updatedData.acceptedBy = "admin";
+      }
+
     const options = { new: true, runValidators: true }; // runValidators ensures schema validation
 
     const result = await orderModel.findByIdAndUpdate(id, updatedData, options);
@@ -1004,7 +1009,7 @@ router.get('/order_details/v1/:id', async (req, res, next) => {
 });
 
 router.post('/acceptOrder', async (req, res, next) => {
-    const { requestdata } = req.body;
+    const { requestdata, acceptedBy = "self" } = req.body;
 
     if (!req.body._id) {
         return res.json({
@@ -1023,6 +1028,8 @@ router.post('/acceptOrder', async (req, res, next) => {
             const update = {
                 order_status: 1,
                 toId: req.body.userId,
+                acceptedAt: new Date(),
+                acceptedBy: acceptedBy === "admin" ? "admin" : "self",
                 // otp: otp,
             };
 

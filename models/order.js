@@ -91,6 +91,17 @@ allDriveLinks: {
               default: "pending",
       }
     },
+
+  acceptedAt: {
+    type: Date,
+    default: null,
+  },
+
+  acceptedBy: {
+    type: String,
+    enum: ["admin", "self"],
+    default: null,
+  },
 }, {
     strict: false,
     timestamps: true

@@ -7,9 +7,11 @@ const venueSchema = new mongoose.Schema(
       ref: "Users",
       required: true,
     },
-    // venueType: { type: String, default: "" },
     venueType: { type: [String], default: [] },
+    venueFeatures: { type: [String], default: [] },
     venueName: { type: String, default: "" },
+    maskName: { type: String, default: "" },
+    description: { type: String, default: "" },
     location: { type: String, default: "" },
     city: { type: String, default: "" },
     locality: { type: String, default: "" },
@@ -18,6 +20,7 @@ const venueSchema = new mongoose.Schema(
     venueImageKey: { type: String, default: "" },
     eventTypes: { type: [String], default: [] }, // e.g., wedding, birthday, corporate
     guestCapacity: { type: Number, default: 0 },
+    minGuestCapacity: { type: Number, default: 0 },
     isParkingAvailable: { type: Boolean, default: false },
     hallType: { type: [String], default: [] }, // e.g., Outdoor, indoor
     foodTypes: { type: [String], default: [] }, // e.g., veg, non-veg, mixed
@@ -29,6 +32,13 @@ const venueSchema = new mongoose.Schema(
       enum: [1, 2, 3],
       default: 1,
     } /* 1-active 2-inactive 3-delete  */,
+
+    faqs: [
+      {
+        question: { type: String, trim: true, default: "" },
+        answer: { type: String, trim: true, default: "" },
+      },
+    ],
 
     subFolders: [
       {

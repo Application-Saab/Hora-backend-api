@@ -212,4 +212,49 @@ router.post('/delete/:id', async (req, res, next) => {
 });
 
 
+router.post('/toggle-status/:id', async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { date, reason } = req.body; // date = inactive date ya active date (YYYY-MM-DD)
+
+        if (!date) {
+            return res.status(400).json({ error: true, message: "Date is required" });
+        }
+
+        const member = await team.findById(id);
+        if (!member) {
+            return res.status(404).json({ error: true, message: "Team not found" });
+        }
+
+        const openPeriod = member.inactivePeriods.find(p => !p.to);
+
+        if (!openPeriod) {
+            member.inactivePeriods.push({ from: date, to: "", reason: reason || "" });
+            member.isActive = false;
+        } else {
+            const d = new Date(date);
+            d.setDate(d.getDate() - 1);
+            const lastInactiveDay = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+            if (lastInactiveDay < openPeriod.from) {
+                member.inactivePeriods.pull(openPeriod._id);
+            } else {
+                openPeriod.to = lastInactiveDay;
+            }
+            member.isActive = true;
+        }
+
+        await member.save();
+
+        return res.status(200).json({
+            error: false,
+            message: member.isActive ? "Member activated" : "Member marked inactive",
+            data: member,
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+
 module.exports = router;

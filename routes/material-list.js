@@ -84,51 +84,81 @@ router.post("/admin_material_list", async (req, res, next) => {
       page,
       per_page,
       materialName,
-      type,
+      selectedMaterialNames,
+      types,
+      specsList,
       materialCategory,
       materialStatus,
-      specs,
     } = req.body;
 
     let query = {};
 
-    // search by material name
     if (materialName) {
-      query.materialName = { $regex: materialName, $options: "i" };
+      query.$or = [
+        { materialName: { $regex: materialName, $options: "i" } },
+        { type: { $regex: materialName, $options: "i" } },
+        { specs: { $regex: materialName, $options: "i" } },
+      ];
     }
 
-    // filter by type
-    if (type) {
-      query.type = type;
+    if (
+      Array.isArray(selectedMaterialNames) &&
+      selectedMaterialNames.length > 0
+    ) {
+      query.materialName = { $in: selectedMaterialNames };
     }
 
-    // filter by category
+    if (Array.isArray(types) && types.length > 0) {
+      query.type = { $in: types };
+    }
+
+    if (Array.isArray(specsList) && specsList.length > 0) {
+      query.specs = { $in: specsList };
+    }
+
     if (materialCategory) {
       query.materialCategory = materialCategory;
     }
 
-    // filter by specs
-    if (specs) {
-      query.specs = { $regex: specs, $options: "i" };
-    }
-
-    // filter by status
     if (materialStatus !== undefined && materialStatus !== "") {
       query.materialStatus = parseInt(materialStatus);
     }
 
-    // Common Pagination Function Use
     const { items, paginate } = await getPaginatedData({
       model: MaterialList,
-      query: query,
-      page: page,
-      per_page: per_page,
+      query,
+      page,
+      per_page,
     });
 
     return CustomResponse(res, 200, false, "Materials fetched successfully", {
       materials: items,
       paginate,
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/material_filter_options", async (req, res, next) => {
+  try {
+    const [materialNames, types, specsList] = await Promise.all([
+      MaterialList.distinct("materialName", { materialName: { $ne: "" } }),
+      MaterialList.distinct("type", { type: { $ne: "" } }),
+      MaterialList.distinct("specs", { specs: { $ne: "" } }),
+    ]);
+
+    return CustomResponse(
+      res,
+      200,
+      false,
+      "Filter options fetched successfully",
+      {
+        materialNames: materialNames.filter(Boolean).sort(),
+        types: types.filter(Boolean).sort(),
+        specs: specsList.filter(Boolean).sort(),
+      },
+    );
   } catch (error) {
     next(error);
   }

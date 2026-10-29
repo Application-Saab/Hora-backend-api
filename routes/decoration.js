@@ -4,7 +4,7 @@ const router = express.Router();
 const AddressModel = require("../models/address");
 const decorationModel = require("../models/decoration");
 const NodeCache = require("node-cache");
-const cache = new NodeCache({ stdTTL: 60 * 10 }); // Cache TTL: 10 minutes
+const cache = new NodeCache({ stdTTL: 60 * 10 }); // 10 minutes TTL
 const path = require("path");
 const fs = require("fs");
 const mongoose = require("mongoose");
@@ -14,6 +14,16 @@ const multer = require("multer");
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 const sharp = require("sharp");
+
+// Helper function to invalidate tag caches
+const clearTagCaches = (tags = []) => {
+  if (!Array.isArray(tags)) return;
+  tags.forEach((t) => {
+    if (t) {
+      cache.del(`search_tag_${t}`);
+    }
+  });
+};
 
 const deleteFileIfExists = (filePath) => {
   try {
@@ -42,38 +52,25 @@ const compressImageToWebP = async (buffer, outputPath, targetMaxKB = 40) => {
     quality -= step;
   }
 
-  // Final attempt with lowest quality
   const fallbackBuffer = await sharp(buffer).webp({ quality: 5 }).toBuffer();
   fs.writeFileSync(outputPath, fallbackBuffer);
   return false;
 };
 
-
-
 const normalizeInclusion = (inclusion) => {
   if (!inclusion) return [];
 
   try {
-    // Case 1:
-    // '["<div>...</div>"]'
     if (typeof inclusion === "string" && inclusion.startsWith("[")) {
       inclusion = JSON.parse(inclusion);
     }
 
-    // Case 2:
-    // "<div>...</div>"
     if (typeof inclusion === "string") {
       return [inclusion];
     }
 
-    // Case 3:
-    // ["<div>...</div>"]
     if (Array.isArray(inclusion)) {
-      return [
-        inclusion
-          .filter(Boolean)
-          .join("")
-      ];
+      return [inclusion.filter(Boolean).join("")];
     }
 
     return [];
@@ -97,6 +94,7 @@ router.post("/edit", upload.array("featured_images", 10), async (req, res, next)
     }
 
     let existingImages = existing.featured_images || [];
+    const oldTags = Array.isArray(existing.tag) ? existing.tag : [];
 
     // -----------------------------
     // REMOVE IMAGES HANDLING
@@ -117,7 +115,7 @@ router.post("/edit", upload.array("featured_images", 10), async (req, res, next)
         const filePath = path.join(
           __dirname,
           "../uploads/compressed_webp",
-          img.fileName,
+          img.fileName
         );
 
         if (fs.existsSync(filePath)) {
@@ -126,7 +124,7 @@ router.post("/edit", upload.array("featured_images", 10), async (req, res, next)
       });
 
       existingImages = existingImages.filter(
-        (img) => !removedImages.some((r) => r.fileName === img.fileName),
+        (img) => !removedImages.some((r) => r.fileName === img.fileName)
       );
     }
 
@@ -138,7 +136,7 @@ router.post("/edit", upload.array("featured_images", 10), async (req, res, next)
     if (req.files && req.files.length > 0) {
       const outputFolder = path.resolve(
         __dirname,
-        "../uploads/compressed_webp",
+        "../uploads/compressed_webp"
       );
 
       if (!fs.existsSync(outputFolder)) {
@@ -154,14 +152,22 @@ router.post("/edit", upload.array("featured_images", 10), async (req, res, next)
 
           return {
             fileName,
-            url: `/uploads/compressed_webp/${fileName}`, // 👈 as per schema
+            url: `/uploads/compressed_webp/${fileName}`,
             createdAt: new Date(),
           };
-        }),
+        })
       );
     }
 
     const inclusion = normalizeInclusion(req.body.inclusion);
+
+    let parsedTags = [];
+    if (req.body.tag) {
+      parsedTags =
+        typeof req.body.tag === "string"
+          ? JSON.parse(req.body.tag)
+          : req.body.tag;
+    }
 
     // -----------------------------
     // UPDATE DB
@@ -171,26 +177,27 @@ router.post("/edit", upload.array("featured_images", 10), async (req, res, next)
       {
         name: req.body.name,
         price: req.body.price,
-        tag: req.body.tag
-          ? typeof req.body.tag === "string"
-            ? JSON.parse(req.body.tag)
-            : req.body.tag
-          : [],
+        tag: parsedTags,
         designType:
-          req.body.designType === "string"
+          typeof req.body.designType === "string"
             ? JSON.parse(req.body.designType)
             : req.body.designType,
-
         inclusion,
         inclusionVariables:
-          req.body.inclusionVariables === "string"
+          typeof req.body.inclusionVariables === "string"
             ? JSON.parse(req.body.inclusionVariables)
             : req.body.inclusionVariables,
-
         featured_images: [...existingImages, ...newImages],
       },
-      { new: true },
+      { new: true }
     );
+
+    // -----------------------------
+    // CACHE INVALIDATION
+    // -----------------------------
+    // Purane aur naye dono tags ki keys delete karo taaki fresh data load ho
+    const combinedTags = Array.from(new Set([...oldTags, ...parsedTags]));
+    clearTagCaches(combinedTags);
 
     return res.json({
       error: false,
@@ -202,99 +209,6 @@ router.post("/edit", upload.array("featured_images", 10), async (req, res, next)
   }
 });
 
-// router.post('/edit', async (req, res) => {
-//     const id = req.body._id;
-//     const updatedData = req.body;
-//     const options = { new: true };
-
-//     try {
-//         const result = await decorationModel.findByIdAndUpdate(id, updatedData, options);
-
-//         if (result) {
-//             // ----- NEW CACHE UPDATE -----
-//             if (updatedData.tag && updatedData.tag.length > 0) {
-//                 const firstTag = updatedData.tag[0];
-//                 // fetch all decorations with this tag
-//                 const decorationsForTag = await decorationModel.find({ tag: { $in: [firstTag] } }).lean();
-//                 const cacheResponse = {
-//                     error: false,
-//                     status: 200,
-//                     message: 'Search Successful',
-//                     data: decorationsForTag
-//                 };
-//                 cache.set(`search_tag_${firstTag}`, cacheResponse);
-//             }
-//             return res.json({
-//                 error: false,
-//                 status: 200,
-//                 message: 'Updated Successfully',
-//                 data: result
-//             });
-//         } else {
-//             return res.json({
-//                 error: true,
-//                 status: 404,
-//                 message: 'Decoration not found.'
-//             });
-//         }
-//     } catch (error) {
-//         return res.status(400).json({
-//             error: true,
-//             message: error.message
-//         });
-//     }
-// });
-
-// router.post('/add', async (req, res) => {
-//     const {
-//         name,
-//         short_link,
-//         featured_image,
-//         caption,
-//         featured_images,
-//         badge,
-//         price,
-//         cost_price,
-//         type,
-//         is_wishlisted,
-//         ratings,
-//         attributes,
-//         inclusion,
-//         tag
-//     } = req.body;
-
-//     const data = new decorationModel({
-//         name: name,
-//         short_link: short_link,
-//         featured_image: featured_image,
-//         caption: caption,
-//         featured_images: featured_images,
-//         badge: badge,
-//         price: price,
-//         cost_price: cost_price,
-//         type: type,
-//         is_wishlisted: is_wishlisted,
-//         ratings: ratings,
-//         attributes: attributes,
-//         inclusion: inclusion,
-//         tag: tag
-//     });
-
-//     try {
-//         // Check if a decoration with the same name and type already exists
-//         const existingDecoration = await decorationModel.findOne({ name: data.name, type: data.type });
-
-//         if (existingDecoration) {
-//             return res.json({ error: true, status: 503, message: 'Decoration already added.' });
-//         } else {
-//             const savedData = await data.save();
-//             return res.json({ error: false, status: 200, message: 'Decoration added successfully.', data: savedData });
-//         }
-//     } catch (error) {
-//         res.status(400).json({ error: true, message: error.message });
-//     }
-// });
-
 router.post("/add", upload.single("featured_image"), async (req, res, next) => {
   try {
     const file = req.file;
@@ -303,8 +217,7 @@ router.post("/add", upload.single("featured_image"), async (req, res, next) => {
       return res.status(400).json({ error: true, message: "Image required" });
     }
 
-    // folder create
-    const outputFolder = "../uploads/compressed_webp";
+    const outputFolder = path.resolve(__dirname, "../uploads/compressed_webp");
     if (!fs.existsSync(outputFolder)) {
       fs.mkdirSync(outputFolder, { recursive: true });
     }
@@ -313,7 +226,6 @@ router.post("/add", upload.single("featured_image"), async (req, res, next) => {
     const fileName = `${originalName}-${Date.now()}.webp`;
     const outputPath = path.join(outputFolder, fileName);
 
-    // compress + save
     await compressImageToWebP(file.buffer, outputPath);
 
     const {
@@ -347,7 +259,7 @@ router.post("/add", upload.single("featured_image"), async (req, res, next) => {
     const data = new decorationModel({
       name,
       short_link,
-      featured_image: fileName, // 👈 now from upload
+      featured_image: fileName,
       caption,
       badge,
       price,
@@ -361,6 +273,11 @@ router.post("/add", upload.single("featured_image"), async (req, res, next) => {
     });
 
     const savedData = await data.save();
+
+    if (tag) {
+      const tagsList = typeof tag === "string" ? JSON.parse(tag) : tag;
+      clearTagCaches(tagsList);
+    }
 
     return res.json({
       error: false,
@@ -388,13 +305,14 @@ router.post("/update_decoration_status", async (req, res, next) => {
     const decoration = await decorationModel.findById(_id);
 
     if (decoration) {
-      const update = {
-        status: status,
-      };
-
-      const result = await decorationModel.findByIdAndUpdate(_id, {
-        $set: update,
+      await decorationModel.findByIdAndUpdate(_id, {
+        $set: { status: status },
       });
+
+      // Status badalne par bhi related tags cache se hata do
+      if (decoration.tag) {
+        clearTagCaches(decoration.tag);
+      }
 
       return res.json({
         error: false,
@@ -413,12 +331,23 @@ router.post("/update_decoration_status", async (req, res, next) => {
   }
 });
 
-router.get("/searchByName/:name", async (req, res, next) => {
-  const { name } = req.params;
+const normalizeDecorationName = (name = "") => {
+  return decodeURIComponent(name)
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9&]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+};
 
+router.get("/searchByName/:name", async (req, res, next) => {
   try {
-    const decorations = await decorationModel.find({
-      name: { $regex: new RegExp(name, "i") },
+    const requestedName = normalizeDecorationName(req.params.name);
+    const allDecorations = await decorationModel.find({}).lean();
+
+    const decorations = allDecorations.filter((decoration) => {
+      const dbName = normalizeDecorationName(decoration.name);
+      return dbName === requestedName;
     });
 
     if (decorations.length > 0) {
@@ -428,13 +357,12 @@ router.get("/searchByName/:name", async (req, res, next) => {
         message: "Search Successful",
         data: decorations,
       });
-    } else {
-      return res.json({
-        error: true,
-        status: 404,
-        message: "No matching decorations found.",
-      });
     }
+    return res.json({
+      error: true,
+      status: 404,
+      message: "No matching decorations found.",
+    });
   } catch (error) {
     error.isPublic = true;
     next(error);
@@ -642,151 +570,6 @@ router.get("/searchByTag/v2/:tag", async (req, res, next) => {
   }
 });
 
-// get decoration by name and all orders individual product actual images
-
-// ====================== Optimized Search API ======================
-
-// router.get("/searchByTag/v2/:tag", async (req, res) => {
-//   try {
-//     const { tag } = req.params;
-//     const limit = Math.min(parseInt(req.query.limit) || 10, 1000);
-//     const page = Math.max(parseInt(req.query.page) || 1, 1);
-
-//     const priceFilter = req.query.priceFilter?.toLowerCase();
-//     const sortBy = req.query.sortBy?.toLowerCase();
-//     const theme = req.query.theme?.toLowerCase();
-
-//     const cacheKey = `search_v3_${tag}_${limit}_${page}_${priceFilter || "all"}_${sortBy || "def"}_${theme || "all"}`;
-
-//     if (cache.has(cacheKey)) {
-//       return res.json({ ...cache.get(cacheKey), cached: true });
-//     }
-
-//     const matchStage = { status: 1 };
-
-//     // Tag
-//     if (mongoose.Types.ObjectId.isValid(tag)) {
-//       matchStage.tag = new mongoose.Types.ObjectId(tag);
-//     } else {
-//       matchStage.tag = tag;
-//     }
-
-//     // Theme Filter
-//     if (theme && theme !== "all") {
-//       matchStage.name = { $regex: theme.split("-")[0], $options: "i" };
-//     }
-
-//     // Price Filter - Try to avoid $expr as much as possible
-//     let pricePipeline = [];
-//     if (priceFilter) {
-//       if (priceFilter === "under2000") {
-//         pricePipeline = [
-//           { $match: { $expr: { $lt: [{ $toDouble: "$price" }, 2000] } } },
-//         ];
-//       } else if (priceFilter === "2000to5000") {
-//         pricePipeline = [
-//           {
-//             $match: {
-//               $expr: {
-//                 $and: [
-//                   { $gte: [{ $toDouble: "$price" }, 2000] },
-//                   { $lte: [{ $toDouble: "$price" }, 5000] },
-//                 ],
-//               },
-//             },
-//           },
-//         ];
-//       } else if (priceFilter === "above5000") {
-//         pricePipeline = [
-//           { $match: { $expr: { $gt: [{ $toDouble: "$price" }, 5000] } } },
-//         ];
-//       }
-//     }
-
-//     // Sorting
-//     let sortStage = { popularity_score: -1 };
-//     if (sortBy === "asc" || sortBy === "desc") {
-//       const dir = sortBy === "asc" ? 1 : -1;
-//       sortStage = { numericPrice: dir, popularity_score: -1 };
-//     }
-
-//     const pipeline = [
-//       { $match: matchStage },
-
-//       // Add numeric price once
-//       {
-//         $addFields: {
-//           numericPrice: {
-//             $cond: [
-//               { $or: [{ $eq: ["$price", null] }, { $eq: ["$price", ""] }] },
-//               0,
-//               { $toDouble: "$price" },
-//             ],
-//           },
-//         },
-//       },
-
-//       ...pricePipeline, // Price filter after numericPrice
-
-//       { $sort: sortStage },
-
-//       {
-//         $facet: {
-//           data: [
-//             { $skip: (page - 1) * limit },
-//             { $limit: limit },
-//             {
-//               $project: {
-//                 _id: 1,
-//                 name: 1,
-//                 short_link: 1,
-//                 featured_image: 1,
-//                 featured_images: 1,
-//                 price: 1,
-//                 cost_price: 1,
-//                 ratings: 1,
-//                 popularity_score: 1,
-//                 designType: 1,
-//               },
-//             },
-//           ],
-//           pagination: [{ $count: "totalItems" }],
-//         },
-//       },
-//     ];
-
-//     const result = await decorationModel.aggregate(pipeline, {
-//       allowDiskUse: true, // Important for large datasets
-//       collation: { locale: "en", numericOrdering: true },
-//     });
-
-//     const decorations = result[0]?.data || [];
-//     const totalItems = result[0]?.pagination?.[0]?.totalItems || 0;
-
-//     const response = {
-//       error: false,
-//       status: 200,
-//       ok: "ok",
-//       message: decorations.length
-//         ? "Search Successful"
-//         : "No matching decorations found.",
-//       data: decorations,
-//       pagination: {
-//         totalItems,
-//         totalPages: Math.ceil(totalItems / limit),
-//         currentPage: page,
-//         limit,
-//       },
-//     };
-
-//     cache.set(cacheKey, response);
-//     return res.json(response);
-//   } catch (error) {
-//     console.error("SearchByTag v2 Error:", error);
-//     return res.status(500).json({ error: true, message: error.message });
-//   }
-// });
-
 router.get("/searchByTag/v3/:tag", async (req, res, next) => {
   try {
     const { tag } = req.params;
@@ -794,6 +577,21 @@ router.get("/searchByTag/v3/:tag", async (req, res, next) => {
     const page = Math.max(parseInt(req.query.page) || 1, 1);
     const theme = req.query.theme;
     const search = req.query.search?.trim();
+    const designType = req.query.designType?.trim();
+    const rawDesignType = req.query.designType;
+
+    const designTypes = [
+      ...new Set(
+        (Array.isArray(rawDesignType)
+          ? rawDesignType
+          : rawDesignType
+            ? String(rawDesignType).split(",")
+            : []
+        )
+          .map((type) => type.trim())
+          .filter(Boolean),
+      ),
+    ];
 
     // ---- Sort (mirrors SearchSortBar sortOptions) ----
     // popularity | newArrival | lowToHigh | highToLow
@@ -805,12 +603,15 @@ router.get("/searchByTag/v3/:tag", async (req, res, next) => {
     const minPrice =
       req.query.minPrice !== undefined ? Number(req.query.minPrice) : null;
     const maxPrice =
-      req.query.maxPrice !== undefined && req.query.maxPrice !== "" && req.query.maxPrice !== "Infinity"
+      req.query.maxPrice !== undefined &&
+      req.query.maxPrice !== "" &&
+      req.query.maxPrice !== "Infinity"
         ? Number(req.query.maxPrice)
         : null;
 
-    const cacheKey = `search_${tag}_${limit}_${page}_${minPrice ?? "noMin"}_${maxPrice ?? "noMax"}_${sortBy}_${theme || "all"}_${search || "noSearch"}`;
-
+    // const cacheKey = `search_${tag}_${limit}_${page}_${minPrice ?? "noMin"}_${maxPrice ?? "noMax"}_${sortBy}_${theme || "all"}_${search || "noSearch"}`;
+    // const cacheKey = `search_${tag}_${limit}_${page}_${minPrice ?? "noMin"}_${maxPrice ?? "noMax"}_${sortBy}_${theme || "all"}_${search || "noSearch"}_${designType || "allDesigns"}`;
+    const cacheKey = `search_${tag}_${limit}_${page}_${minPrice ?? "noMin"}_${maxPrice ?? "noMax"}_${sortBy}_${theme || "all"}_${search || "noSearch"}_${designTypes.sort().join("|") || "allDesigns"}`;
     const cachedData = cache.get(cacheKey);
     if (cachedData) {
       return res.json({ ...cachedData, cached: true });
@@ -838,7 +639,8 @@ router.get("/searchByTag/v3/:tag", async (req, res, next) => {
         conditions.push({ $lte: [priceExpr, maxPrice] });
       }
       if (conditions.length) {
-        matchStage.$expr = conditions.length > 1 ? { $and: conditions } : conditions[0];
+        matchStage.$expr =
+          conditions.length > 1 ? { $and: conditions } : conditions[0];
       }
     }
 
@@ -858,6 +660,17 @@ router.get("/searchByTag/v3/:tag", async (req, res, next) => {
       } else {
         matchStage.name = searchCond.name;
       }
+    }
+
+    // Multi-select Design Type filter (OR logic)
+    if (designTypes.length > 0) {
+      const designTypeCondition = {
+        $or: designTypes.map((type) => ({
+          [`designType.${type}`]: true,
+        })),
+      };
+
+      matchStage.$and = [...(matchStage.$and || []), designTypeCondition];
     }
 
     // ---- Sort stage ----
@@ -931,7 +744,10 @@ router.get("/searchByTag/v3/:tag", async (req, res, next) => {
       error: false,
       status: 200,
       ok: "ok",
-      message: decorations.length > 0 ? "Search Successful" : "No matching decorations found.",
+      message:
+        decorations.length > 0
+          ? "Search Successful"
+          : "No matching decorations found.",
       data: decorations,
       pagination: {
         totalItems,
@@ -948,9 +764,6 @@ router.get("/searchByTag/v3/:tag", async (req, res, next) => {
     next(error);
   }
 });
-
-
-
 
 router.get("/decorations/:name/orders", async (req, res, next) => {
   try {

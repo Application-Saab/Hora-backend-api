@@ -54,11 +54,14 @@ const orderSchema = new mongoose.Schema({
     notificationStep: { type: Number, default: 0 },
     lastNotifiedAt: { type: Date, default: null },
     orderDriveLink: {type: String, default:""},
+    processedBy: { type: Array, default: [] },
     themes: { type: Array, default: [] },
   supplierUpload: {
     type: String,
     default: ""
   },
+    isPaymentDone: { type: Boolean, default: true },
+    isEmergencyOrder: { type: Boolean, default: false },
   customInclusion: {
     type: [String],
     default: []
@@ -92,6 +95,17 @@ allDriveLinks: {
               default: "pending",
       }
     },
+
+  acceptedAt: {
+    type: Date,
+    default: null,
+  },
+
+  acceptedBy: {
+    type: String,
+    enum: ["admin", "self"],
+    default: null,
+  },
 }, {
     strict: false,
     timestamps: true

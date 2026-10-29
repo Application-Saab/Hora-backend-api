@@ -254,7 +254,7 @@ router.get("/package-list", async (req, res) => {
     const skip = (Number(page) - 1) * Number(limit);
 
     const packages = await VenuePackage.find(query)
-      .populate("venueId", "venueName venueType location")
+      .populate("venueId", "venueName venueType venueFeatures location")
       .populate("packageItems")
       .sort({
         createdAt: -1,
@@ -301,7 +301,7 @@ router.get("/package-details/:id", async (req, res) => {
     }
 
     const packageData = await VenuePackage.findById(id)
-      .populate("venueId", "venueName venueType location googleMapLink")
+      .populate("venueId", "venueName venueType venueFeatures location googleMapLink")
       .populate("packageItems")
       .lean();
 
@@ -511,6 +511,45 @@ router.delete("/package-details/:id", async (req, res) => {
 // =============================================
 // GET PACKAGES BY VENUE ID
 // =============================================
+// router.get("/packages-by-venue-admin/:venueId", async (req, res) => {
+//   try {
+//     const { venueId } = req.params;
+
+//     if (!mongoose.Types.ObjectId.isValid(venueId)) {
+//       return res.status(400).json({
+//         error: true,
+//         message: "Invalid venue id",
+//       });
+//     }
+
+//     const packages = await VenuePackage.find({
+//       venueId,
+//       packageStatus: {
+//         $ne: 3,
+//       },
+//     })
+//       .populate("packageItems")
+//       .sort({
+//         createdAt: -1,
+//       })
+//       .lean();
+
+//     return res.status(200).json({
+//       error: false,
+//       message: "Venue packages fetched successfully",
+//       data: packages,
+//     });
+//   } catch (err) {
+//     console.log(err);
+
+//     return res.status(500).json({
+//       error: true,
+//       message: "Server Error",
+//     });
+//   }
+// });
+
+
 router.get("/packages-by-venue-admin/:venueId", async (req, res) => {
   try {
     const { venueId } = req.params;
@@ -524,15 +563,19 @@ router.get("/packages-by-venue-admin/:venueId", async (req, res) => {
 
     const packages = await VenuePackage.find({
       venueId,
-      packageStatus: {
-        $ne: 3,
-      },
+      packageStatus: { $ne: 3 },
     })
-      .populate("packageItems")
-      .sort({
-        createdAt: -1,
-      })
-      .lean();
+    .populate({
+      path: "packageItems.itemId",
+      select: "title foodType",
+    })
+    .populate({
+      path: "packageItems.categoryId",
+      select: "title",
+    })
+    .sort({ createdAt: -1 })
+    .lean();
+    console.log('%c [ packages ]', 'font-size:13px; background:pink; color:#bf2c9f;', packages)
 
     return res.status(200).json({
       error: false,
@@ -540,8 +583,7 @@ router.get("/packages-by-venue-admin/:venueId", async (req, res) => {
       data: packages,
     });
   } catch (err) {
-    console.log(err);
-
+    console.error("Error fetching packages:", err);
     return res.status(500).json({
       error: true,
       message: "Server Error",
@@ -608,6 +650,9 @@ router.patch("/venue-package-status/:id", async (req, res) => {
   }
 });
 
+// =============================================
+// GET PACKAGES BY VENUE ID (WITH POPULATED ITEMS)
+// =============================================
 router.get("/packages-by-venue/:venueId", async (req, res) => {
   try {
     const { venueId } = req.params;
@@ -620,25 +665,37 @@ router.get("/packages-by-venue/:venueId", async (req, res) => {
     }
 
     const packages = await VenuePackage.find({
-      venueId,
-      packageStatus: {
-        $ne: 2,
-      },
+      venueId: new mongoose.Types.ObjectId(venueId),
+      packageStatus: 1, // Only active packages
     })
-      .populate("packageItems")
-      .sort({
-        createdAt: -1,
+      .populate({
+        path: "packageItems.itemId",
+        model: "venue-package-items",
+        select: "title foodType itemsStatus",
+        match: { itemsStatus: { $ne: 3 } },
       })
+      .populate({
+        path: "packageItems.categoryId",
+        model: "venue-package-categories",
+        select: "title",
+      })
+      .sort({ createdAt: 1 })
       .lean();
+
+    const cleanedPackages = packages.map((pkg) => ({
+      ...pkg,
+      packageItems: (pkg.packageItems || []).filter(
+        (entry) => entry.itemId && entry.categoryId
+      ),
+    }));
 
     return res.status(200).json({
       error: false,
       message: "Venue packages fetched successfully",
-      data: packages,
+      data: cleanedPackages,
     });
   } catch (err) {
-    console.log(err);
-
+    console.error("Error fetching populated venue packages:", err);
     return res.status(500).json({
       error: true,
       message: "Server Error",

@@ -16,12 +16,13 @@ const auth = new google.auth.JWT({
   key: private_key,
   scopes: ["https://www.googleapis.com/auth/spreadsheets"],
 });
+
 // ================== SUMMARY COUNTERS ==================
 const stats = {
   packages: {
     loaded: 0,
     created: 0,
-    skipped: 0,
+    skippedExisting: 0,
     errors: 0,
     venueNotFound: 0,
   },
@@ -37,27 +38,27 @@ const stats = {
   },
   addons: {
     loaded: 0,
+    processed: 0,
   },
   tags: {
     loaded: 0,
+    processed: 0,
   },
-  // NEW: missing venues list
   missingVenues: new Set(),
 };
 
 function printSummary() {
   console.log("\n" + "=".repeat(50));
-  console.log("           PACKAGE SYNC SUMMARY");
+  console.log("            PACKAGE SYNC SUMMARY");
   console.log("=".repeat(50));
 
   console.log("\n📦 PACKAGES:");
-  console.log(`   Loaded from sheet      : ${stats.packages.loaded}`);
-  console.log(`   Created                : ${stats.packages.created}`);
-  console.log(`   Skipped (already exist): ${stats.packages.skipped}`);
-  console.log(`   Venue Not Found        : ${stats.packages.venueNotFound}`);
-  console.log(`   Errors                 : ${stats.packages.errors}`);
+  console.log(`   Loaded from sheet       : ${stats.packages.loaded}`);
+  console.log(`   Created (New)           : ${stats.packages.created}`);
+  console.log(`   Skipped (Already in DB) : ${stats.packages.skippedExisting}`);
+  console.log(`   Venue Not Found         : ${stats.packages.venueNotFound}`);
+  console.log(`   Errors                  : ${stats.packages.errors}`);
 
-  // ===== Missing Venues List =====
   if (stats.missingVenues.size > 0) {
     console.log("\n❌ VENUES NOT FOUND IN DB:");
     [...stats.missingVenues].forEach((venue, index) => {
@@ -66,20 +67,22 @@ function printSummary() {
   }
 
   console.log("\n🍽️  ITEMS:");
-  console.log(`   Loaded from sheet      : ${stats.items.loaded}`);
-  console.log(`   Created                : ${stats.items.created}`);
-  console.log(`   Updated                : ${stats.items.updated}`);
-  console.log(`   Errors                 : ${stats.items.errors}`);
+  console.log(`   Loaded from sheet       : ${stats.items.loaded}`);
+  console.log(`   Created                 : ${stats.items.created}`);
+  console.log(`   Updated                 : ${stats.items.updated}`);
+  console.log(`   Errors                  : ${stats.items.errors}`);
 
   console.log("\n🏷️  CATEGORIES:");
-  console.log(`   Created                : ${stats.categories.created}`);
-  console.log(`   Updated (casing)       : ${stats.categories.updated}`);
+  console.log(`   Created                 : ${stats.categories.created}`);
+  console.log(`   Updated (casing)        : ${stats.categories.updated}`);
 
   console.log("\n➕ ADDONS:");
-  console.log(`   Loaded                 : ${stats.addons.loaded}`);
+  console.log(`   Loaded from sheet       : ${stats.addons.loaded}`);
+  console.log(`   Processed into new pkgs : ${stats.addons.processed}`);
 
   console.log("\n🔖 TAGS:");
-  console.log(`   Loaded                 : ${stats.tags.loaded}`);
+  console.log(`   Loaded from sheet       : ${stats.tags.loaded}`);
+  console.log(`   Processed into new pkgs : ${stats.tags.processed}`);
 
   console.log("\n" + "=".repeat(50));
 }
@@ -132,7 +135,11 @@ async function getPackageItems() {
   const map = new Map();
 
   for (const row of rows) {
-    const key = `${normalize(row.venueName)}|${normalize(row.packageName)}`;
+    const venueName = normalize(row.venueName);
+    const packageName = normalize(row.packageName);
+    if (!venueName || !packageName) continue;
+
+    const key = `${venueName}|${packageName}`;
     if (!map.has(key)) map.set(key, []);
 
     map.get(key).push({
@@ -142,7 +149,6 @@ async function getPackageItems() {
     });
     stats.items.loaded++;
   }
-
   return map;
 }
 
@@ -151,12 +157,15 @@ async function getPackageAddons() {
   const map = new Map();
 
   for (const row of rows) {
-    const key = `${normalize(row.venueName)}|${normalize(row.packageName)}`;
+    const venueName = normalize(row.venueName);
+    const packageName = normalize(row.packageName);
+    if (!venueName || !packageName) continue;
+
+    const key = `${venueName}|${packageName}`;
     if (!map.has(key)) map.set(key, []);
     map.get(key).push(normalize(row.addonTitle));
     stats.addons.loaded++;
   }
-
   return map;
 }
 
@@ -165,16 +174,19 @@ async function getPackageCategoryTags() {
   const map = new Map();
 
   for (const row of rows) {
-    const key = `${normalize(row.venueName)}|${normalize(row.packageName)}`;
-    if (!map.has(key)) map.set(key, {});
+    const venueName = normalize(row.venueName);
+    const packageName = normalize(row.packageName);
+    if (!venueName || !packageName) continue;
 
-    const category = await getOrCreateCategory(normalize(row.categoryTitle));
-    if (category) {
-      map.get(key)[category._id.toString()] = normalize(row.tagValue);
-      stats.tags.loaded++;
-    }
+    const key = `${venueName}|${packageName}`;
+    if (!map.has(key)) map.set(key, []);
+
+    map.get(key).push({
+      categoryTitle: normalize(row.categoryTitle),
+      tagValue: normalize(row.tagValue),
+    });
+    stats.tags.loaded++;
   }
-
   return map;
 }
 
@@ -198,7 +210,6 @@ async function getOrCreateCategory(categoryTitle) {
     await category.save();
     stats.categories.updated++;
   }
-
   return category;
 }
 
@@ -228,7 +239,7 @@ async function getOrCreateItem(itemTitle, categoryTitle, foodType) {
       });
       stats.items.created++;
       console.log(`   ➕ Created Item: ${item.title}`);
-      return item;
+      return { item, category };
     }
 
     // Update existing item
@@ -243,11 +254,6 @@ async function getOrCreateItem(itemTitle, categoryTitle, foodType) {
     }
 
     const newFoodType = normalize(foodType || "veg").toLowerCase();
-    
-    // Schema me enum: ["veg", "non-veg", "mixed"]
-    // if (!["veg", "non-veg", "mixed"].includes(newFoodType)) {
-    //   console.log(`   ⚠️  Invalid foodType "${newFoodType}" for item "${item.title}" → keeping old`);
-    // } else 
     if (item.foodType !== newFoodType) {
       item.foodType = newFoodType;
       updated = true;
@@ -259,12 +265,89 @@ async function getOrCreateItem(itemTitle, categoryTitle, foodType) {
       console.log(`   🔄 Updated Item: ${item.title}`);
     }
 
-    return item;
+    return { item, category };
   } catch (err) {
     stats.items.errors++;
     console.error(`   ❌ Item error "${itemTitle}":`, err.message);
     return null;
   }
+}
+
+// create new package
+async function createNewPackage({
+  venue,
+  venueName,
+  packageName,
+  rowData,
+  itemsMap,
+  addonsMap,
+  tagsMap,
+}) {
+  const key = `${venueName}|${packageName}`;
+  const itemData = itemsMap.get(key) || [];
+  const addonData = addonsMap.get(key) || [];
+  const tagList = tagsMap.get(key) || [];
+
+  console.log(
+    `\n→ Creating NEW Package: "${packageName}" | Venue: "${venueName}" | Items: ${itemData.length} | Addons: ${addonData.length}`
+  );
+
+  // 1. Process Items
+  let packageItems = [];
+  for (const it of itemData) {
+    const result = await getOrCreateItem(
+      it.itemTitle,
+      it.categoryTitle,
+      it.foodType
+    );
+
+    if (result && result.item && result.category) {
+      packageItems.push({
+        itemId: result.item._id,
+        categoryId: result.category._id,
+      });
+    } else if (result && result.item) {
+      console.log(
+        `   ⚠️  Item "${it.itemTitle}" found/created but category missing → skipped from package`
+      );
+    }
+  }
+
+  // 2. Process Addons
+  const finalAddons = addonData;
+  if (addonData.length > 0) {
+    stats.addons.processed += addonData.length;
+  }
+
+  // 3. Process Tags
+  const finalTags = {};
+  for (const t of tagList) {
+    const category = await getOrCreateCategory(t.categoryTitle);
+    if (category) {
+      finalTags[category._id.toString()] = t.tagValue;
+      stats.tags.processed++;
+    }
+  }
+
+  // 4. Create in DB
+  await VenuePackage.create({
+    venueId: venue._id,
+    title: packageName,
+    subTitle: normalize(rowData?.subTitle || ""),
+    actualPrice: Number(rowData?.actualPrice) || 0,
+    discountedPrice: Number(rowData?.discountedPrice) || 0,
+    maxGuests: Number(rowData?.maxGuests) || 0,
+    tag: normalize(rowData?.tag || ""),
+    packageItems: packageItems,
+    packageAddons: finalAddons,
+    packageCategoriesTags: finalTags,
+    packageImageUrl: "",
+    packageImageKey: "",
+    packageStatus: 1,
+  });
+
+  stats.packages.created++;
+  console.log(`   ✅ Created new package successfully in DB`);
 }
 
 async function syncPackages() {
@@ -287,90 +370,47 @@ async function syncPackages() {
       const venueName = normalize(row.venueName);
       const packageName = normalize(row.title);
 
-      const venue = await Venues.findOne({ venueName });
+      if (!venueName || !packageName) continue;
 
+      const venue = await Venues.findOne({ venueName });
       if (!venue) {
         stats.packages.venueNotFound++;
         stats.missingVenues.add(venueName);
         continue;
       }
 
-      let existing = await VenuePackage.findOne({
+      // Check DB: if package exist, will not process
+      const existing = await VenuePackage.findOne({
         venueId: venue._id,
         title: packageName,
       });
 
-      // ========== ITEMS PROCESS (hamesha) ==========
-      const itemData = itemsMap.get(`${venueName}|${packageName}`) || [];
-      const packageItems = [];
-
-      console.log(`\n→ Processing Package: "${packageName}" | Venue: "${venueName}" | Items in sheet: ${itemData.length}`);
-
-      for (const it of itemData) {
-        const item = await getOrCreateItem(
-          it.itemTitle,
-          it.categoryTitle,
-          it.foodType,
-        );
-        if (item) {
-          packageItems.push(item._id);
-        } else {
-          console.log(`   ⚠️  Item failed: "${it.itemTitle}"`);
-        }
-      }
-
-      // Addons
-      const packageAddons = addonsMap.get(`${venueName}|${packageName}`) || [];
-
-      // Category Tags
-      const packageCategoriesTags =
-        tagsMap.get(`${venueName}|${packageName}`) || {};
-
       if (existing) {
-        // ===== EXISTING PACKAGE → UPDATE ITEMS =====
-        existing.packageItems = packageItems;
-        existing.packageAddons = packageAddons;
-        existing.packageCategoriesTags = packageCategoriesTags;
-        existing.subTitle = normalize(row.subTitle);
-        existing.actualPrice = typeof row.actualPrice === "number" ? Number(row.actualPrice || 0) : 0;
-        existing.discountedPrice = typeof row.discountedPrice === "number" ? Number(row.discountedPrice || 0) : 0;
-        existing.maxGuests = typeof row.maxGuests === "number" ? Number(row.maxGuests || 0) : 0;
-        existing.tag = normalize(row.tag);
-
-        await existing.save();
-        stats.packages.skipped++; // already existed, but updated
-        console.log(`   ✅ Updated existing package`);
-      } else {
-        // ===== NEW PACKAGE → CREATE =====
-        await VenuePackage.create({
-          venueId: venue._id,
-          title: packageName,
-          subTitle: normalize(row.subTitle),
-          actualPrice: typeof row.actualPrice === "number" ? Number(row.actualPrice || 0) : 0,
-          discountedPrice: typeof row.discountedPrice === "number" ? Number(row.discountedPrice || 0) : 0,
-          maxGuests: typeof row.maxGuests === "number" ? Number(row.maxGuests || 0) : 0,
-          tag: normalize(row.tag),
-          packageItems,
-          packageAddons,
-          packageCategoriesTags,
-          packageImageUrl: "",
-          packageImageKey: "",
-          packageStatus: 1,
-        });
-
-        stats.packages.created++;
-        console.log(`   ✅ Created new package`);
+        stats.packages.skippedExisting++;
+        console.log(
+          `⏭️  SKIP: Package "${packageName}" already exists in DB for venue "${venueName}". No updates made.`
+        );
+        continue;
       }
+
+      //If not exist create new
+      await createNewPackage({
+        venue,
+        venueName,
+        packageName,
+        rowData: row,
+        itemsMap,
+        addonsMap,
+        tagsMap,
+      });
     } catch (error) {
       stats.packages.errors++;
       console.error(`\n❌ Package error "${row.title}":`, error.message);
-      console.error(error);
     }
   }
 }
 
 // ================== SYNC MASTER SHEETS ==================
-
 async function syncCategoriesSheet() {
   const sheets = google.sheets({ version: "v4", auth });
   const categories = await PackageCategory.find({

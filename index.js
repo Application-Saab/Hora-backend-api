@@ -256,7 +256,8 @@ async function sendNotificationsInPriority() {
   try {
     const orders = await orderModel.find({
       order_status: 0,
-      notificationStep: { $lt: 4 }
+      notificationStep: { $lt: 4 },
+      isEmergencyOrder: { $ne: true },
     });
     for (const order of orders) {
       const freshOrder = await orderModel.findById(order._id).select(
@@ -326,9 +327,67 @@ async function sendNotificationsInPriority() {
     console.error("Notification Scheduler Error:", error);
   }
 }
+/**
+ * Emergency Orders expire check Cron Function
+ */
+const expireEmergencyOrders = async () => {
+    try {
+        const emergencyOrders = await orderModel.find({
+            isEmergencyOrder: true,
+            status: 0,     
+            order_status: 7,                          
+            isPaymentDone: false
+        });
+
+        const currentTimeMs = Date.now();
+        const EXPIRE_TIME_MS = 30 * 60 * 1000; // 30 Minutes
+
+        let expiredCount = 0;
+
+        for (const order of emergencyOrders) {
+            const firstYesProcessed = order.processedBy?.find(
+                (item) => item?.action === "yes" && item?.time
+            );
+
+            if (firstYesProcessed && firstYesProcessed.time) {
+                const emergencyStartTime = new Date(firstYesProcessed.time).getTime();
+
+                if (currentTimeMs - emergencyStartTime >= EXPIRE_TIME_MS) {
+                    order.order_status = 6; 
+                    await order.save();
+                    expiredCount++;
+                  console.log(`Emergency Order ID #${order.order_id + 10800} expired successfully at: ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`);
+                }
+            }
+            
+          if (
+            Array.isArray(order.processedBy) &&
+            order.processedBy.length === 0 &&
+            order.createdAt
+          ) {
+            const orderCreatedTime = new Date(order.createdAt).getTime();
+
+            if (currentTimeMs - orderCreatedTime >= EXPIRE_TIME_MS) {
+              order.order_status = 6;
+              await order.save();
+              expiredCount++;
+
+              console.log(
+                `Emergency Order ID #${order.order_id + 10800} expired successfully at: ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`
+              );
+            }
+          }
+
+        }
+
+    } catch (error) {
+        console.error('Error while expiring emergency orders:', error);
+    }
+};
 
 
 cron.schedule("*/1 * * * *", async () => {
+  expireEmergencyOrders();
   await sendNotificationsInPriority();
 });
 
@@ -396,17 +455,20 @@ cron.schedule('0 20 * * *', async () => {
   }
 });
 
-cron.schedule('0 1 * * *', async () => {
-  try {
-    if (typeof syncLeadsFromSheet === 'function') {
-      await syncLeadsFromSheet();
-    } else {
-      console.error("ERROR: syncLeadsFromSheet is not a function! Check require/export path.");
-    }
-  } catch (err) {
-    console.error("CRON SYNC ERROR:", err);
-  }
-});
+// cron.schedule('0 1 * * *', async () => {
+//   try {
+//     if (typeof syncLeadsFromSheet === 'function') {
+//       await syncLeadsFromSheet();
+//     } else {
+//       console.error("ERROR: syncLeadsFromSheet is not a function! Check require/export path.");
+//     }
+//   } catch (err) {
+//     console.error("CRON SYNC ERROR:", err);
+//   }
+// } , {
+//     scheduled: true,
+//     timezone: "Asia/Kolkata",
+//   },);
 
 const getDaysDifference = (fromDate, toDate) => {
   if (!fromDate || !toDate) return -1;
@@ -473,9 +535,7 @@ const processDailyRetentionSequences = async () => {
 
       const hostUploadDate = order.imageUploadCounts.AllImagesUploadedAt;
 
-      const link = order.folderDetails?.shortCode
-        ? `https://horaservices.com/eventcapsule/share/${order.folderDetails.shortCode}`
-        : order.orderWebLink;
+      const link = `https://horaservices.com`;
 
       if (hostPhone && hostUploadDate) {
         const hostDiffDays = getDaysDifference(hostUploadDate, today) + 1;
@@ -618,6 +678,7 @@ const CityServedRoutes = require("./routes/city-served");
 const CityServedLocalityRoutes = require("./routes/city-served-locality");
 const ShopsRoutes = require("./routes/shops");
 const AddressRoutes = require("./routes/address");
+const AddressRoutesAdmin = require("./routes/address-admin-api");
 const OrderRoutes = require("./routes/order");
 const PaymentGatewayRoutes = require("./routes/payment-gateway");
 const DecorationRoutes = require("./routes/decoration");
@@ -640,10 +701,20 @@ const EventDateRoutes = require("./routes/event-dates");
 const AddonRoutes = require("./routes/addon");
 const ThemeRoutes = require("./routes/photography-theme");
 const team = require("./routes/team");
+const holidaysRoutes = require("./routes/holidays")
+const specializationRoutes = require("./routes/specialization");
 const ErrorLogRoutes = require("./routes/error-log")
 const pinCodes = require("./routes/serviceabilityPincodes")
+const venueSuggestion = require("./routes/venue-suggestion")
 let passportAuth = require("./store/passportAuth").passportAuth;
 
+app.get("/api/check-token-health", passportAuth, async (req, res) => {
+    return res.status(200).json({
+        error: false,
+        status: 200,
+        authenticated: true,
+    });
+});
 app.use("/api/admin", AdminRoutes);
 app.use("/api/user", UserRoutes);
 app.use("/api/customer/event", EventInviteRoutes);
@@ -660,6 +731,7 @@ app.use("/api/city_served_locality", CityServedLocalityRoutes);
 app.use("/api/shops", ShopsRoutes);
 app.use("/api/order", OrderRoutes);
 app.use("/api/users/address", passportAuth, AddressRoutes);
+app.use("/api/admin/address", AddressRoutesAdmin);
 app.use("/api/payment_gateway", PaymentGatewayRoutes);
 app.use("/api/decoration", DecorationRoutes);
 app.use("/api/photography", PhotographyRoutes);
@@ -682,9 +754,12 @@ app.use("/eventcapsule/share", ShareCapsule);
 app.use("/api/addon", AddonRoutes);
 app.use("/api/photography-theme", ThemeRoutes);
 app.use("/api/team", team);
+app.use("/api/holidays", holidaysRoutes);
 app.use("/api/leads", leadsRoutes); 
-app.use("/api/error-log", ErrorLogRoutes.router);
+app.use("/api/specializations", specializationRoutes);
 app.use("/api/pincode", pinCodes)
+app.use("/api/venue-suggestion", venueSuggestion)
+app.use("/api/error-log", ErrorLogRoutes.router);
 
 const notificationFunction = require("./store/notifications");
 const UserModel = require("./models/user");
@@ -843,7 +918,15 @@ app.post(
   },
 );
 
-app.use("/api/uploads", express.static(path.join(__dirname, "uploads")));
+app.use(
+  "/api/uploads",
+  express.static(path.join(__dirname, "uploads"), {
+    setHeaders: (res) => {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    },
+  })
+);
 
 app.post("/firebase/notification", async (req, res) => {
   try {

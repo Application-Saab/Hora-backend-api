@@ -343,6 +343,116 @@ router.post('/admin_user_address_list', async (req, res, next) => {
       next(error);
     }
 });
+const INCLUSION_TO_API_KEY = {
+  "Raw Photos": "rawPhotos",
+  "Edited Photos": "editedPhotos",
+  "Teaser": "teaser",
+  "Edited Video": "editedVideos",
+  "Raw Video": "rawVideos",
+  "Drone Shoot": "droneShoot",
+  "Edited Reel": "editedReel"
+};
+
+const buildDriveStatusStages = () => {
+  const branches = Object.entries(INCLUSION_TO_API_KEY).map(([k, v]) => ({
+    case: { $eq: ["$$inc.k", k] },
+    then: v,
+  }));
+
+  const nonEmpty = (field) => ({
+    $gt: [{ $strLenCP: { $trim: { input: { $ifNull: [field, ""] } } } }, 0],
+  });
+
+  return [
+    {
+      $addFields: {
+        _expectedKeys: {
+          $setUnion: [
+            [],
+            {
+              $filter: {
+                input: {
+                  $map: {
+                    input: {
+                      $filter: {
+                        input: {
+                          $objectToArray: {
+                            $ifNull: ["$call_checklist.inclusions", {}],
+                          },
+                        },
+                        as: "inc",
+                        cond: { $eq: ["$$inc.v", true] },
+                      },
+                    },
+                    as: "inc",
+                    in: { $switch: { branches, default: null } },
+                  },
+                },
+                as: "k",
+                cond: { $ne: ["$$k", null] },
+              },
+            },
+          ],
+        },
+      },
+    },
+    {
+      $addFields: {
+        _filledKeys: {
+          $filter: {
+            input: "$_expectedKeys",
+            as: "k",
+            cond: {
+              $or: [
+                {
+                  $gt: [
+                    {
+                      $size: {
+                        $filter: {
+                          input: { $ifNull: ["$allDriveLinks", []] },
+                          as: "l",
+                          cond: {
+                            $and: [
+                              { $eq: ["$$l.linkType", "$$k"] },
+                              nonEmpty("$$l.link"),
+                            ],
+                          },
+                        },
+                      },
+                    },
+                    0,
+                  ],
+                },
+                {
+                  $and: [
+                    { $eq: ["$$k", "rawPhotos"] },
+                    nonEmpty("$orderDriveLink"),
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      },
+    },
+    {
+      $addFields: {
+        driveLinkStatus: {
+          $cond: [
+            {
+              $and: [
+                { $gt: [{ $size: "$_expectedKeys" }, 0] },
+                { $eq: [{ $size: "$_expectedKeys" }, { $size: "$_filledKeys" }] },
+              ],
+            },
+            "completed",
+            "pending",
+          ],
+        },
+      },
+    },
+  ];
+};
 
 router.post("/adminOrderList", async (req, res, next) => {
   try {
@@ -366,6 +476,7 @@ router.post("/adminOrderList", async (req, res, next) => {
       start_date,
       end_date,
       order_date,
+      driveLinkStatus,
     } = req.body;
 
     // Build the query object
@@ -409,8 +520,29 @@ router.post("/adminOrderList", async (req, res, next) => {
     }
 
     // Aggregation pipeline
+    const useDriveFilter =
+      driveLinkStatus === "completed" || driveLinkStatus === "pending";
+
+    const basePipeline = [{ $match: finder }];
+
+    if (useDriveFilter) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      basePipeline.push(
+        {
+          $match: {
+            type: 8,
+            createdAt: { $lt: today },
+          },
+        },
+        ...buildDriveStatusStages(),
+        { $match: { driveLinkStatus } }
+      );
+    }
+
     const order = await orderModel.aggregate([
-      { $match: finder },
+      ...basePipeline,
       {
         $lookup: {
           from: "addresses",
@@ -470,7 +602,16 @@ router.post("/adminOrderList", async (req, res, next) => {
       { $limit: Number(per_page) },
     ]);
 
-    const totalorder = await orderModel.countDocuments(finder);
+    let totalorder;
+    if (useDriveFilter) {
+      const countResult = await orderModel.aggregate([
+        ...basePipeline,
+        { $count: "total" },
+      ]);
+      totalorder = countResult[0]?.total || 0;
+    } else {
+      totalorder = await orderModel.countDocuments(finder);
+    }
 
     const paginate = {
       total_item: totalorder,
@@ -838,6 +979,37 @@ router.get("/getUserDetails/:id", async (req, res, next) => {
     });
   } catch (error) {
       next(error);
+  }
+});
+
+router.post("/getMultipleUserDetails", async (req, res, next) => {
+  try {
+    const { ids } = req.body;
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.json({
+        error: true,
+        status: 422,
+        message: "Supplier IDs are required.",
+        data: [],
+      });
+    }
+
+    const objectIds = ids.map((id) => new ObjectId(id));
+
+    const data = await UserModel.find({
+      _id: { $in: objectIds },
+      role: "supplier",
+    }).select("name firstName lastName city job_type phone");
+
+    return res.json({
+      error: false,
+      status: 200,
+      message: "Details Fetch Successfully",
+      data: data,
+    });
+  } catch (error) {
+    next(error);
   }
 });
 

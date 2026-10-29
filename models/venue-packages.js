@@ -30,8 +30,16 @@ const venuePackagesSchema = new mongoose.Schema(
     packageItems: {
       type: [
         {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "venue-package-items",
+          itemId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "venue-package-items",
+            required: true,
+          },
+          categoryId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "venue-package-categories",
+            required: true,
+          },
         },
       ],
       default: [],

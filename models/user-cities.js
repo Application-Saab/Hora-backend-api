@@ -19,29 +19,71 @@ const userCitiesSchema = new mongoose.Schema(
       default: "NOT_SELECTED",
       required: true,
     },
-    searchCount : {
-      type : Number,
-      default : 0
+
+    searchCount: {
+      type: Number,
+      default: 0,
     },
-    eventDateCount : {
-      type : Number,
-      default : 0
+
+    eventDateCount: {
+      type: Number,
+      default: 0,
     },
+
     clickCounts: {
-      whatsapp : {
+      whatsapp: {
         type: Number,
-        default : 0,
+        default: 0,
       },
-      facebook : {
+
+      facebook: {
         type: Number,
-        default : 0
-      }
-    }
+        default: 0,
+      },
+    },
   },
   {
     timestamps: true,
   },
 );
+
+// Default listing / date filtering
+userCitiesSchema.index({
+  createdAt: -1,
+});
+
+// City + date filtering
+userCitiesSchema.index({
+  cityName: 1,
+  createdAt: -1,
+});
+
+// User lookup
+userCitiesSchema.index({
+  userId: 1,
+});
+
+// Visitor lookup
+userCitiesSchema.index({
+  visitorId: 1,
+});
+
+// Search/event filters
+userCitiesSchema.index({
+  searchCount: 1,
+  createdAt: -1,
+});
+
+userCitiesSchema.index({
+  eventDateCount: 1,
+  createdAt: -1,
+});
+
+// WhatsApp filtering
+userCitiesSchema.index({
+  "clickCounts.whatsapp": 1,
+  createdAt: -1,
+});
 
 userCitiesSchema.pre("validate", function () {
   if (!this.userId && !this.visitorId) {

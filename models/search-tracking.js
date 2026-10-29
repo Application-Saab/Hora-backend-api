@@ -51,4 +51,13 @@ searchTrackingSchema.pre("validate", function () {
   }
 });
 
+searchTrackingSchema.index({ createdAt: -1 });
+searchTrackingSchema.index({ clickedType: 1, createdAt: -1 });
+searchTrackingSchema.index({ searchTerm: 1 });
+searchTrackingSchema.index({ clickedTitle: 1 });
+searchTrackingSchema.index({ userId: 1, createdAt: -1 });
+searchTrackingSchema.index({ visitorId: 1, createdAt: -1 });
+searchTrackingSchema.index({ clickedItemId: 1, clickedType: 1 });
+searchTrackingSchema.index({ "clickedItemId": 1, createdAt: -1 });
+
 module.exports = mongoose.model("search-tracking", searchTrackingSchema);

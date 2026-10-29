@@ -20,7 +20,22 @@ const leadSchema = new mongoose.Schema(
         lastSyncedRow: {
             type: Number,
             default: 0
-        }
+        },
+        eventDate: {
+            type: String,
+        },
+        orderSummary:{
+            type:String,
+        },
+        eventDetails:{
+            type:String,
+        },
+        agent_phone: { type: String },
+        funnelStage : { type: String },
+        event_date_at: { type: Date, default: null },
+        event_details_at: { type: Date, default: null },
+        order_summary_at: { type: Date, default: null },
+        callback_requested_at: { type: Date, default: null },
     },
     {
         timestamps: true,
@@ -34,6 +49,14 @@ leadSchema.index(
 leadSchema.index(
     { phoneNumber: 1, source: 1 },
     { sparse: true }
+);
+
+leadSchema.index(
+    { phoneNumber: 1 },
+    {
+        unique: true,
+        partialFilterExpression: { createdAt: { $gte: new Date("2026-10-19T18:30:00Z") } }
+    }
 );
 
 const Lead = mongoose.model('lead', leadSchema);

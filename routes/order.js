@@ -536,12 +536,9 @@ router.post('/add', async(req, res, next) => {
         inclusionVariables :req.body.inclusionVariables,
         customInclusion: req.body.customInclusion,
         notificationStep: 1,
-<<<<<<< HEAD
         supplierUpload: supplierUpload,
-=======
         isPaymentDone: req.body.isPaymentDone,
         isEmergencyOrder: req.body.isEmergencyOrder,
->>>>>>> 716d16d6f89ba5129bd65621abc6b183cd5993b2
         lastNotifiedAt: new Date(),
     })
     if(req.body.items.length>0){

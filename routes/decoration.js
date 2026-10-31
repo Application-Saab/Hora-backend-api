@@ -369,6 +369,34 @@ router.get("/searchByName/:name", async (req, res, next) => {
   }
 });
 
+router.get("/panel-searchByName/:name", async (req, res, next) => {
+  const { name } = req.params;
+
+  try {
+    const decorations = await decorationModel.find({
+      name: { $regex: new RegExp(name, "i") },
+    });
+
+    if (decorations.length > 0) {
+      return res.json({
+        error: false,
+        status: 200,
+        message: "Search Successful",
+        data: decorations,
+      });
+    } else {
+      return res.json({
+        error: true,
+        status: 404,
+        message: "No matching decorations found.",
+      });
+    }
+  } catch (error) {
+    error.isPublic = true;
+    next(error);
+  }
+});
+
 router.get("/searchByTag/:tag", async (req, res, next) => {
   const { tag } = req.params;
   const cacheKey = `search_tag_${tag}`;

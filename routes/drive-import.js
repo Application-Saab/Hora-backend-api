@@ -424,7 +424,7 @@ router.post("/add-order-drive-link", async (req, res, next) => {
       }
     }
 
-    const folderName = `${order_id}_${customerId}_${phoneNo}`;
+    const folderName = `${order_id}_${customerId}`;
 
     let folder = await FolderModel.findOne({ folderName, customerId });
 

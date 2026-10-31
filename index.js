@@ -28,6 +28,12 @@ const deploymentId = process.env.GOOGLE_SCRIPT_DEPLOYMENT_ID;
 
 const app = express();
 app.use(cors());
+
+// app.use(cors({
+//   origin: "*",
+//   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+// }));
+
 // app.use(express.json());
 app.use(bodyParser.json({ limit: "50mb" }));
 app.use(
@@ -916,6 +922,14 @@ app.post(
         .json({ error: true, message: "Image compression failed" });
     }
   },
+);
+
+console.log("UPLOADS PATH:", path.join(__dirname, "uploads"));
+console.log(
+  "IMAGE EXISTS:",
+  fs.existsSync(
+    path.join(__dirname, "uploads", "attachment-1793426237758-870956.jpeg")
+  )
 );
 
 app.use(

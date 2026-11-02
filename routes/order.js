@@ -454,7 +454,7 @@ const createEventCapsuleFolder = async (order) => {
 
         const eventId = eventInvite ? eventInvite._id : null;
 
-        const folderName = `${orderId}_${customerId}`;
+        const folderName = `${orderId}_${customerId}_${phoneNo}`;
 
         const existingFolder = await FolderModel.findOne({
             folderName,

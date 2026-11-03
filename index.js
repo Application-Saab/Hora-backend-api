@@ -27,12 +27,12 @@ const deploymentId = process.env.GOOGLE_SCRIPT_DEPLOYMENT_ID;
 // Database Connection End
 
 const app = express();
-app.use(cors());
+// app.use(cors());
 
-// app.use(cors({
-//   origin: "*",
-//   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-// }));
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+}));
 
 // app.use(express.json());
 app.use(bodyParser.json({ limit: "50mb" }));

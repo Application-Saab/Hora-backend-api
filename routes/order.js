@@ -2,6 +2,7 @@ const express = require('express');
 const orderModel = require('../models/order');
 const dishModel = require('../models/dish');
 const userModel = require('../models/user');
+const eventInviteModel = require('../models/event-invite');
 const orderFeedbackModel = require('../models/order-feedback');
 const commonFunction = require('../store/commonFunction');
 const router = express.Router();
@@ -2400,8 +2401,13 @@ router.get('/order_details_decoration/:id', async (req, res, next) => {
       order.items.map(itemId => decorationModel.findById(itemId).exec())
     );
 
+      const eventData = await eventInviteModel.find({
+          orderId: order.order_id
+      }).select('_id orderId hostName eventType');
+
     const orderWithDecorations = {
       ...order.toObject(),
+        eventData,
       items: order.items.map((itemId, idx) => ({
         itemId,
         decoration: decorationDocs[idx] ?? null
@@ -2419,8 +2425,8 @@ router.get('/order_details_decoration/:id', async (req, res, next) => {
 
   } catch (err) {
     console.error('Error fetching order + decorations:', err);
-    error.isPublic = true;
-    next(error);
+      err.isPublic = true;
+      next(err);
   }
 });
 
@@ -2540,8 +2546,13 @@ router.get('/order_details_photography/:id', async (req, res, next) => {
             // Resolve all promises
             photography = await Promise.all(photographyPromisesArray);
 
+            const eventData = await eventInviteModel.find({
+                orderId: order[0].order_id
+            }).select('_id orderId hostName eventType');
+
             orderWithPhotography = {
                 ...order[0]._doc, // Mongoose 9 returns document object safely
+                eventData,
                 items: order[0].items.map((itemId, index) => ({
                     itemId: itemId,
                     photography: photography[0][index] // keep same structure

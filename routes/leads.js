@@ -746,7 +746,7 @@ router.get("/admin-leads", async (req, res) => {
 
         if (String(sources).trim()) {
             const selectedSourceList = String(sources)
-                .split(",")
+                .split("|")
                 .map((item) => item.trim())
                 .filter(Boolean);
 

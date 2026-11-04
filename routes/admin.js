@@ -477,6 +477,7 @@ router.post("/adminOrderList", async (req, res, next) => {
       end_date,
       order_date,
       driveLinkStatus,
+      emergencyOrderStatus,
     } = req.body;
 
     // Build the query object
@@ -517,6 +518,27 @@ router.post("/adminOrderList", async (req, res, next) => {
       };
     } else if (order_date) {
       finder.order_date = new Date(order_date);
+    }
+
+    if (emergencyOrderStatus === "pending") {
+      finder.isEmergencyOrder = true;
+      finder.toId = "";
+
+      finder.processedBy = {
+        $not: {
+          $elemMatch: { action: "yes" }
+        }
+      };
+    }
+
+    if (emergencyOrderStatus === "paid") {
+      finder.isEmergencyOrder = true;
+      finder.isPaymentDone = true;
+    }
+
+    if (emergencyOrderStatus === "notPaid") {
+      finder.isEmergencyOrder = true;
+      finder.isPaymentDone = false;
     }
 
     // Aggregation pipeline

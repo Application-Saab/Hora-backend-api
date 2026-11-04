@@ -345,10 +345,11 @@ router.post('/admin_user_address_list', async (req, res, next) => {
 });
 const INCLUSION_TO_API_KEY = {
   "Raw Photos": "rawPhotos",
+  "Color Corrected Photos": "colorCorrectedPhotos",
   "Edited Photos": "editedPhotos",
   "Teaser": "teaser",
   "Edited Video": "editedVideos",
-  "Raw Video": "rawVideos",
+  "Raw Video Clips": "rawVideoClips",
   "Drone Shoot": "droneShoot",
   "Edited Reel": "editedReel"
 };
@@ -413,7 +414,27 @@ const buildDriveStatusStages = () => {
                           as: "l",
                           cond: {
                             $and: [
-                              { $eq: ["$$l.linkType", "$$k"] },
+                              {
+                                $or: [
+                                  { $eq: ["$$l.linkType", "$$k"] },
+                                  {
+                                    $and: [
+                                      { $in: ["$$k", ["rawPhotos", "colorCorrectedPhotos"]] },
+                                      {
+                                        $in: [
+                                          "$$l.linkType",
+                                          [
+                                            "rawPhotos",
+                                            "Raw Photos",
+                                            "colorCorrectedPhotos",
+                                            "Color Corrected Photos"
+                                          ]
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
                               nonEmpty("$$l.link"),
                             ],
                           },
@@ -425,7 +446,9 @@ const buildDriveStatusStages = () => {
                 },
                 {
                   $and: [
-                    { $eq: ["$$k", "rawPhotos"] },
+                    {
+                      $in: ["$$k", ["rawPhotos", "colorCorrectedPhotos"]]
+                    },
                     nonEmpty("$orderDriveLink"),
                   ],
                 },
@@ -554,7 +577,7 @@ router.post("/adminOrderList", async (req, res, next) => {
       {
         $lookup: {
           from: "eventinvites", // correct collection name
-          let: { orderId: "$order_id" },
+          let: { orderId: "$order_id" }, 
           pipeline: [
             {
               $match: {

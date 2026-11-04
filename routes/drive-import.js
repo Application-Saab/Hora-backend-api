@@ -266,7 +266,7 @@ router.post("/import-drive-folder", async (req, res, next) => {
     if (order.allDriveLinks && order.allDriveLinks.length > 0) {
       const now = new Date();
       updateFields.allDriveLinks = order.allDriveLinks.map((item) => {
-        if (item.linkType === "Raw Photos" || !item.linkType) {
+        if (item.linkType === "Raw Photos" || item.linkType === "Color Corrected Photos" || !item.linkType) {
           return {
             ...item,
             link: folderUrl,
@@ -461,7 +461,13 @@ router.post("/add-order-drive-link", async (req, res, next) => {
       const now = new Date();
 
       updateFields.allDriveLinks = allDriveLinks.map(item => {
-        const existingItem = existingLinks.find(el => el.linkType === item.linkType);
+        const existingItem = existingLinks.find(el =>
+          el.linkType === item.linkType ||
+          (
+            ["Raw Photos", "Color Corrected Photos"].includes(el.linkType) &&
+            ["Raw Photos", "Color Corrected Photos"].includes(item.linkType)
+          )
+        );
 
         if (!existingItem || existingItem.link !== item.link) {
           isAnySubLinkChangedOrNew = true;
@@ -494,7 +500,7 @@ router.post("/add-order-drive-link", async (req, res, next) => {
         })
         .catch((err) => {
           console.error(
-            "Media worker API call failed for rawPhotos:",
+            "Media worker API call failed for Color Corrected Photos:",
             err.response?.data || err.message
           );
         });
@@ -502,6 +508,12 @@ router.post("/add-order-drive-link", async (req, res, next) => {
       else {
         console.log("-> Skipping media worker. Link is identical and it's not a retry request.");
       }
+
+      console.log("========== SHEET UPDATE CONDITION ==========");
+      console.log("Raw Link Changed:", isRawLinkNewOrChanged);
+      console.log("Sub Link Changed:", isAnySubLinkChangedOrNew);
+      console.log("Retry:", isRetry);
+      console.log("Folder URL Present:", !!folderUrl);
 
       if (isRawLinkNewOrChanged || isAnySubLinkChangedOrNew || isRetry === true) {
         console.log("-> Changes or Retry detected. Updating Google Sheet...");
@@ -520,7 +532,7 @@ router.post("/add-order-drive-link", async (req, res, next) => {
             });
 
             return {
-              linkType: item.linkType || "Raw Photos",
+              linkType: item.linkType || "Color Corrected Photos",
               link: item.link || "",
               submittedAt: `${formattedDate}, ${formattedTime}`, 
             };
@@ -536,7 +548,7 @@ router.post("/add-order-drive-link", async (req, res, next) => {
           });
 
           contentTypesPayload.push({
-            linkType: "Raw Photos",
+            linkType: "Color Corrected Photos",
             link: folderUrl,
             submittedAt: `${formattedDate}, ${formattedTime}`,
           });
@@ -568,18 +580,49 @@ router.post("/add-order-drive-link", async (req, res, next) => {
           contentTypes: contentTypesPayload
         };
 
-      axios
-        .post(
-          `https://script.google.com/macros/s/${deploymentId}/exec`,
-          googlePayload,
-          { headers: { "Content-Type": "application/json" } }
-        )
-        .catch((err) => {
-          console.error(
-            "Google Sheet update failed:",
-            err.response?.data || err.message
+
+        console.log("\n========== GOOGLE SHEET REQUEST START ==========");
+
+        console.log("Target Sheet:", googlePayload.targetSheet);
+        console.log("Raw Order ID:", googlePayload.rawOrderId);
+        console.log("Sheet Order ID (+10800):", googlePayload.orderId);
+        console.log("Order Date:", googlePayload.orderFulfilmentDate);
+        console.log("Content Types:", googlePayload.contentTypes.map(item => item.linkType));
+        console.log("Total Drive Links:", googlePayload.contentTypes.length);
+        console.log("Main Drive Link Present:", !!googlePayload.driveLink);
+        console.log("Web Link Present:", !!googlePayload.webLink);
+
+        try {
+          const sheetResponse = await axios.post(
+            `https://script.google.com/macros/s/${deploymentId}/exec`,
+            googlePayload,
+            {
+              headers: {
+                "Content-Type": "application/json"
+              }
+            }
           );
-        });
+
+          console.log("\n========== GOOGLE SHEET RESPONSE ==========");
+          console.log("HTTP Status:", sheetResponse.status);
+          console.log("Response Data:", sheetResponse.data);
+
+          if (sheetResponse.data?.status === "success") {
+            console.log("✅ GOOGLE SHEET DATA SENT SUCCESSFULLY");
+          } else {
+            console.error("❌ GOOGLE SCRIPT RETURNED ERROR:", sheetResponse.data);
+          }
+
+        } catch (err) {
+          console.error("\n========== GOOGLE SHEET API ERROR ==========");
+          console.error("Error Message:", err.message);
+          console.error("HTTP Status:", err.response?.status);
+          console.error("Error Response:", err.response?.data);
+        }
+
+        console.log("========== GOOGLE SHEET REQUEST END ==========\n");
+
+
       }
       }
 

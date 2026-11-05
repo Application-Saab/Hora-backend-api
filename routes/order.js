@@ -538,6 +538,7 @@ router.post('/add', async(req, res, next) => {
         isPaymentDone: req.body.isPaymentDone,
         isEmergencyOrder: req.body.isEmergencyOrder,
         lastNotifiedAt: new Date(),
+        customProductImage: req.body.customProductImage,
     })
     if(req.body.items.length>0){
         let hasKey = req.body.items[0].hasOwnProperty('item_id');

@@ -58,6 +58,7 @@ const orderSchema = new mongoose.Schema({
     themes: { type: Array, default: [] },
     isPaymentDone: { type: Boolean, default: true },
     isEmergencyOrder: { type: Boolean, default: false },
+    customProductImage:{type:String, default:""},
   albumImages: {
     type: [String],
     default: []

@@ -137,6 +137,8 @@ const FolderSchema = new mongoose.Schema(
 
     eventDate: { type: Date, default: '' },
 
+    galleryQrCode: { type: String, default: '',},
+
     galleryFolders: [
       {
         galleryId: {

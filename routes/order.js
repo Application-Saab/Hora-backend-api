@@ -6,6 +6,7 @@ const eventInviteModel = require('../models/event-invite');
 const orderFeedbackModel = require('../models/order-feedback');
 const commonFunction = require('../store/commonFunction');
 const router = express.Router();
+const QRCode = require('qrcode');
 var async = require("async");
 var ObjectId = require('mongoose').Types.ObjectId; 
 const notificationFunction = require("../store/notifications");
@@ -471,6 +472,18 @@ const createEventCapsuleFolder = async (order) => {
 
         const shortCode = await capsuleGenerateShortCode();
 
+        const galleryLink = `https://horaservices.com/eventcapsule/share/${shortCode}`;
+
+        // Node 16 par async/await ke sath QR code generate karna
+        const qrCodeDataUrl = await QRCode.toDataURL(galleryLink, {
+            errorCorrectionLevel: 'H',
+            margin: 2,
+            color: {
+                dark: '#000000',
+                light: '#ffffff'
+            }
+        });
+
         const folder = new FolderModel({
             folderName,
             customerId,
@@ -479,6 +492,7 @@ const createEventCapsuleFolder = async (order) => {
             status: "processing",
             shortCode,
             eventDate: eventDate,
+            galleryQrCode: qrCodeDataUrl,
         });
 
         await folder.save();

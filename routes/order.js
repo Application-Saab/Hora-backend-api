@@ -2,6 +2,7 @@ const express = require('express');
 const orderModel = require('../models/order');
 const dishModel = require('../models/dish');
 const userModel = require('../models/user');
+const eventInviteModel = require('../models/event-invite');
 const orderFeedbackModel = require('../models/order-feedback');
 const commonFunction = require('../store/commonFunction');
 const router = express.Router();
@@ -11,7 +12,10 @@ const notificationFunction = require("../store/notifications");
 const cityServedLocalityModel = require('../models/city-served-locality');
 const cityServedModel = require('../models/city-served');
 const decorationModel = require('../models/decoration');
-const photographyModel = require('../models/photography')
+const photographyModel = require('../models/photography');
+const FolderModel = require("../models/folder");
+const EventinvitesModel = require("../models/event-invite");
+const capsuleGenerateShortCode = require("../utils/capsuleGenerateShortCode");
 // Load the full build.
 var _ = require('lodash');
 const AddressModel = require('../models/address');
@@ -434,6 +438,63 @@ router.post("/process-emergency-order", async (req, res, next) => {
     }
 });
 
+const createEventCapsuleFolder = async (order) => {
+    try {
+        if (Number(order.type) !== 8) {
+            return;
+        }
+
+        const customerId = order.fromId;
+        const orderId = order.order_id;
+        const phoneNo = order.phone_no;
+        const eventDate = order.order_date;
+
+        const eventInvite = await EventinvitesModel.findOne({
+            orderId: Number(orderId)
+        });
+
+        const eventId = eventInvite ? eventInvite._id : null;
+
+        const folderName = `${orderId}_${customerId}_${phoneNo}`;
+
+        const existingFolder = await FolderModel.findOne({
+            folderName,
+            customerId
+        });
+
+        if (existingFolder) {
+            console.log(
+                `Event Capsule folder already exists for order ${orderId}: ${existingFolder._id}`
+            );
+            return;
+        }
+
+        const shortCode = await capsuleGenerateShortCode();
+
+        const folder = new FolderModel({
+            folderName,
+            customerId,
+            orderId,
+            eventId,
+            status: "processing",
+            shortCode,
+            eventDate: eventDate,
+        });
+
+        await folder.save();
+
+        console.log(
+            `Event Capsule folder created for order ${orderId}: ${folder._id}`
+        );
+
+    } catch (error) {
+        console.error(
+            `Failed to create Event Capsule folder for order ${order?.order_id}:`,
+            error
+        );
+    }
+};
+
 router.post('/add', async(req, res, next) => {
     const lastOrder = await orderModel.findOne().sort({ order_id: -1 }).select('order_id');
     const nextOrderId = lastOrder ? lastOrder.order_id + 1 : 1;
@@ -638,6 +699,7 @@ router.post('/add', async(req, res, next) => {
                 data.helper=commonFunction.getCalcalutionOfChefAndHelper(noOfChefHelper).helper;
                 //data.supplierUserIds=userSupplierIdsArray;
                 const dataToSave = await data.save();
+                createEventCapsuleFolder(dataToSave);
                 const io = getIO();
                 if ((orderStatus == 1 && filteredSuppliers.length) || (orderStatus == 0 && isPaymentDone === false && filteredSuppliers.length)) {
                 filteredSuppliers.forEach((supplier) => {
@@ -2401,8 +2463,13 @@ router.get('/order_details_decoration/:id', async (req, res, next) => {
       order.items.map(itemId => decorationModel.findById(itemId).exec())
     );
 
+      const eventData = await eventInviteModel.find({
+          orderId: order.order_id
+      }).select('_id orderId hostName eventType');
+
     const orderWithDecorations = {
       ...order.toObject(),
+        eventData,
       items: order.items.map((itemId, idx) => ({
         itemId,
         decoration: decorationDocs[idx] ?? null
@@ -2420,8 +2487,8 @@ router.get('/order_details_decoration/:id', async (req, res, next) => {
 
   } catch (err) {
     console.error('Error fetching order + decorations:', err);
-    error.isPublic = true;
-    next(error);
+      err.isPublic = true;
+      next(err);
   }
 });
 
@@ -2541,8 +2608,13 @@ router.get('/order_details_photography/:id', async (req, res, next) => {
             // Resolve all promises
             photography = await Promise.all(photographyPromisesArray);
 
+            const eventData = await eventInviteModel.find({
+                orderId: order[0].order_id
+            }).select('_id orderId hostName eventType');
+
             orderWithPhotography = {
                 ...order[0]._doc, // Mongoose 9 returns document object safely
+                eventData,
                 items: order[0].items.map((itemId, index) => ({
                     itemId: itemId,
                     photography: photography[0][index] // keep same structure

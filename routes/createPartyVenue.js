@@ -126,20 +126,69 @@ router.get("/venues-list", async (req, res, next) => {
   }
 });
 
+// Get all unique localities for a given city (Case-insensitive)
+router.get("/venue-localities-list", async (req, res, next) => {
+  try {
+    const { city } = req.query;
+
+    if (!city || !city.trim()) {
+      return sendResponse(res, 400, true, "City parameter is required", []);
+    }
+
+    const query = {
+      venueStatus: { $ne: 3 }, // Deleted venues ko filter out karein (optional: venueStatus: 1 for active only)
+      city: { $regex: `^${city.trim()}$`, $options: "i" },
+      locality: { $exists: true, $ne: "" },
+    };
+
+    // MongoDB se directly unique localities fetch karna
+    const rawLocalities = await Venues.distinct("locality", query);
+
+    // Trimming, empty string removal aur duplicate capitalization ko clean karna
+    const cleanLocalities = Array.from(
+      new Set(
+        rawLocalities
+          .filter((loc) => Boolean(loc && typeof loc === "string" && loc.trim()))
+          .map((loc) => loc.trim())
+      )
+    ).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+
+    return sendResponse(
+      res,
+      200,
+      false,
+      "Localities fetched successfully",
+      cleanLocalities
+    );
+  } catch (err) {
+    err.isPublic = true;
+    next(err);
+  }
+});
+
 // Public Venue Listing API with filters
 router.get("/venues-public-list", async (req, res, next) => {
   try {
-    const { city, eventType, venueType, guestCapacity } = req.query;
+    const { city, locality, eventType, venueType, guestCapacity, search, q } = req.query;
+
+    const searchTerm = (search || q || "").trim();
 
     const query = {
       venueStatus: 1,
     };
 
     // ----------------------------
-    // CITY FILTER (partial match)
+    // CITY FILTER
     // ----------------------------
     if (city) {
       query.city = { $regex: city, $options: "i" };
+    }
+
+    // ----------------------------
+    // LOCALITY FILTER
+    // ----------------------------
+    if (locality) {
+      query.locality = { $regex: locality, $options: "i" };
     }
 
     // ----------------------------
@@ -147,38 +196,58 @@ router.get("/venues-public-list", async (req, res, next) => {
     // ----------------------------
     if (venueType) {
       const venueTypesArray = venueType.split(",");
-
-      query.venueType = {
-        $in: venueTypesArray,
-      };
+      query.venueType = { $in: venueTypesArray };
     }
 
     // ----------------------------
-    // EVENT TYPE FILTER (array contains)
+    // EVENT TYPE FILTER
     // ----------------------------
     if (eventType) {
       const eventTypesArray = eventType.split(",");
-
-      query.eventTypes = {
-        $in: eventTypesArray,
-      };
+      query.eventTypes = { $in: eventTypesArray };
     }
 
     // ----------------------------
     // GUEST CAPACITY FILTER
-    // (get venues >= required capacity)
     // ----------------------------
     if (guestCapacity) {
       query.guestCapacity = { $gte: Number(guestCapacity) };
     }
 
     // ----------------------------
-    // QUERY EXECUTION (FAST)
+    // HYBRID FREE-TEXT SEARCH
     // ----------------------------
+    if (searchTerm) {
+      const regex = { $regex: searchTerm, $options: "i" };
+      const numericValue = Number(searchTerm);
+
+      const orConditions = [
+        { venueName: regex },
+        { maskName: regex },
+        { location: regex },
+        { city: regex },
+        { locality: regex },
+        { venueType: regex },
+        { eventTypes: regex },
+        { venueFeatures: regex },
+        { hallType: regex },
+        { foodTypes: regex },
+      ];
+
+      // number based search (capacity / price / rooms)
+      if (!isNaN(numericValue) && numericValue > 0) {
+        orConditions.push(
+          { guestCapacity: { $gte: numericValue } },
+          { minGuestCapacity: { $lte: numericValue } },
+          { startingPrice: { $lte: numericValue } },
+          { totalRoomsAvailable: { $gte: numericValue } }
+        );
+      }
+
+      query.$or = orConditions;
+    }
+
     const venues = await Venues.find(query)
-      // .select(
-      //   "venueName venueType city location googleMapLink venueImageUrl guestCapacity eventTypes foodTypes hallType startingPrice"
-      // )
       .sort({ createdAt: -1 })
       .lean();
 
@@ -407,9 +476,9 @@ router.get("/venue-details/:id", async (req, res, next) => {
 
     // ✅ Fetch venue
     const venue = await Venues.findById(id)
-      .select(
-        "userId venueType venueName location googleMapLink venueImageUrl subFolders createdAt termsAndConditionsHtml faqs description venueFeatures",
-      )
+      // .select(
+      //   "userId venueType venueName location googleMapLink venueImageUrl subFolders createdAt termsAndConditionsHtml faqs description venueFeatures",
+      // )
       .lean();
 
     if (!venue) {

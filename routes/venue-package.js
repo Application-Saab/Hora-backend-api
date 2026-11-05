@@ -112,6 +112,7 @@ router.post(
         packageItems,
         packageAddons,
         tag,
+        packageFeatures,
         packageCategoriesTags,
       } = req.body;
 
@@ -131,6 +132,10 @@ router.post(
         typeof req.body.packageAddons === "string"
           ? JSON.parse(req.body.packageAddons)
           : req.body.packageAddons;
+      packageFeatures =
+        typeof req.body.packageFeatures === "string"
+          ? JSON.parse(req.body.packageFeatures)
+          : req.body.packageFeatures;
 
       packageCategoriesTags =
         typeof req.body.packageCategoriesTags === "string"
@@ -156,6 +161,7 @@ router.post(
         packageItems,
         packageAddons,
         tag,
+        packageFeatures,
         packageCategoriesTags
       });
 
@@ -369,6 +375,7 @@ router.put(
         maxGuests,
         packageItems,
         packageAddons,
+        packageFeatures,
         packageStatus,
         tag,
         packageCategoriesTags,
@@ -383,6 +390,11 @@ router.put(
         typeof packageAddons === "string"
           ? JSON.parse(packageAddons)
           : packageAddons;
+
+      let parsedPackageFeatures =
+        typeof packageFeatures === "string"
+          ? JSON.parse(packageFeatures)
+          : packageFeatures;
 
       let parsedPackageCategoriesTags =
         typeof packageCategoriesTags === "string"
@@ -405,6 +417,9 @@ router.put(
 
       if (parsedPackageAddons !== undefined)
         packageData.packageAddons = parsedPackageAddons;
+
+      if (parsedPackageFeatures !== undefined)
+        packageData.packageFeatures = parsedPackageFeatures;
 
       if (parsedPackageCategoriesTags !== undefined) {
         packageData.packageCategoriesTags = parsedPackageCategoriesTags;

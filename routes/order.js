@@ -2650,10 +2650,39 @@ router.post("/save-call-checklist", async (req, res, next) => {
 
     const call_checklist_exists = true;
 
-    const {
-      designType = {},
-      ...orderChecklist
-    } = call_checklist;
+      const {
+          designType = {},
+          ...orderChecklist
+      } = call_checklist || {};
+
+      // Sync Raw Photos and Color Corrected Photos
+      const inclusions = orderChecklist.inclusions || {};
+
+      const hasRawPhotos = Object.prototype.hasOwnProperty.call(
+          inclusions,
+          "Raw Photos"
+      );
+
+      const hasColorCorrected = Object.prototype.hasOwnProperty.call(
+          inclusions,
+          "Color Corrected Photos"
+      );
+
+      let photosValue;
+
+      if (hasRawPhotos) {
+          photosValue = inclusions["Raw Photos"];
+      } else if (hasColorCorrected) {
+          photosValue = inclusions["Color Corrected Photos"];
+      }
+
+      if (photosValue !== undefined) {
+          orderChecklist.inclusions = {
+              ...inclusions,
+              "Raw Photos": photosValue,
+              "Color Corrected Photos": photosValue
+          };
+      }
 
     const updatedOrder = await orderModel.findByIdAndUpdate(
       orderId,
@@ -2715,24 +2744,63 @@ router.put("/edit-call-checklist/:orderId", async (req, res, next) => {
       return res.status(404).json({ success: false, message: "Order not found" });
     }
 
-    // Merge checklist fields
-    const updatedChecklist = { ...existingOrder.call_checklist };
+      // Merge checklist fields
+      const updatedChecklist = { ...existingOrder.call_checklist };
 
-    if (call_checklist) {
-      // Merge designType
-      if (call_checklist.designType) {
-        updatedChecklist.designType = {
-          ...updatedChecklist.designType,
-          ...call_checklist.designType
-        };
+      if (call_checklist) {
+          if (call_checklist.designType) {
+              updatedChecklist.designType = {
+                  ...updatedChecklist.designType,
+                  ...call_checklist.designType
+              };
+          }
+
+          Object.keys(call_checklist).forEach(key => {
+              if (key === "designType") return;
+
+              if (key === "inclusions") {
+                  updatedChecklist.inclusions = {
+                      ...(updatedChecklist.inclusions || {}),
+                      ...(call_checklist.inclusions || {})
+                  };
+              } else {
+                  updatedChecklist[key] = call_checklist[key];
+              }
+          });
       }
-      // Merge other checklist fields (booleans, etc.)
-      Object.keys(call_checklist).forEach(key => {
-        if (!["designType"].includes(key)) {
-          updatedChecklist[key] = call_checklist[key];
-        }
-      });
-    }
+
+      // Sync Raw Photos and Color Corrected Photos
+      const inclusions = updatedChecklist.inclusions || {};
+
+      const hasRawPhotos = Object.prototype.hasOwnProperty.call(
+          call_checklist?.inclusions || {},
+          "Raw Photos"
+      );
+
+      const hasColorCorrected = Object.prototype.hasOwnProperty.call(
+          call_checklist?.inclusions || {},
+          "Color Corrected Photos"
+      );
+
+      let photosValue;
+
+      if (hasRawPhotos) {
+          photosValue = call_checklist.inclusions["Raw Photos"];
+      } else if (hasColorCorrected) {
+          photosValue = call_checklist.inclusions["Color Corrected Photos"];
+      } else if (Object.prototype.hasOwnProperty.call(inclusions, "Raw Photos")) {
+          photosValue = inclusions["Raw Photos"];
+      } else if (Object.prototype.hasOwnProperty.call(inclusions, "Color Corrected Photos")) {
+          photosValue = inclusions["Color Corrected Photos"];
+      }
+
+      if (photosValue !== undefined) {
+          updatedChecklist.inclusions = {
+              ...inclusions,
+              "Raw Photos": photosValue,
+              "Color Corrected Photos": photosValue
+          };
+      }
 
     // Update the order
     const updatedOrder = await orderModel.findByIdAndUpdate(
@@ -2778,7 +2846,7 @@ router.put("/edit-call-checklist/:orderId", async (req, res, next) => {
     error.isPublic = true;
     next(error);
   }
-});
+}); 
 
 // DELETE TEH UPLOAD CALLCHECKLIST IMAGE 
 router.post("/delete-callchecklist-image", async (req, res, next) => {

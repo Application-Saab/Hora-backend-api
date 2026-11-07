@@ -365,10 +365,8 @@ const expireEmergencyOrders = async () => {
                   console.log(`Emergency Order ID #${order.order_id + 10800} expired successfully at: ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`);
                 }
             }
-            
-          if (
-            Array.isArray(order.processedBy) &&
-            order.processedBy.length === 0 &&
+ 
+          else if (
             order.createdAt
           ) {
             const orderCreatedTime = new Date(order.createdAt).getTime();

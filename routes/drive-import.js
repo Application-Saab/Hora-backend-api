@@ -265,17 +265,45 @@ router.post("/import-drive-folder", async (req, res, next) => {
 
     if (order.allDriveLinks && order.allDriveLinks.length > 0) {
       const now = new Date();
-      updateFields.allDriveLinks = order.allDriveLinks.map((item) => {
-        if (item.linkType === "Raw Photos" || item.linkType === "Color Corrected Photos" || !item.linkType) {
-          return {
-            ...item,
+
+      const photoTypes = [
+        "rawPhotos",
+        "colorCorrectedPhotos",
+        "Raw Photos",
+        "Color Corrected Photos"
+      ];
+
+      const existingPhotoLink = order.allDriveLinks.find(
+        item => photoTypes.includes(item.linkType)
+      );
+
+      const otherLinks = order.allDriveLinks.filter(
+        item => !photoTypes.includes(item.linkType)
+      );
+
+      if (existingPhotoLink) {
+        const submittedAt = existingPhotoLink.submittedAt || now;
+
+        updateFields.allDriveLinks = [
+          ...otherLinks,
+          {
+            ...existingPhotoLink,
+            linkType: "rawPhotos",
             link: folderUrl,
-            submittedAt: item.submittedAt || new Date(),
-            updatedAt: now,
-          };
-        }
-        return item;
-      });
+            submittedAt,
+            updatedAt: now
+          },
+          {
+            ...existingPhotoLink,
+            linkType: "colorCorrectedPhotos",
+            link: folderUrl,
+            submittedAt,
+            updatedAt: now
+          }
+        ];
+      } else {
+        updateFields.allDriveLinks = order.allDriveLinks;
+      }
     }
 
     if (!isLinkAlreadyProvided || !order.imageUploadCounts?.driveProvidedAt) {
@@ -369,9 +397,32 @@ async function isDriveResourcePubliclyAccessible(resourceId, apiKey) {
 
 router.post("/add-order-drive-link", async (req, res, next) => {
   try {
-    const { folderUrl, order_id, allDriveLinks = [], isRetry = false } = req.body;
+    const { folderUrl, order_id, allDriveLinks: incomingDriveLinks = [], isRetry = false } = req.body;
     const order = await OrderModel.findOne({ order_id });
     if (!order) throw new Error("Order not found");
+
+    // Sync Raw Photos and Color Corrected Photos
+    const photoTypes = [
+      "rawPhotos",
+      "colorCorrectedPhotos",
+      "Raw Photos",
+      "Color Corrected Photos"
+    ];
+
+    const photoLink = incomingDriveLinks.find(item =>
+      photoTypes.includes(item.linkType)
+    );
+
+    const allDriveLinks = photoLink
+      ? [
+        ...incomingDriveLinks.filter(
+          item => !photoTypes.includes(item.linkType)
+        ),
+        { ...photoLink, linkType: "rawPhotos" },
+        { ...photoLink, linkType: "colorCorrectedPhotos" }
+      ]
+      : incomingDriveLinks;
+
     const customerId = order.fromId;
     const orderId = order_id;
     const phoneNo = order.phone_no;
@@ -460,23 +511,29 @@ router.post("/add-order-drive-link", async (req, res, next) => {
       const existingLinks = order.allDriveLinks || [];
       const now = new Date();
 
+      const photoTypes = ["rawPhotos", "colorCorrectedPhotos"];
+
       updateFields.allDriveLinks = allDriveLinks.map(item => {
-        const existingItem = existingLinks.find(el =>
-          el.linkType === item.linkType ||
-          (
-            ["Raw Photos", "Color Corrected Photos"].includes(el.linkType) &&
-            ["Raw Photos", "Color Corrected Photos"].includes(item.linkType)
-          )
+        const existingItem = existingLinks.find(
+          el => el.linkType === item.linkType
         );
+
+        const existingPhotoItem = photoTypes.includes(item.linkType)
+          ? existingLinks.find(el => photoTypes.includes(el.linkType))
+          : null;
 
         if (!existingItem || existingItem.link !== item.link) {
           isAnySubLinkChangedOrNew = true;
-          return {
-            ...item, submittedAt: now,
-            updatedAt: now, };
         }
 
-        return { ...item, submittedAt: existingItem.submittedAt || new Date(), updatedAt: now, };
+        return {
+          ...item,
+          submittedAt:
+            existingItem?.submittedAt ||
+            existingPhotoItem?.submittedAt ||
+            now,
+          updatedAt: now
+        };
       });
     }
     let webLink;

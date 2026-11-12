@@ -264,7 +264,7 @@ const fetchAnalyticsFast = async (groupByField, startDate, endDate, source) => {
         const selectedSources = (
             Array.isArray(source) ? source : [source]
         )
-            .flatMap((item) => String(item).split(","))
+            .flatMap((item) => String(item).split("|"))
             .map((item) => item.trim())
             .filter(Boolean);
 

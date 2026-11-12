@@ -7,6 +7,7 @@ const orderFeedbackModel = require('../models/order-feedback');
 const commonFunction = require('../store/commonFunction');
 const router = express.Router();
 const QRCode = require('qrcode');
+const sharp = require("sharp");
 var async = require("async");
 var ObjectId = require('mongoose').Types.ObjectId; 
 const notificationFunction = require("../store/notifications");
@@ -449,6 +450,7 @@ const createEventCapsuleFolder = async (order) => {
         const orderId = order.order_id;
         const phoneNo = order.phone_no;
         const eventDate = order.order_date;
+        const eventName = String(order.eventName || "Event").trim();
 
         const eventInvite = await EventinvitesModel.findOne({
             orderId: Number(orderId)
@@ -474,15 +476,68 @@ const createEventCapsuleFolder = async (order) => {
 
         const galleryLink = `https://horaservices.com/eventcapsule/share/${shortCode}`;
 
-        // Node 16 par async/await ke sath QR code generate karna
-        const qrCodeDataUrl = await QRCode.toDataURL(galleryLink, {
+        // Generate QR code
+        const qrBuffer = await QRCode.toBuffer(galleryLink, {
             errorCorrectionLevel: 'H',
             margin: 2,
+            width: 400,
             color: {
                 dark: '#000000',
                 light: '#ffffff'
             }
         });
+
+        // Escape event name for SVG
+        const safeEventName = eventName.replace(/[&<>"']/g, (char) => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&apos;'
+        }[char]));
+
+        const fontSize = Math.max(
+            10,
+            Math.min(18, 18 - Math.max(0, eventName.length - 12) * 0.5)
+        );
+
+        // Event name overlay
+        const eventNameSvg = `
+            <svg width="180" height="56">
+                <rect
+                    x="0"
+                    y="0"
+                    width="180"
+                    height="56"
+                    rx="8"
+                    fill="#ffffff"
+                    stroke="#000000"
+                    stroke-width="1"
+                />
+                <text
+                    x="90"
+                    y="34"
+                    font-family="Arial"
+                    font-size="${fontSize}"
+                    font-weight="bold"
+                    text-anchor="middle"
+                    textLength="160"
+                    lengthAdjust="spacingAndGlyphs"
+                    fill="#000000"
+                >${safeEventName}</text>
+            </svg>
+        `;
+
+        // Composite event name in QR center
+        const finalQrBuffer = await sharp(qrBuffer)
+            .composite([{
+                input: Buffer.from(eventNameSvg),
+                gravity: 'centre'
+            }])
+            .png()
+            .toBuffer();
+
+        const qrCodeDataUrl = `data:image/png;base64,${finalQrBuffer.toString('base64')}`;
 
         const folder = new FolderModel({
             folderName,
@@ -491,7 +546,7 @@ const createEventCapsuleFolder = async (order) => {
             eventId,
             status: "processing",
             shortCode,
-            eventDate: eventDate,
+            eventDate,
             galleryQrCode: qrCodeDataUrl,
         });
 

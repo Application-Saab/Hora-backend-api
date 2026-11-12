@@ -41,6 +41,10 @@ const celebrationBoostersSchema = new mongoose.Schema(
         ref: "meals",
       },
     ],
+    productUrl: {
+      type: String,
+      default: "",
+    },
     status: { type: Number, default: 1 /* 1-active 2-inactive 3-delete  */ },
     discount: Number,
     designType: { type: Object, default: {} },

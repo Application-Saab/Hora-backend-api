@@ -423,6 +423,25 @@ router.post("/add-order-drive-link", async (req, res, next) => {
       ]
       : incomingDriveLinks;
 
+
+
+    // Sync Raw Video Clips and Raw Videos
+    const videoTypes = ["rawVideoClips", "rawVideos"];
+
+    const videoLink = incomingDriveLinks.find(item =>
+      videoTypes.includes(item.linkType)
+    );
+
+    const finalDriveLinks = videoLink
+      ? [
+        ...allDriveLinks.filter(
+          item => !videoTypes.includes(item.linkType)
+        ),
+        { ...videoLink, linkType: "rawVideoClips" },
+        { ...videoLink, linkType: "rawVideos" }
+      ]
+      : allDriveLinks;
+
     const customerId = order.fromId;
     const orderId = order_id;
     const phoneNo = order.phone_no;
@@ -507,19 +526,28 @@ router.post("/add-order-drive-link", async (req, res, next) => {
 
     let isAnySubLinkChangedOrNew = false; 
 
-    if (allDriveLinks.length > 0) {
+    if (finalDriveLinks.length > 0) {
       const existingLinks = order.allDriveLinks || [];
       const now = new Date();
 
       const photoTypes = ["rawPhotos", "colorCorrectedPhotos"];
 
-      updateFields.allDriveLinks = allDriveLinks.map(item => {
+      updateFields.allDriveLinks = finalDriveLinks.map(item => {
+
         const existingItem = existingLinks.find(
           el => el.linkType === item.linkType
         );
+        
+        const existingPhotoItem = ["rawPhotos", "colorCorrectedPhotos"].includes(item.linkType)
+          ? existingLinks.find(el =>
+            ["rawPhotos", "colorCorrectedPhotos"].includes(el.linkType)
+          )
+          : null;
 
-        const existingPhotoItem = photoTypes.includes(item.linkType)
-          ? existingLinks.find(el => photoTypes.includes(el.linkType))
+        const existingVideoItem = ["rawVideoClips", "rawVideos"].includes(item.linkType)
+          ? existingLinks.find(el =>
+            ["rawVideoClips", "rawVideos"].includes(el.linkType)
+          )
           : null;
 
         if (!existingItem || existingItem.link !== item.link) {
@@ -531,6 +559,7 @@ router.post("/add-order-drive-link", async (req, res, next) => {
           submittedAt:
             existingItem?.submittedAt ||
             existingPhotoItem?.submittedAt ||
+            existingVideoItem?.submittedAt ||
             now,
           updatedAt: now
         };
@@ -576,38 +605,76 @@ router.post("/add-order-drive-link", async (req, res, next) => {
         console.log("-> Changes or Retry detected. Updating Google Sheet...");
 
         let contentTypesPayload = [];
-        if (updateFields.allDriveLinks && updateFields.allDriveLinks.length > 0) {
-          contentTypesPayload = updateFields.allDriveLinks.map(item => {
-            const dateObj = new Date(item.submittedAt);
 
-            const formattedDate = dateObj.toLocaleDateString("en-GB", { timeZone: "Asia/Kolkata" });
-            const formattedTime = dateObj.toLocaleTimeString("en-GB", {
-              timeZone: "Asia/Kolkata",
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: false
-            });
+        const isPhotoType = (type) =>
+          ["rawphotos", "colorcorrectedphotos", "raw photos", "color corrected photos"]
+            .includes(String(type || "").toLowerCase().trim());
 
-            return {
-              linkType: item.linkType || "Color Corrected Photos",
-              link: item.link || "",
-              submittedAt: `${formattedDate}, ${formattedTime}`, 
-            };
+        // Keep all non-photo links unchanged
+        const otherLinks = (updateFields.allDriveLinks || []).filter(
+          (item) =>
+            !isPhotoType(item.linkType) &&
+            item.linkType !== "rawVideos"
+        );
+
+        // Color Corrected Photos priority
+        const colorCorrectedLink = incomingDriveLinks.find((item) =>
+          ["colorcorrectedphotos", "color corrected photos"].includes(
+            String(item.linkType || "").toLowerCase().trim()
+          )
+        );
+
+        // Raw Photos fallback
+        const rawPhotoLink = incomingDriveLinks.find((item) =>
+          ["rawphotos", "raw photos"].includes(
+            String(item.linkType || "").toLowerCase().trim()
+          )
+        );
+
+        const selectedPhotoLink = colorCorrectedLink || rawPhotoLink;
+
+        const formatSheetDate = (date) => {
+          const dateObj = new Date(date || new Date());
+
+          const formattedDate = dateObj.toLocaleDateString("en-GB", {
+            timeZone: "Asia/Kolkata",
           });
-        } else {
-          const dateObj = new Date();
-          const formattedDate = dateObj.toLocaleDateString("en-GB", { timeZone: "Asia/Kolkata" });
+
           const formattedTime = dateObj.toLocaleTimeString("en-GB", {
             timeZone: "Asia/Kolkata",
             hour: "2-digit",
             minute: "2-digit",
-            hour12: false
+            hour12: false,
           });
 
+          return `${formattedDate}, ${formattedTime}`;
+        };
+
+        // Other links
+        contentTypesPayload = otherLinks.map((item) => ({
+          linkType: item.linkType,
+          link: item.link || "",
+          submittedAt: formatSheetDate(item.submittedAt),
+        }));
+
+        // Only one photo entry
+        if (selectedPhotoLink) {
+          const existingPhoto = (updateFields.allDriveLinks || []).find(
+            (item) => isPhotoType(item.linkType)
+          );
+
           contentTypesPayload.push({
-            linkType: "Color Corrected Photos",
+            linkType: "colorCorrectedPhotos",
+            link: selectedPhotoLink.link || "",
+            submittedAt: formatSheetDate(
+              selectedPhotoLink.submittedAt || existingPhoto?.submittedAt
+            ),
+          });
+        } else if (!updateFields.allDriveLinks?.length) {
+          contentTypesPayload.push({
+            linkType: "colorCorrectedPhotos",
             link: folderUrl,
-            submittedAt: `${formattedDate}, ${formattedTime}`,
+            submittedAt: formatSheetDate(new Date()),
           });
         }
 

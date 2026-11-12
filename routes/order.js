@@ -2658,11 +2658,6 @@ router.post("/save-call-checklist", async (req, res, next) => {
       // Sync Raw Photos and Color Corrected Photos
       const inclusions = orderChecklist.inclusions || {};
 
-      const hasRawPhotos = Object.prototype.hasOwnProperty.call(
-          inclusions,
-          "Raw Photos"
-      );
-
       const hasColorCorrected = Object.prototype.hasOwnProperty.call(
           inclusions,
           "Color Corrected Photos"
@@ -2670,9 +2665,7 @@ router.post("/save-call-checklist", async (req, res, next) => {
 
       let photosValue;
 
-      if (hasRawPhotos) {
-          photosValue = inclusions["Raw Photos"];
-      } else if (hasColorCorrected) {
+      if (hasColorCorrected) {
           photosValue = inclusions["Color Corrected Photos"];
       }
 
@@ -2681,6 +2674,20 @@ router.post("/save-call-checklist", async (req, res, next) => {
               ...inclusions,
               "Raw Photos": photosValue,
               "Color Corrected Photos": photosValue
+          };
+      }
+
+
+      // Sync Raw Video Clips and Raw Videos
+      const hasRawVideoClips = Object.prototype.hasOwnProperty.call(
+          inclusions,
+          "Raw Video Clips"
+      );
+
+      if (hasRawVideoClips) {
+          orderChecklist.inclusions = {
+              ...orderChecklist.inclusions,
+              "Raw Video": inclusions["Raw Video Clips"]
           };
       }
 
@@ -2772,11 +2779,6 @@ router.put("/edit-call-checklist/:orderId", async (req, res, next) => {
       // Sync Raw Photos and Color Corrected Photos
       const inclusions = updatedChecklist.inclusions || {};
 
-      const hasRawPhotos = Object.prototype.hasOwnProperty.call(
-          call_checklist?.inclusions || {},
-          "Raw Photos"
-      );
-
       const hasColorCorrected = Object.prototype.hasOwnProperty.call(
           call_checklist?.inclusions || {},
           "Color Corrected Photos"
@@ -2784,12 +2786,8 @@ router.put("/edit-call-checklist/:orderId", async (req, res, next) => {
 
       let photosValue;
 
-      if (hasRawPhotos) {
-          photosValue = call_checklist.inclusions["Raw Photos"];
-      } else if (hasColorCorrected) {
+      if (hasColorCorrected) {
           photosValue = call_checklist.inclusions["Color Corrected Photos"];
-      } else if (Object.prototype.hasOwnProperty.call(inclusions, "Raw Photos")) {
-          photosValue = inclusions["Raw Photos"];
       } else if (Object.prototype.hasOwnProperty.call(inclusions, "Color Corrected Photos")) {
           photosValue = inclusions["Color Corrected Photos"];
       }
@@ -2799,6 +2797,20 @@ router.put("/edit-call-checklist/:orderId", async (req, res, next) => {
               ...inclusions,
               "Raw Photos": photosValue,
               "Color Corrected Photos": photosValue
+          };
+      }
+
+
+      // Sync Raw Video Clips and Raw Videos
+      const hasRawVideoClips = Object.prototype.hasOwnProperty.call(
+          call_checklist?.inclusions || {},
+          "Raw Video Clips"
+      );
+
+      if (hasRawVideoClips) {
+          updatedChecklist.inclusions = {
+              ...updatedChecklist.inclusions,
+              "Raw Video": call_checklist.inclusions["Raw Video Clips"]
           };
       }
 

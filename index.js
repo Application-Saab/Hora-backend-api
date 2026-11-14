@@ -264,6 +264,7 @@ async function sendNotificationsInPriority() {
       order_status: 0,
       notificationStep: { $lt: 4 },
       isEmergencyOrder: { $ne: true },
+      status: 1,
     });
     for (const order of orders) {
       const freshOrder = await orderModel.findById(order._id).select(

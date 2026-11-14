@@ -2093,46 +2093,65 @@ router.post("/admin_all_details", async (req, res, next) => {
     let data = [];
     let total = 0;
 
-    // BY USERS (OPTIMIZED)
+    // ==========================================
+    // 1. BY USERS (OPTIMIZED)
+    // ==========================================
     if (type === "byUsers") {
-      const date = getDateFilter(dateFilter);
+      const hostedMatch = date ? { createdAt: { $gte: date } } : {};
 
-      const hostedMatch = {};
+      // Agar search (phone) hai toh pehle matching userIds nikal lo (Index scan)
+      let matchedUserIds = null;
+      if (search) {
+        const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const matchedUsers = await Users.find(
+          { phone: { $regex: `^${escapedSearch}`, $options: "i" } },
+          { _id: 1 }
+        ).lean();
 
-      if (date) {
-        hostedMatch.createdAt = { $gte: date };
+        matchedUserIds = matchedUsers.map((u) => u._id);
+
+        if (matchedUserIds.length === 0) {
+          return CustomResponse(res, 200, false, "Data fetched successfully", {
+            data: [],
+            paginate: {
+              total_item: 0,
+              showing: 0,
+              first_page: 1,
+              previous_page: 1,
+              current_page: currentPage,
+              next_page: 1,
+              last_page: 1,
+            },
+          });
+        }
+        hostedMatch.userId = { $in: matchedUserIds };
       }
 
-      // =========================
-      // SINGLE PIPELINE
-      // =========================
+      const guestMatch = matchedUserIds ? { userId: { $in: matchedUserIds } } : {};
+      const postMatch = matchedUserIds ? { postById: { $in: matchedUserIds } } : {};
+      const wonderlandMatch = {
+        fromWonderland: true,
+        ...(matchedUserIds ? { _id: { $in: matchedUserIds } } : {}),
+      };
 
       const pipeline = [
-        // hosted events
+        // 1. Base: EventInvites (hosted)
+        { $match: hostedMatch },
         {
-          $unionWith: {
-            coll: "eventinvites",
-            pipeline: [
-              {
-                $match: hostedMatch,
-              },
-              {
-                $project: {
-                  userId: 1,
-                  hosted: { $literal: 1 },
-                  guest: { $literal: 0 },
-                  posts: { $literal: 0 },
-                },
-              },
-            ],
+          $project: {
+            userId: 1,
+            hosted: { $literal: 1 },
+            guest: { $literal: 0 },
+            posts: { $literal: 0 },
           },
         },
 
-        // guest events
+        // 2. Guest events
         {
           $unionWith: {
             coll: "eventguests",
             pipeline: [
+              ...(Object.keys(guestMatch).length ? [{ $match: guestMatch }] : []),
               {
                 $project: {
                   userId: 1,
@@ -2145,11 +2164,12 @@ router.post("/admin_all_details", async (req, res, next) => {
           },
         },
 
-        // posts
+        // 3. Posts
         {
           $unionWith: {
             coll: "event-posts",
             pipeline: [
+              ...(Object.keys(postMatch).length ? [{ $match: postMatch }] : []),
               {
                 $project: {
                   userId: "$postById",
@@ -2162,54 +2182,56 @@ router.post("/admin_all_details", async (req, res, next) => {
           },
         },
 
-        // group counts
+        // 4. Wonderland Users (taaki 0 events wale wonderland users bhi include hon)
         {
-          $group: {
-            _id: "$userId",
-
-            hostedEventsCount: {
-              $sum: "$hosted",
-            },
-
-            guestEventsCount: {
-              $sum: "$guest",
-            },
-
-            postsCount: {
-              $sum: "$posts",
-            },
+          $unionWith: {
+            coll: "users",
+            pipeline: [
+              { $match: wonderlandMatch },
+              {
+                $project: {
+                  userId: "$_id",
+                  hosted: { $literal: 0 },
+                  guest: { $literal: 0 },
+                  posts: { $literal: 0 },
+                },
+              },
+            ],
           },
         },
 
-        // join users
+        // 5. Group counts per user
+        {
+          $group: {
+            _id: "$userId",
+            hostedEventsCount: { $sum: "$hosted" },
+            guestEventsCount: { $sum: "$guest" },
+            postsCount: { $sum: "$posts" },
+          },
+        },
+
+        // 6. Lookup user details
         {
           $lookup: {
             from: "users",
             localField: "_id",
             foreignField: "_id",
+            pipeline: [
+              {
+                $project: {
+                  name: 1,
+                  phone: 1,
+                  fromWonderland: 1,
+                  createdAt: 1,
+                },
+              },
+            ],
             as: "user",
           },
         },
+        { $unwind: "$user" },
 
-        {
-          $unwind: "$user",
-        },
-
-        // search
-        ...(search
-          ? [
-              {
-                $match: {
-                  "user.phone": {
-                    $regex: `^${search}`,
-                    $options: "i",
-                  },
-                },
-              },
-            ]
-          : []),
-
-        // include wonderland users
+        // 7. Filter valid users
         {
           $match: {
             $or: [
@@ -2226,39 +2248,31 @@ router.post("/admin_all_details", async (req, res, next) => {
             name: "$user.name",
             phone: "$user.phone",
             fromWonderland: "$user.fromWonderland",
-
             hostedEventsCount: 1,
             guestEventsCount: 1,
             postsCount: 1,
-
             createdAt: "$user.createdAt",
           },
         },
 
-        {
-          $sort: {
-            createdAt: -1,
-          },
-        },
+        { $sort: { createdAt: -1 } },
 
         {
           $facet: {
             data: [{ $skip: skip }, { $limit: limit }],
-
             totalCount: [{ $count: "count" }],
           },
         },
       ];
 
       const result = await EventInvite.aggregate(pipeline);
-
       data = result[0]?.data || [];
       total = result[0]?.totalCount?.[0]?.count || 0;
     }
 
-    // ===========================
-    // BY EVENTS
-    // ===========================
+    // ==========================================
+    // 2. BY EVENTS (SUPER FAST - PAGINATE FIRST)
+    // ==========================================
     else if (type === "byEvents") {
       const matchStage = {};
 
@@ -2267,97 +2281,102 @@ router.post("/admin_all_details", async (req, res, next) => {
       }
 
       if (search) {
-        matchStage.hostName = { $regex: search, $options: "i" };
+        const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        matchStage.hostName = { $regex: escapedSearch, $options: "i" };
       }
 
-      const pipeline = [
-        { $match: matchStage },
+      // Step A: Sirf current page ke 10 events + total count parallel mein fetch karein
+      const [events, totalCount] = await Promise.all([
+        EventInvite.find(matchStage)
+          .select(
+            "_id wonderland_id hostName eventDate hostCount createdAt orderId fromInternational userId"
+          )
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+        EventInvite.countDocuments(matchStage),
+      ]);
 
-        // Host User
-        {
-          $lookup: {
-            from: "users",
-            localField: "userId",
-            foreignField: "_id",
-            as: "hostUser",
-          },
-        },
-        { $unwind: { path: "$hostUser", preserveNullAndEmptyArrays: true } },
+      total = totalCount;
 
-        // Guests Count (excluding host)
-        {
-          $lookup: {
-            from: "eventguests",
-            let: { eventId: "$_id", hostId: "$userId" },
-            pipeline: [
-              {
-                $match: {
-                  $expr: {
-                    $and: [
-                      { $eq: ["$eventId", "$$eventId"] },
-                      { $ne: ["$userId", "$$hostId"] },
-                    ],
-                  },
-                },
+      if (events.length > 0) {
+        const eventIds = events.map((e) => e._id);
+        const userIds = [
+          ...new Set(events.map((e) => e.userId).filter(Boolean)),
+        ];
+
+        // Step B: Sirf in 10 events ke liye Users, Guests, aur Posts parallel mein fetch karein
+        const [users, guestCounts, postCounts] = await Promise.all([
+          User.find({ _id: { $in: userIds } })
+            .select("_id phone")
+            .lean(),
+
+          EventGuest.aggregate([
+            { $match: { eventId: { $in: eventIds } } },
+            {
+              $group: {
+                _id: "$eventId",
+                guestUserIds: { $addToSet: "$userId" },
               },
-              { $count: "count" },
-            ],
-            as: "guestData",
-          },
-        },
+            },
+          ]),
 
-        // Posts Count
-        {
-          $lookup: {
-            from: "event-posts",
-            let: { eventId: "$_id" },
-            pipeline: [
-              {
-                $match: {
-                  $expr: { $eq: ["$eventId", "$$eventId"] },
-                },
+          eventPosts.aggregate([
+            { $match: { eventId: { $in: eventIds } } },
+            {
+              $group: {
+                _id: "$eventId",
+                count: { $sum: 1 },
               },
-              { $count: "count" },
-            ],
-            as: "postData",
-          },
-        },
-
-        {
-          $addFields: {
-            guestCount: {
-              $ifNull: [{ $arrayElemAt: ["$guestData.count", 0] }, 0],
             },
-            photoCount: {
-              $ifNull: [{ $arrayElemAt: ["$postData.count", 0] }, 0],
-            },
-            hostPhone: "$hostUser.phone",
-            hostCount: 1,
-          },
-        },
+          ]),
+        ]);
 
-        {
-          $project: {
-            wonderland_id: 1,
-            hostName: 1,
-            hostPhone: 1,
-            eventDate: 1,
-            guestCount: 1,
-            photoCount: 1,
-            hostCount: 1,
-            createdAt: 1,
-            orderId: 1,
-            fromInternational: 1,
-          },
-        },
+        // Step C: O(1) Map lookup in memory
+        const userPhoneMap = new Map(
+          users.map((u) => [u._id.toString(), u.phone])
+        );
 
-        { $sort: { createdAt: -1 } },
-        { $skip: skip },
-        { $limit: limit },
-      ];
+        const guestMap = new Map(
+          guestCounts.map((g) => [g._id.toString(), g.guestUserIds])
+        );
 
-      data = await EventInvite.aggregate(pipeline);
-      total = await EventInvite.countDocuments(matchStage);
+        const postMap = new Map(
+          postCounts.map((p) => [p._id.toString(), p.count])
+        );
+
+        // Step D: Exact response format build karein
+        data = events.map((ev) => {
+          const evIdStr = ev._id.toString();
+          const hostIdStr = ev.userId ? ev.userId.toString() : "";
+
+          // Host ko exclude karke guest count calculate karein
+          const guestUsers = guestMap.get(evIdStr) || [];
+          const filteredGuestCount = guestUsers.filter(
+            (uid) => uid && uid.toString() !== hostIdStr
+          ).length;
+
+          const item = {
+            _id: ev._id,
+            hostName: ev.hostName,
+            eventDate: ev.eventDate,
+            wonderland_id: ev.wonderland_id,
+            fromInternational: ev.fromInternational,
+            createdAt: ev.createdAt,
+            guestCount: filteredGuestCount,
+            photoCount: postMap.get(evIdStr) || 0,
+            hostPhone: userPhoneMap.get(hostIdStr) || undefined,
+            hostCount: ev.hostCount,
+          };
+
+          if (ev.orderId !== undefined && ev.orderId !== null) {
+            item.orderId = ev.orderId;
+          }
+
+          return item;
+        });
+      }
     }
 
     const lastPage = Math.ceil(total / limit) || 1;

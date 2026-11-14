@@ -6,7 +6,6 @@ const path = require("path");
 const multer = require("multer");
 const Venues = require("../models/party-venue");
 const User = require("../models/user");
-const VenueVisitors = require("../models/venue-visitors");
 const { s3, S3_BUCKET } = require("../utils/awsConfigs");
 const VenueImages = require("../models/venueImages");
 const {
@@ -126,20 +125,69 @@ router.get("/venues-list", async (req, res, next) => {
   }
 });
 
+// Get all unique localities for a given city (Case-insensitive)
+router.get("/venue-localities-list", async (req, res, next) => {
+  try {
+    const { city } = req.query;
+
+    if (!city || !city.trim()) {
+      return sendResponse(res, 400, true, "City parameter is required", []);
+    }
+
+    const query = {
+      venueStatus: { $ne: 3 }, // Deleted venues ko filter out karein (optional: venueStatus: 1 for active only)
+      city: { $regex: `^${city.trim()}$`, $options: "i" },
+      locality: { $exists: true, $ne: "" },
+    };
+
+    // MongoDB se directly unique localities fetch karna
+    const rawLocalities = await Venues.distinct("locality", query);
+
+    // Trimming, empty string removal aur duplicate capitalization ko clean karna
+    const cleanLocalities = Array.from(
+      new Set(
+        rawLocalities
+          .filter((loc) => Boolean(loc && typeof loc === "string" && loc.trim()))
+          .map((loc) => loc.trim())
+      )
+    ).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+
+    return sendResponse(
+      res,
+      200,
+      false,
+      "Localities fetched successfully",
+      cleanLocalities
+    );
+  } catch (err) {
+    err.isPublic = true;
+    next(err);
+  }
+});
+
 // Public Venue Listing API with filters
 router.get("/venues-public-list", async (req, res, next) => {
   try {
-    const { city, eventType, venueType, guestCapacity } = req.query;
+    const { city, locality, eventType, venueType, guestCapacity, search, q } = req.query;
+
+    const searchTerm = (search || q || "").trim();
 
     const query = {
       venueStatus: 1,
     };
 
     // ----------------------------
-    // CITY FILTER (partial match)
+    // CITY FILTER
     // ----------------------------
     if (city) {
       query.city = { $regex: city, $options: "i" };
+    }
+
+    // ----------------------------
+    // LOCALITY FILTER
+    // ----------------------------
+    if (locality) {
+      query.locality = { $regex: locality, $options: "i" };
     }
 
     // ----------------------------
@@ -147,38 +195,58 @@ router.get("/venues-public-list", async (req, res, next) => {
     // ----------------------------
     if (venueType) {
       const venueTypesArray = venueType.split(",");
-
-      query.venueType = {
-        $in: venueTypesArray,
-      };
+      query.venueType = { $in: venueTypesArray };
     }
 
     // ----------------------------
-    // EVENT TYPE FILTER (array contains)
+    // EVENT TYPE FILTER
     // ----------------------------
     if (eventType) {
       const eventTypesArray = eventType.split(",");
-
-      query.eventTypes = {
-        $in: eventTypesArray,
-      };
+      query.eventTypes = { $in: eventTypesArray };
     }
 
     // ----------------------------
     // GUEST CAPACITY FILTER
-    // (get venues >= required capacity)
     // ----------------------------
     if (guestCapacity) {
       query.guestCapacity = { $gte: Number(guestCapacity) };
     }
 
     // ----------------------------
-    // QUERY EXECUTION (FAST)
+    // HYBRID FREE-TEXT SEARCH
     // ----------------------------
+    if (searchTerm) {
+      const regex = { $regex: searchTerm, $options: "i" };
+      const numericValue = Number(searchTerm);
+
+      const orConditions = [
+        { venueName: regex },
+        { maskName: regex },
+        { location: regex },
+        { city: regex },
+        { locality: regex },
+        { venueType: regex },
+        { eventTypes: regex },
+        { venueFeatures: regex },
+        { hallType: regex },
+        { foodTypes: regex },
+      ];
+
+      // number based search (capacity / price / rooms)
+      if (!isNaN(numericValue) && numericValue > 0) {
+        orConditions.push(
+          { guestCapacity: { $gte: numericValue } },
+          { minGuestCapacity: { $lte: numericValue } },
+          { startingPrice: { $lte: numericValue } },
+          { totalRoomsAvailable: { $gte: numericValue } }
+        );
+      }
+
+      query.$or = orConditions;
+    }
+
     const venues = await Venues.find(query)
-      // .select(
-      //   "venueName venueType city location googleMapLink venueImageUrl guestCapacity eventTypes foodTypes hallType startingPrice"
-      // )
       .sort({ createdAt: -1 })
       .lean();
 
@@ -191,11 +259,7 @@ router.get("/venues-public-list", async (req, res, next) => {
   }
 });
 
-// =============================================
 // CREATE VENUE
-// Creates a new party venue for a user
-// Validates userId and ensures user exists
-// =============================================
 router.post(
   "/create-party-venue",
   (req, res, next) => {
@@ -388,11 +452,7 @@ router.patch("/venue-status/:id", async (req, res, next) => {
   }
 });
 
-// =============================================
 // GET VENUE DETAILS
-// Fetches a single venue by ID
-// Returns basic venue info
-// =============================================
 router.get("/venue-details/:id", async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -407,9 +467,9 @@ router.get("/venue-details/:id", async (req, res, next) => {
 
     // ✅ Fetch venue
     const venue = await Venues.findById(id)
-      .select(
-        "userId venueType venueName location googleMapLink venueImageUrl subFolders createdAt termsAndConditionsHtml faqs description venueFeatures",
-      )
+      // .select(
+      //   "userId venueType venueName location googleMapLink venueImageUrl subFolders createdAt termsAndConditionsHtml faqs description venueFeatures",
+      // )
       .lean();
 
     if (!venue) {
@@ -545,188 +605,6 @@ router.put(
     }
   },
 );
-
-// =============================================
-// REGISTER VENUE VISITOR
-// Logs that a user visited a venue
-// Prevents duplicate entries (same user + venue)
-// =============================================
-router.post("/venue-visitor", async (req, res, next) => {
-  try {
-    const { userId, venueId } = req.body;
-
-    // ✅ Validate IDs
-    if (
-      !mongoose.Types.ObjectId.isValid(userId) ||
-      !mongoose.Types.ObjectId.isValid(venueId)
-    ) {
-      return res.status(400).json({
-        message: "Invalid userId or venueId",
-        error: true,
-      });
-    }
-
-    // ✅ Check duplicate
-    const existingVisitor = await VenueVisitors.findOne({
-      userId,
-      venueId,
-    }).lean();
-
-    if (existingVisitor) {
-      return res.status(409).json({
-        message: "User already visited this venue",
-        error: true,
-      });
-    }
-
-    // ✅ Create new visitor
-    const visitor = new VenueVisitors({
-      userId,
-      venueId,
-    });
-
-    const savedVisitor = await visitor.save();
-
-    return res.status(201).json({
-      message: "Venue visitor registered",
-      error: false,
-      data: savedVisitor,
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// =============================================
-// GET ALL VISITORS OF A VENUE
-// Returns list of users who visited a venue
-// Includes user details via aggregation
-// =============================================
-router.get("/venue-visitors/all/:venueId", async (req, res, next) => {
-  try {
-    const { venueId } = req.params;
-
-    // Validate venueId
-    if (!mongoose.Types.ObjectId.isValid(venueId)) {
-      return sendResponse(res, 400, true, "Invalid venue ID");
-    }
-
-    const visitors = await VenueVisitors.aggregate([
-      {
-        $match: {
-          venueId: new mongoose.Types.ObjectId(venueId),
-        },
-      },
-
-      // Join user details
-      {
-        $lookup: {
-          from: "users", // make sure this matches your actual collection name
-          localField: "userId",
-          foreignField: "_id",
-          as: "user",
-        },
-      },
-      { $unwind: "$user" },
-
-      // Format response
-      {
-        $project: {
-          _id: 0,
-          userId: "$user._id",
-          name: "$user.name",
-          phone: "$user.phone",
-          avatar: "$user.avatar",
-          visitedAt: "$createdAt",
-        },
-      },
-
-      // Latest visitors first
-      { $sort: { visitedAt: -1 } },
-    ]);
-
-    return sendResponse(
-      res,
-      200,
-      false,
-      "Venue visitors fetched successfully",
-      visitors || [],
-    );
-  } catch (err) {
-    next(err);
-  }
-});
-
-const storage = multer.diskStorage({
-  destination: "./uploads/",
-  filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`);
-  },
-});
-
-const uploadSingle = multer({
-  storage,
-  limits: { fileSize: 100 * 1024 * 1024 },
-}).single("image");
-
-const deleteFileWithRetry = async (filePath, retries = 3, delay = 100) => {
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      await fs.unlinkSync(filePath);
-      console.log(`Successfully deleted file: ${filePath}`);
-      return;
-    } catch (err) {
-      console.error(
-        `Attempt ${attempt} to delete file ${filePath} failed:`,
-        err.message,
-      );
-      if (attempt === retries) {
-        console.error(
-          `Failed to delete file ${filePath} after ${retries} attempts`,
-        );
-        return; // Don't throw error to avoid interrupting the response
-      }
-      await new Promise((resolve) => setTimeout(resolve, delay));
-    }
-  }
-};
-
-// =============================================
-// UPLOAD IMAGE TO S3 HELPER
-// Uploads file to AWS S3
-// Supports folder-based structure in S3
-// =============================================
-const uploadImageToS3 = async (
-  filePath,
-  fileName,
-  userId,
-  venueId,
-  mimeType,
-  folderId = null, // ✅ NEW
-  folderName = "venue-images",
-) => {
-  const params = {
-    Bucket: S3_BUCKET,
-
-    // ✅ UPDATED PATH (supports folders)
-    Key: `${folderName}/${userId}/${venueId}/${folderId || "general"}/${fileName}`,
-
-    Body: fs.createReadStream(filePath),
-    ContentType: mimeType,
-  };
-
-  return await s3.upload(params).promise();
-};
-
-// Helper: Delete image from S3
-async function deleteFromS3(key) {
-  if (!key) return;
-  const params = {
-    Bucket: S3_BUCKET,
-    Key: key,
-  };
-  await s3.deleteObject(params).promise();
-}
 
 // Update venue details
 router.put(
@@ -877,11 +755,72 @@ router.put(
     }
   },
 );
-// =============================================
+
+const storage = multer.diskStorage({
+  destination: "./uploads/",
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`);
+  },
+});
+
+const uploadSingle = multer({
+  storage,
+  limits: { fileSize: 100 * 1024 * 1024 },
+}).single("image");
+
+const deleteFileWithRetry = async (filePath, retries = 3, delay = 100) => {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      await fs.unlinkSync(filePath);
+      console.log(`Successfully deleted file: ${filePath}`);
+      return;
+    } catch (err) {
+      console.error(
+        `Attempt ${attempt} to delete file ${filePath} failed:`,
+        err.message,
+      );
+      if (attempt === retries) {
+        console.error(
+          `Failed to delete file ${filePath} after ${retries} attempts`,
+        );
+        return; // Don't throw error to avoid interrupting the response
+      }
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+};
+
+// UPLOAD IMAGE TO S3 HELPER
+const uploadImageToS3 = async (
+  filePath,
+  fileName,
+  userId,
+  venueId,
+  mimeType,
+  folderId = null,
+  folderName = "venue-images",
+) => {
+  const params = {
+    Bucket: S3_BUCKET,
+    Key: `${folderName}/${userId}/${venueId}/${folderId || "general"}/${fileName}`,
+    Body: fs.createReadStream(filePath),
+    ContentType: mimeType,
+  };
+
+  return await s3.upload(params).promise();
+};
+
+// Helper: Delete image from S3
+async function deleteFromS3(key) {
+  if (!key) return;
+  const params = {
+    Bucket: S3_BUCKET,
+    Key: key,
+  };
+  await s3.deleteObject(params).promise();
+}
+
 // GET ALL IMAGES OF A VENUE
-// Returns all images (no folder filtering)
-// Used for "All" tab
-// =============================================
 router.get("/venue-images/:venueId", async (req, res, next) => {
   try {
     const { venueId } = req.params;
@@ -897,10 +836,7 @@ router.get("/venue-images/:venueId", async (req, res, next) => {
   }
 });
 
-// =============================================
 // DELETE VENUE IMAGE / VIDEO
-// Deletes original + webp/preview from S3
-// =============================================
 router.post("/venue-image/:imageId", async (req, res, next) => {
   try {
     const { imageId } = req.params;
@@ -948,14 +884,9 @@ router.post("/venue-image/:imageId", async (req, res, next) => {
   }
 });
 
-// =============================================
-// CREATE SUB-FOLDER INSIDE VENUE
-// Adds a new folder (category) to venue
-// - Max 50 folders allowed
-// - Prevents duplicate names
-// =============================================
-
 const upload = multer({ storage, limits: { fileSize: 100 * 1024 * 1024 } });
+
+// CREATE SUB-FOLDER INSIDE VENUE
 router.post(
   "/venue/create-subfolder/:venueId",
   upload.single("image"),

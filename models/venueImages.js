@@ -46,6 +46,7 @@ const venueImagesSchema = new mongoose.Schema(
     },
   },
   {
+    strict: false,
     timestamps: true,
     versionKey: false,
   },

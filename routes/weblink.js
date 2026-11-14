@@ -121,10 +121,17 @@ router.get("/capsule-tracking", async (req, res) => {
 
     const matchQuery = {
       type: 8,
-      orderWebLink: {
-        $exists: true,
-        $nin: ["", " ", null]
-      }
+      $or: [
+        {
+          orderWebLink: {
+            $exists: true,
+            $nin: ["", " ", null]
+          }
+        },
+        {
+          imageUploadByApp: true
+        }
+      ]
     };
 
     if (search) {
@@ -468,6 +475,7 @@ router.get("/capsule-tracking", async (req, res) => {
             orderDriveLink: 1,
             allDriveLinks: 1,
             imageUploadCounts: 1,
+            imageUploadByApp: 1,
 
             folderStatus: { $ifNull: ["$folder.status", "pending"] },
             mainFolderId: "$folder._id",

@@ -483,6 +483,11 @@ const createEventCapsuleFolder = async (order) => {
 
         await folder.save();
 
+        const webLink = `https://horaservices.com/weblink-gallery?galleryId=${encodeURIComponent(folder._id)}`;
+
+        order.orderWebLink = webLink;
+        await order.save();
+
         console.log(
             `Event Capsule folder created for order ${orderId}: ${folder._id}`
         );

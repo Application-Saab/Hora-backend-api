@@ -165,10 +165,11 @@ router.get("/venue-localities-list", async (req, res, next) => {
   }
 });
 
-// Public Venue Listing API with filters
+
 router.get("/venues-public-list", async (req, res, next) => {
   try {
-    const { city, locality, eventType, venueType, guestCapacity, search, q } = req.query;
+    const { city, locality, eventType, venueType, guestCapacity, search, q } =
+      req.query;
 
     const searchTerm = (search || q || "").trim();
 
@@ -176,48 +177,39 @@ router.get("/venues-public-list", async (req, res, next) => {
       venueStatus: 1,
     };
 
-    // ----------------------------
-    // CITY FILTER
-    // ----------------------------
+    // City Filter
     if (city) {
-      query.city = { $regex: city, $options: "i" };
+      const escapedCity = city.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      query.city = { $regex: escapedCity, $options: "i" };
     }
 
-    // ----------------------------
-    // LOCALITY FILTER
-    // ----------------------------
+    // Locality filter
     if (locality) {
-      query.locality = { $regex: locality, $options: "i" };
+      const escapedLocality = locality.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      query.locality = { $regex: escapedLocality, $options: "i" };
     }
 
-    // ----------------------------
-    // VENUE TYPE FILTER
-    // ----------------------------
+    // Venuetype filter
     if (venueType) {
-      const venueTypesArray = venueType.split(",");
+      const venueTypesArray = venueType.split(",").map((v) => v.trim());
       query.venueType = { $in: venueTypesArray };
     }
 
-    // ----------------------------
-    // EVENT TYPE FILTER
-    // ----------------------------
+    // Event type filter
     if (eventType) {
-      const eventTypesArray = eventType.split(",");
+      const eventTypesArray = eventType.split(",").map((e) => e.trim());
       query.eventTypes = { $in: eventTypesArray };
     }
 
-    // ----------------------------
-    // GUEST CAPACITY FILTER
-    // ----------------------------
+    // Guest capacity filter
     if (guestCapacity) {
       query.guestCapacity = { $gte: Number(guestCapacity) };
     }
 
-    // ----------------------------
-    // HYBRID FREE-TEXT SEARCH
-    // ----------------------------
+    // Text search
     if (searchTerm) {
-      const regex = { $regex: searchTerm, $options: "i" };
+      const escapedSearch = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const regex = { $regex: escapedSearch, $options: "i" };
       const numericValue = Number(searchTerm);
 
       const orConditions = [
@@ -233,7 +225,6 @@ router.get("/venues-public-list", async (req, res, next) => {
         { foodTypes: regex },
       ];
 
-      // number based search (capacity / price / rooms)
       if (!isNaN(numericValue) && numericValue > 0) {
         orConditions.push(
           { guestCapacity: { $gte: numericValue } },
@@ -247,19 +238,65 @@ router.get("/venues-public-list", async (req, res, next) => {
     }
 
     const venues = await Venues.find(query)
+      .select(
+        [
+          "_id",
+          "venueName",
+          "venueType",
+          "location",
+          "city",
+          "locality",
+          "venueImageUrl",
+          "eventTypes",
+          "guestCapacity",
+          "minGuestCapacity",
+          "hallType",
+          "startingPrice",
+          "createdAt",
+          ""
+        ].join(" ")
+      )
       .sort({ createdAt: -1 })
       .lean();
 
+    if (venues.length === 0) {
+      return res.status(200).json({
+        message: "Public venues fetched successfully",
+        data: [],
+      });
+    }
+
+    const venueIds = venues.map((v) => v._id);
+
+    const imageCounts = await VenueImages.aggregate([
+      { $match: { venueId: { $in: venueIds } } },
+      {
+        $group: {
+          _id: "$venueId",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const countMap = new Map(
+      imageCounts.map((item) => [item._id.toString(), item.count])
+    );
+
+    const venuesWithImageCount = venues.map((venue) => ({
+      ...venue,
+      imageCount: countMap.get(venue._id.toString()) || 0,
+    }));
+
     return res.status(200).json({
       message: "Public venues fetched successfully",
-      data: venues,
+      data: venuesWithImageCount,
     });
   } catch (err) {
     next(err);
   }
 });
 
-// CREATE VENUE
+// Create Venue
 router.post(
   "/create-party-venue",
   (req, res, next) => {

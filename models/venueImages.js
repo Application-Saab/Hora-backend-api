@@ -51,5 +51,6 @@ const venueImagesSchema = new mongoose.Schema(
     versionKey: false,
   },
 );
+venueImagesSchema.index({ venueId: 1 });
 
 module.exports = mongoose.model("venue-images", venueImagesSchema);

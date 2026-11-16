@@ -84,4 +84,7 @@ const venueSchema = new mongoose.Schema(
   },
 );
 
+venueSchema.index({ venueStatus: 1, createdAt: -1 });
+venueSchema.index({ venueStatus: 1, city: 1, locality: 1 });
+
 module.exports = mongoose.model("Venues", venueSchema);

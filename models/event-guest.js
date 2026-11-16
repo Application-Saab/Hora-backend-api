@@ -17,5 +17,6 @@ const eventGuestSchema = new mongoose.Schema(
 // Add unique index on userId and eventId combination
 eventGuestSchema.index({ userId: 1, eventId: 1 }, { unique: true });
 eventGuestSchema.index({ userId: 1 });
+eventGuestSchema.index({ eventId: 1, userId: 1 });
 
 module.exports = mongoose.model("EventGuest", eventGuestSchema);

@@ -7,6 +7,10 @@ const venueSuggestionSchema = new mongoose.Schema(
       trim: true, 
       default: "" 
     },
+    iconSvg: {
+      type: String,
+      default: "",
+    },
     metaData: { 
       type: mongoose.Schema.Types.Mixed, 
       default: {} 
@@ -30,5 +34,6 @@ const venueSuggestionSchema = new mongoose.Schema(
 
 // fast filtering ke liye index
 venueSuggestionSchema.index({ dataType: 1, status: 1 });
+venueSuggestionSchema.index({ title: 1, dataType: 1 });
 
 module.exports = mongoose.model("VenueSuggestion", venueSuggestionSchema, "venue-suggestions");

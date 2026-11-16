@@ -16,6 +16,87 @@ const notificationFunction = require("../store/notifications");
 const cityServedModel = require("../models/city-served");
 const cityServedLocalityModel = require("../models/city-served-locality");
 
+router.post("/change_admin_password", async (req, res, next) => {
+  try {
+    const { email, newPassword } = req.body;
+
+    if (!email || !newPassword) {
+      return res.json({
+        error: true,
+        status: 400,
+        message: "Email and newPassword are required",
+      });
+    }
+
+    const admin = await UserModel.findOne({ email: email, role: "admin" });
+    if (!admin) {
+      return res.json({
+        error: true,
+        status: 404,
+        message: "Admin not found",
+      });
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 10);
+
+    admin.password = newPassword;
+    admin.hashpassword = newHash;
+    const updatedAdmin = await admin.save();
+
+    return res.json({
+      error: false,
+      status: 200,
+      message: "Admin password updated successfully",
+      newHash: updatedAdmin.hashpassword,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/check-admin-password", async (req, res, next) => {
+  try {
+    let { email, hashcode } = req.body;
+
+    if (!email || !hashcode) {
+      return res.status(400).json({
+        status: false,
+        message: "not matched",
+      });
+    }
+
+    const admin = await UserModel.findOne({
+      email: email.trim().toLowerCase(),
+      role: { $in: ["admin", "subadmin"] },
+    }).select("hashpassword status");
+
+    if (!admin || admin.status !== 1) {
+      return res.status(200).json({
+        status: false,
+        message: "not matched",
+      });
+    }
+
+    if (admin.hashpassword && admin.hashpassword === hashcode) {
+      return res.status(200).json({
+        status: true,
+        message: "is matched",
+      });
+    } else {
+      return res.status(200).json({
+        status: false,
+        message: "not matched",
+      });
+    }
+  } catch (error) {
+    console.error("Error in check-admin-password:", error);
+    return res.status(500).json({
+      status: false,
+      message: "Internal server error",
+    });
+  }
+});
+
 router.post('/admin_signup', async (req, res, next) => {
     const data = new UserModel({
         email: req.body.email,

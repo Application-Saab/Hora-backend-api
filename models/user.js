@@ -72,5 +72,6 @@ const userSchema = new mongoose.Schema(
 userSchema.index({ phone: 1 });
 
 userSchema.index({ phone: 1, createdAt: -1 });
+userSchema.index({ fromWonderland: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Users', userSchema)

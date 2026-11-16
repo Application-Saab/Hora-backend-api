@@ -13,6 +13,7 @@ const venuePackagesSchema = new mongoose.Schema(
     actualPrice: { type: Number, min: 0, required: true },
     maxGuests: { type: Number, default: 0, min: 0 },
     tag: { type: String, default: "", trim: true },
+    packageFeatures: { type: [String], default: [] },
     packageImageUrl: {
       type: String,
       default: "",

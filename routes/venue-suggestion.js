@@ -7,10 +7,10 @@ const { CustomResponse } = require("../store/commonFunction");
 
 const VALID_DATA_TYPES = ["FAQ", "SPECIAL_FEATURES"];
 
-// 1. CREATE SUGGESTION
+// CREATE SUGGESTION
 router.post("/", async (req, res, next) => {
   try {
-    const { title, metaData, dataType, status } = req.body;
+    const { title, metaData, dataType, status, iconSvg } = req.body;
 
     if (!title || !title.trim()) {
       return CustomResponse(res, 400, true, "Title is required");
@@ -21,12 +21,29 @@ router.post("/", async (req, res, next) => {
         res,
         400,
         true,
-        `Invalid dataType. Allowed values: ${VALID_DATA_TYPES.join(", ")}`,
+        `Invalid dataType. Allowed values: ${VALID_DATA_TYPES.join(", ")}`
+      );
+    }
+
+    // Optional: duplicate check (same title + dataType)
+    const existing = await VenueSuggestions.findOne({
+      title: title.trim(),
+      dataType: dataType ? dataType.toUpperCase() : "FAQ",
+      status: 1,
+    });
+
+    if (existing) {
+      return CustomResponse(
+        res,
+        400,
+        true,
+        "This suggestion already exists"
       );
     }
 
     const newSuggestion = await VenueSuggestions.create({
       title: title.trim(),
+      iconSvg: iconSvg ? String(iconSvg).trim() : "",
       metaData: metaData || {},
       dataType: dataType ? dataType.toUpperCase() : "FAQ",
       status: status !== undefined ? Number(status) : 1,
@@ -37,7 +54,7 @@ router.post("/", async (req, res, next) => {
       201,
       false,
       "Suggestion created successfully!",
-      newSuggestion,
+      newSuggestion
     );
   } catch (err) {
     next(err);

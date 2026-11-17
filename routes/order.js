@@ -483,6 +483,11 @@ const createEventCapsuleFolder = async (order) => {
 
         await folder.save();
 
+        const webLink = `https://horaservices.com/weblink-gallery?galleryId=${encodeURIComponent(folder._id)}`;
+
+        order.orderWebLink = webLink;
+        await order.save();
+
         console.log(
             `Event Capsule folder created for order ${orderId}: ${folder._id}`
         );
@@ -620,7 +625,7 @@ router.post('/add', async(req, res, next) => {
                        filteredSuppliers.forEach(element => {
                            userSupplierIdsArray.push(element._id);
                            console.log(`Sending notification to supplier: ${element._id}, device_token: ${element.device_token}`);
-                           notificationFunction.sendNotifications(
+                           notificationFunction.sendNotifications( 
                                element.device_token,
                                req.body.fromId,
                                'New Order',
@@ -908,13 +913,16 @@ router.post('/update_order_status', async (req, res, next) => {
 
           const notificationSuppliers = isEmergencyOrder
               ? filteredSuppliers.filter(supplier =>
+                  ["Elite", "Good"].includes(supplier.performanceBadge) &&
                   order.processedBy?.some(
                       item =>
                           item?.id?.toString() === supplier._id?.toString() &&
                           item?.action === "yes"
                   )
               )
-              : filteredSuppliers;
+              : filteredSuppliers.filter(
+                  supplier => supplier.performanceBadge === "Elite"
+              );
 
           console.log("Filtered suppliers matching locality and type:", notificationSuppliers.length);
           console.log("supplier ids", notificationSuppliers)
@@ -924,7 +932,7 @@ router.post('/update_order_status', async (req, res, next) => {
           console.log(`Sending notification to supplier: ${supplier._id}, device_token: ${supplier.device_token}`);
           notificationFunction.sendNotifications(
             supplier.device_token,
-            order.fromId, // fromId from order
+            order.fromId, // fromId from order 
             'New Order',
             `New Order!!! Order ID: #${order.order_id + 10800} 🥳🤩`,
             '',

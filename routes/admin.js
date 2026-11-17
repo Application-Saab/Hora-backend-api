@@ -701,6 +701,28 @@ router.post("/adminOrderList", async (req, res, next) => {
           as: "eventData",
         },
       },
+      {
+        $lookup: {
+          from: "folders",
+          let: { orderId: { $toString: "$order_id" } },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $eq: ["$orderId", "$$orderId"]
+                }
+              }
+            },
+            {
+              $project: {
+                _id: 0,
+                rawVideoClips: 1
+              }
+            }
+          ],
+          as: "folderData"
+        }
+      },
       //add this field for get the designType from decoration model
       {
         $lookup: {

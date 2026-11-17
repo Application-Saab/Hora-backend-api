@@ -7,6 +7,7 @@ let cookieParser = require("cookie-parser");
 let bodyParser = require("body-parser");
 let fs = require("fs");
 const orderModel = require("./models/order");
+const folderModel = require("./models/folder");
 const User = require('./models/user');
 const { sendWhatsApp } = require('./utils/whatsappService');
 const commonFunction = require("./store/commonFunction");
@@ -655,6 +656,83 @@ cron.schedule('0 20 * * *', async () => {
   await processDailyRetentionSequences();
 }, {
   scheduled: true,
+  timezone: "Asia/Kolkata"
+});
+
+const cleanupExpiredRawVideoClips = async () => {
+  try {
+    const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+    const cutoffDate = new Date(Date.now() - THIRTY_DAYS);
+
+    const folders = await folderModel.find({
+      "rawVideoClips.0": { $exists: true }
+    });
+
+    console.log(`Found ${folders.length} folders for cleanup`);
+
+    for (const folder of folders) {
+      for (const clip of folder.rawVideoClips) {
+        try {
+          // Check submittedAt
+          if (!clip.submittedAt || !clip.s3Key) {
+            continue;
+          }
+
+          const submittedAt = new Date(clip.submittedAt);
+
+          if (isNaN(submittedAt.getTime())) {
+            continue;
+          }
+
+          // Keep files younger than 30 days
+          if (submittedAt > cutoffDate) {
+            continue;
+          }
+
+          // Delete file from S3
+          await s3.deleteObject({
+            Bucket: process.env.S3_BUCKET_NAME,
+            Key: clip.s3Key
+          }).promise();
+
+          // Remove only this clip from MongoDB
+          await folderModel.updateOne(
+            {
+              _id: folder._id,
+              "rawVideoClips._id": clip._id
+            },
+            {
+              $pull: {
+                rawVideoClips: { _id: clip._id }
+              }
+            }
+          );
+
+          console.log(
+            `Deleted rawVideoClip: ${clip.s3Key}, OrderId: ${folder.orderId}`
+          );
+
+        } catch (error) {
+          console.error(
+            `Failed to delete clip ${clip.s3Key}:`,
+            error.message
+          );
+        }
+      }
+    }
+
+    console.log("Raw Video Clips Cleanup Completed");
+
+  } catch (error) {
+    console.error("Raw Video Clips Cleanup Error:", error);
+  }
+};
+
+cron.schedule("0 21 * * *", async () => {
+  console.log("Running Raw Video Clips Cleanup Job:", new Date());
+
+  await cleanupExpiredRawVideoClips();
+}, {
   timezone: "Asia/Kolkata"
 });
 

@@ -1375,12 +1375,7 @@ router.get("/reports/dashboard", async (req, res) => {
             const phone = normalizePhone(lead.phoneNumber);
             const leadAgent = teamByPhone.get(normalizePhone(lead.agent_phone));
 
-            const ts = parseLeadDate(lead.date);
-            const createdAt = ts !== null
-                ? new Date(ts).toISOString()
-                : lead.createdAt
-                    ? new Date(lead.createdAt).toISOString()
-                    : undefined;
+            const createdAt = new Date(lead.createdAt).toISOString();
 
             const leadCalls = callsByLead.get(String(lead._id)) || [];
 

@@ -476,7 +476,7 @@ router.get("/capsule-tracking", async (req, res) => {
             allDriveLinks: 1,
             imageUploadCounts: 1,
             imageUploadByApp: 1,
-
+            imageUploadTracking: 1,
             folderStatus: { $ifNull: ["$folder.status", "pending"] },
             mainFolderId: "$folder._id",
 

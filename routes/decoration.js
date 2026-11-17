@@ -15,6 +15,9 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage });
 const sharp = require("sharp");
 
+sharp.concurrency(1);
+sharp.cache(false);
+
 // Helper function to invalidate tag caches
 const clearTagCaches = (tags = []) => {
   if (!Array.isArray(tags)) return;

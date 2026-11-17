@@ -12,6 +12,9 @@ const multer = require("multer");
 const sharp = require("sharp");
 const AddOn = require("../models/addon");
 
+sharp.concurrency(1);
+sharp.cache(false);
+
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 

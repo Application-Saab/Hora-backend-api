@@ -7,6 +7,9 @@ require('dotenv').config();
 const fss = require('fs')
 const ffmpeg = require('fluent-ffmpeg');
 
+sharp.concurrency(1);
+sharp.cache(false);
+
 const router = express.Router();
 
 // AWS S3 Configuration
@@ -109,22 +112,22 @@ try {
 
 const generateVideoPreview = (inputPath, outputPath, duration = 4, start = 0) => {
   return new Promise((resolve, reject) => {
-    // ensure output dir exists
     const outDir = path.dirname(outputPath);
     if (!fss.existsSync(outDir)) fss.mkdirSync(outDir, { recursive: true });
 
     ffmpeg(inputPath)
-      .setStartTime(start)               // start from beginning or a small offset
-      .setDuration(duration)             // seconds
-      .videoCodec('libx264')             // re-encode for compatibility & size
+      .setStartTime(start)
+      .setDuration(duration)
+      .videoCodec('libx264')
       .outputOptions([
-        '-crf 28',                       // quality (higher -> smaller)
-        '-preset veryfast',              // speed
-        '-movflags +faststart',          // streaming friendly
-        '-pix_fmt yuv420p',              // compatibility
-        '-an'                            // remove audio to reduce size (optional)
+        '-threads 1',            // FFmpeg ko sirf 1 CPU core tak limit karega
+        '-crf 28',               // quality (higher -> smaller)
+        '-preset veryfast',      // fast encoding & low CPU
+        '-movflags +faststart',  // streaming friendly
+        '-pix_fmt yuv420p',      // compatibility
+        '-an'                    // remove audio
       ])
-      .size('640x?')                     // scale width to 640, keep aspect
+      .size('640x?')
       .on('end', () => resolve(outputPath))
       .on('error', (err) => reject(err))
       .save(outputPath);
@@ -139,12 +142,13 @@ const compressVideo = (inputPath, outputPath, crf = 28) => {
     ffmpeg(inputPath)
       .videoCodec('libx264')
       .outputOptions([
-        `-crf ${crf}`,             // quality level 28(medium) = small size
-        '-preset veryfast',        // fast encoding
-        '-movflags +faststart',    // progressive playback
-        '-pix_fmt yuv420p',        // max compatibility
-        '-acodec aac',             // compress audio
-        '-b:a 128k'                // audio bitrate
+        '-threads 1',            // Yahan bhi 1 CPU core limit lagana zaroori hai
+        `-crf ${crf}`,           // quality level 28 = small size
+        '-preset veryfast',      // fast encoding
+        '-movflags +faststart',  // progressive playback
+        '-pix_fmt yuv420p',      // max compatibility
+        '-acodec aac',           // compress audio
+        '-b:a 128k'              // audio bitrate
       ])
       .on('end', () => resolve(outputPath))
       .on('error', (err) => reject(err))

@@ -16,6 +16,9 @@ const { runPackageSync } = require("./store/import-venue-packages");
 const { router: leadsRoutes, syncLeadsFromSheet } = require("./routes/leads"); 
 const axios = require("axios")
 
+sharp.concurrency(1);
+sharp.cache(false);
+
 // Database Connection Start
 mongoose.set("strictQuery", true);
 mongoose.connect(

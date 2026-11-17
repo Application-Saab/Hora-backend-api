@@ -16,6 +16,9 @@ const WebLink = require("../models/weblink-images");
 const multer = require("multer");
 const UserModel = require("../models/user")
 
+sharp.concurrency(1);
+sharp.cache(false);
+
 // AWS S3 Configuration
 const s3 = new AWS.S3({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,

@@ -1830,6 +1830,80 @@ router.get("/imageby-galleryId", async (req, res, next) => {
   }
 });
 
+router.get("/download-s3-video", async (req, res) => {
+  try {
+    const { url } = req.query;
 
+    if (!url) {
+      return res.status(400).json({
+        success: false,
+        message: "Video URL is required",
+      });
+    }
+
+    const videoUrl = new URL(url);
+
+    if (
+      videoUrl.hostname !==
+      "photography-hora.s3.eu-north-1.amazonaws.com"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid S3 URL",
+      });
+    }
+
+    const response = await axios({
+      method: "GET",
+      url: videoUrl.href,
+      responseType: "stream",
+      timeout: 0,
+    });
+
+    if (response.status !== 200) {
+      return res.status(400).json({
+        success: false,
+        message: "Unable to download video",
+      });
+    }
+
+    const fileName =
+      decodeURIComponent(videoUrl.pathname.split("/").pop());
+
+    res.setHeader("Content-Type", "video/mp4");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${fileName}"`
+    );
+
+    if (response.headers["content-length"]) {
+      res.setHeader(
+        "Content-Length",
+        response.headers["content-length"]
+      );
+    }
+
+    response.data.pipe(res);
+
+    response.data.on("error", (error) => {
+      console.error("Video stream error:", error);
+      if (!res.headersSent) {
+        res.status(500).end();
+      } else {
+        res.destroy(error);
+      }
+    });
+
+  } catch (error) {
+    console.error("Download API Error:", error.message);
+
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        message: "Video download failed",
+      });
+    }
+  }
+});
 
 module.exports = router;

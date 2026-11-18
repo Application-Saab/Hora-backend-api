@@ -123,17 +123,23 @@ router.get("/capsule-tracking", async (req, res) => {
       type: 8,
       $or: [
         {
-          orderWebLink: {
-            $exists: true,
-            $nin: ["", " ", null]
-          }
+          imageUploadByApp: true
         },
         {
-          imageUploadByApp: true
+          allDriveLinks: {
+            $elemMatch: {
+              linkType: {
+                $in: ["rawPhotos", "colorCorrectedPhotos"]
+              },
+              link: {
+                $exists: true,
+                $nin: ["", " ", null]
+              }
+            }
+          }
         }
       ]
     };
-
     if (search) {
       matchQuery.order_id = Number(search);
     }

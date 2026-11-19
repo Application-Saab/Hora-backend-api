@@ -14,7 +14,7 @@ const commonFunction = require("./store/commonFunction");
 const sharp = require("sharp");
 const cron = require("node-cron");
 const { runPackageSync } = require("./store/import-venue-packages");
-const { router: leadsRoutes, syncLeadsFromSheet } = require("./routes/leads"); 
+const { router: leadsRoutes, syncLeadsFromSheet } = require("./routes/leads");
 const axios = require("axios")
 
 sharp.concurrency(1);
@@ -80,8 +80,8 @@ app.use(async (req, res, next) => {
   }
   console.log(
     "####################################### " +
-      req.url +
-      " API IS CALLED WITH DATA: ",
+    req.url +
+    " API IS CALLED WITH DATA: ",
     userdata,
   );
   var apiRequest = {
@@ -198,22 +198,22 @@ async function runSupplierPerformance() {
 
         if (order.reviewStatus === "positive" || order.reviewStatus === "negative"){
           totalFeedbackCount++;
-        if (order.reviewStatus === "positive") {
-          positiveReviews++;
-        } else if (order.reviewStatus === "negative") {
-          negativeReviews++;
-        }
+          if (order.reviewStatus === "positive") {
+            positiveReviews++;
+          } else if (order.reviewStatus === "negative") {
+            negativeReviews++;
+          }
           continue;
-      }
+        }
 
-      if(rate){
-        totalFeedbackCount++;
-        if (rate === "9-10") excellent++;
-        else if (rate === "7-8") good++;
-        else if (rate === "1-6") poor++;
-        else if (rate === "6-8") good++;
-        else if (rate === "0-6") poor++;
-      }
+        if(rate){
+          totalFeedbackCount++;
+          if (rate === "9-10") excellent++;
+          else if (rate === "7-8") good++;
+          else if (rate === "1-6") poor++;
+          else if (rate === "6-8") good++;
+          else if (rate === "0-6") poor++;
+        }
 
       }
 
@@ -296,7 +296,7 @@ async function sendNotificationsInPriority() {
 
 
       const suppliers = await UserModel.find({
-        role: "supplier", 
+        role: "supplier",
         device_token: { $nin: [null, ""] },
         city: freshOrder.order_locality,
         order_type: freshOrder.type,
@@ -342,56 +342,56 @@ async function sendNotificationsInPriority() {
  * Emergency Orders expire check Cron Function
  */
 const expireEmergencyOrders = async () => {
-    try {
-        const emergencyOrders = await orderModel.find({
-            isEmergencyOrder: true,
-            status: 0,     
-            order_status: 7,                          
-            isPaymentDone: false
-        });
+  try {
+    const emergencyOrders = await orderModel.find({
+      isEmergencyOrder: true,
+      status: 0,
+      order_status: 7,
+      isPaymentDone: false
+    });
 
-        const currentTimeMs = Date.now();
-        const EXPIRE_TIME_MS = 30 * 60 * 1000; // 30 Minutes
+    const currentTimeMs = Date.now();
+    const EXPIRE_TIME_MS = 30 * 60 * 1000; // 30 Minutes
 
-        let expiredCount = 0;
+    let expiredCount = 0;
 
-        for (const order of emergencyOrders) {
-            const firstYesProcessed = order.processedBy?.find(
-                (item) => item?.action === "yes" && item?.time
-            );
+    for (const order of emergencyOrders) {
+      const firstYesProcessed = order.processedBy?.find(
+        (item) => item?.action === "yes" && item?.time
+      );
 
-            if (firstYesProcessed && firstYesProcessed.time) {
-                const emergencyStartTime = new Date(firstYesProcessed.time).getTime();
+      if (firstYesProcessed && firstYesProcessed.time) {
+        const emergencyStartTime = new Date(firstYesProcessed.time).getTime();
 
-                if (currentTimeMs - emergencyStartTime >= EXPIRE_TIME_MS) {
-                    order.order_status = 6; 
-                    await order.save();
-                    expiredCount++;
-                  console.log(`Emergency Order ID #${order.order_id + 10800} expired successfully at: ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`);
-                }
-            }
- 
-          else if (
-            order.createdAt
-          ) {
-            const orderCreatedTime = new Date(order.createdAt).getTime();
-
-            if (currentTimeMs - orderCreatedTime >= EXPIRE_TIME_MS) {
-              order.order_status = 6;
-              await order.save();
-              expiredCount++;
-
-              console.log(
-                `Emergency Order ID #${order.order_id + 10800} expired successfully at: ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`
-              );
-            }
-          }
-
+        if (currentTimeMs - emergencyStartTime >= EXPIRE_TIME_MS) {
+          order.order_status = 6;
+          await order.save();
+          expiredCount++;
+          console.log(`Emergency Order ID #${order.order_id + 10800} expired successfully at: ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`);
         }
+      }
 
-    } catch (error) {
-        console.error('Error while expiring emergency orders:', error);
+      else if (
+        order.createdAt
+      ) {
+        const orderCreatedTime = new Date(order.createdAt).getTime();
+
+        if (currentTimeMs - orderCreatedTime >= EXPIRE_TIME_MS) {
+          order.order_status = 6;
+          await order.save();
+          expiredCount++;
+
+          console.log(
+            `Emergency Order ID #${order.order_id + 10800} expired successfully at: ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`
+          );
+        }
+      }
+
     }
+
+  } catch (error) {
+    console.error('Error while expiring emergency orders:', error);
+  }
 };
 
 
@@ -429,17 +429,23 @@ cron.schedule('0 20 * * *', async () => {
 
       const trueInclusions = Object.keys(inclusions).filter(key => inclusions[key] === true);
 
-      if (trueInclusions.length === 0) {
-        continue; 
+      const finalInclusions = trueInclusions.filter(key => {
+        if (key === "Raw Photos") return false;
+        if (key === "Raw Video") return false;
+        return true;
+      });
+
+      if (finalInclusions.length === 0) {
+        continue;
       }
 
       const googlePayload = {
         targetSheet: "photography_inclusions",
-        orderId: String(Number(order.order_id) + 10800), 
+        orderId: String(Number(order.order_id) + 10800),
         orderDate: order.order_date
           ? new Date(order.order_date).toLocaleDateString("en-GB")
           : "N/A",
-        inclusions: trueInclusions 
+        inclusions: finalInclusions,
       };
 
       await axios
@@ -795,11 +801,11 @@ const venueSuggestion = require("./routes/venue-suggestion")
 let passportAuth = require("./store/passportAuth").passportAuth;
 
 app.get("/api/check-token-health", passportAuth, async (req, res) => {
-    return res.status(200).json({
-        error: false,
-        status: 200,
-        authenticated: true,
-    });
+  return res.status(200).json({
+    error: false,
+    status: 200,
+    authenticated: true,
+  });
 });
 app.use("/api/admin", AdminRoutes);
 app.use("/api/user", UserRoutes);
@@ -841,7 +847,7 @@ app.use("/api/addon", AddonRoutes);
 app.use("/api/photography-theme", ThemeRoutes);
 app.use("/api/team", team);
 app.use("/api/holidays", holidaysRoutes);
-app.use("/api/leads", leadsRoutes); 
+app.use("/api/leads", leadsRoutes);
 app.use("/api/specializations", specializationRoutes);
 app.use("/api/pincode", pinCodes)
 app.use("/api/venue-suggestion", venueSuggestion)
@@ -863,7 +869,7 @@ app.post("/test_post", function (req, res) {
     error: false,
     status: 200,
     message: "api test successfully",
-    
+
     data: req.body,
   });
 });

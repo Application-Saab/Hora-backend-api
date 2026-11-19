@@ -429,7 +429,13 @@ cron.schedule('0 20 * * *', async () => {
 
       const trueInclusions = Object.keys(inclusions).filter(key => inclusions[key] === true);
 
-      if (trueInclusions.length === 0) {
+      const finalInclusions = trueInclusions.filter(key => {
+        if (key === "Raw Photos") return false;
+        if (key === "Raw Video") return false;
+        return true;
+      });
+
+      if (finalInclusions.length === 0) {
         continue; 
       }
 
@@ -439,7 +445,7 @@ cron.schedule('0 20 * * *', async () => {
         orderDate: order.order_date
           ? new Date(order.order_date).toLocaleDateString("en-GB")
           : "N/A",
-        inclusions: trueInclusions 
+        inclusions: finalInclusions,
       };
 
       await axios

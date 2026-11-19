@@ -661,13 +661,20 @@ router.post("/adminOrderList", async (req, res, next) => {
       order_date,
       driveLinkStatus,
       emergencyOrderStatus,
+      customProduct,
     } = req.body;
 
     // Build the query object
     const finder = { status: { $ne: 2 } };
 
     if (order_id) finder.order_id = order_id;
-    if (type) finder.type = type;
+    if (customProduct) {
+      finder.items = {
+        $in: ["67d0102bf188f092cdf80e11"]
+      };
+    } else if (type) {
+      finder.type = type;
+    }
     if (order_status) finder.order_status = order_status;
     if (status) finder.status = status;
     if (phone_no) finder.phone_no = phone_no;

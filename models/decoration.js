@@ -19,6 +19,17 @@ const decorationSchema = new mongoose.Schema(
     featured_images: [
       {
         fileName: String,
+        url: String,
+        mediaType: {
+          type: String,
+          enum: ["image", "video"],
+          default: "image",
+        },
+        videoStatus: {
+          type: String,
+          enum: ["processing", "ready"],
+          default: "ready",
+        },
         createdAt: {
           type: Date,
           default: Date.now,

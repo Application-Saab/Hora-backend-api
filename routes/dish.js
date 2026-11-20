@@ -8,27 +8,83 @@ const router = express.Router();
 const { default: mongoose } = require("mongoose");
 const path = require("path");
 const fs = require("fs");
+const fsPromises = require("fs/promises");
 const multer = require("multer");
 const sharp = require("sharp");
+const ffmpeg = require("fluent-ffmpeg");
 const AddOn = require("../models/addon");
 
 sharp.concurrency(1);
 sharp.cache(false);
 
+// Existing memoryStorage kept intact so other routes in dish.js don't break
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-const compressImageToWebP = async (buffer, outputPath, targetMaxKB = 40) => {
+// Directories for Disk-Based Media Upload (Images + Videos)
+const TEMP_UPLOAD_DIR = path.resolve(__dirname, "../uploads/temp");
+const IMAGE_OUTPUT_DIR = path.resolve(__dirname, "../uploads/compressed_webp");
+const VIDEO_OUTPUT_DIR = path.resolve(__dirname, "../uploads/compressed_webp");
+
+[TEMP_UPLOAD_DIR, IMAGE_OUTPUT_DIR, VIDEO_OUTPUT_DIR].forEach((dir) => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+});
+
+// Dedicated DiskStorage for Decoration Media (Safe for large videos)
+const mediaDiskStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, TEMP_UPLOAD_DIR);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
+    cb(null, `${uniqueSuffix}${path.extname(file.originalname)}`);
+  },
+});
+
+const mediaUpload = multer({
+  storage: mediaDiskStorage,
+  limits: { fileSize: 150 * 1024 * 1024 }, // 150MB max per file
+});
+
+const isVideoFile = (file) => {
+  if (!file) return false;
+  if (file.mimetype && file.mimetype.startsWith("video/")) return true;
+  return /\.(mp4|webm|ogg|mov|mkv|avi)$/i.test(file.originalname || "");
+};
+
+const sanitizeBaseName = (originalName) => {
+  return path
+    .parse(originalName)
+    .name.replace(/[^a-zA-Z0-9_-]/g, "_")
+    .slice(0, 50);
+};
+
+const deleteFileIfExists = (filePath) => {
+  try {
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  } catch (err) {
+    console.error("File delete error:", err);
+  }
+};
+
+// Supports both Buffer and File Path
+const compressImageToWebP = async (inputSource, outputPath, targetMaxKB = 40) => {
   let quality = 85;
   const step = 5;
 
   while (quality > 5) {
-    const compressedBuffer = await sharp(buffer).webp({ quality }).toBuffer();
+    const compressedBuffer = await sharp(inputSource)
+      .webp({ quality })
+      .toBuffer();
 
     const sizeKB = compressedBuffer.length / 1024;
 
     if (sizeKB <= targetMaxKB) {
-      fs.writeFileSync(outputPath, compressedBuffer);
+      await fsPromises.writeFile(outputPath, compressedBuffer);
       return true;
     }
 
@@ -36,8 +92,10 @@ const compressImageToWebP = async (buffer, outputPath, targetMaxKB = 40) => {
   }
 
   // Final attempt with lowest quality
-  const fallbackBuffer = await sharp(buffer).webp({ quality: 5 }).toBuffer();
-  fs.writeFileSync(outputPath, fallbackBuffer);
+  const fallbackBuffer = await sharp(inputSource)
+    .webp({ quality: 5 })
+    .toBuffer();
+  await fsPromises.writeFile(outputPath, fallbackBuffer);
   return false;
 };
 
@@ -45,28 +103,15 @@ const normalizeInclusion = (inclusion) => {
   if (!inclusion) return [];
 
   try {
-    // Case 1:
-    // '["<div>...</div>"]'
     if (typeof inclusion === "string" && inclusion.startsWith("[")) {
       inclusion = JSON.parse(inclusion);
     }
-
-    // Case 2:
-    // "<div>...</div>"
     if (typeof inclusion === "string") {
       return [inclusion];
     }
-
-    // Case 3:
-    // ["<div>...</div>"]
     if (Array.isArray(inclusion)) {
-      return [
-        inclusion
-          .filter(Boolean)
-          .join("")
-      ];
+      return [inclusion.filter(Boolean).join("")];
     }
-
     return [];
   } catch (err) {
     console.error("normalizeInclusion error", err);
@@ -74,48 +119,131 @@ const normalizeInclusion = (inclusion) => {
   }
 };
 
+// ============================================================================
+// BACKGROUND VIDEO COMPRESSION QUEUE (Sequential 1-by-1)
+// ============================================================================
+const videoJobQueue = [];
+let isProcessingVideo = false;
+
+const compressVideoFile = (inputPath, tempCompressedPath) => {
+  return new Promise((resolve, reject) => {
+    const startTime = Date.now();
+    console.log(`🎬 [BG VIDEO] Compression started: ${path.basename(inputPath)}`);
+
+    ffmpeg(inputPath)
+      .videoCodec("libx264")
+      .videoFilters("scale='min(1080,iw)':-2")
+      .outputOptions([
+        "-crf 26",
+        "-preset veryfast",
+        "-profile:v high",
+        "-level 4.1",
+        "-pix_fmt yuv420p",
+        "-maxrate 2200k",
+        "-bufsize 4400k",
+        "-threads 1",
+        "-c:a aac",
+        "-b:a 96k",
+        "-movflags +faststart",
+      ])
+      .on("end", () => {
+        const sec = ((Date.now() - startTime) / 1000).toFixed(2);
+        console.log(`✅ [BG VIDEO] Done in ${sec}s: ${path.basename(inputPath)}`);
+        resolve(tempCompressedPath);
+      })
+      .on("error", (err) => {
+        console.error(`❌ [BG VIDEO] Failed:`, err.message);
+        reject(err);
+      })
+      .save(tempCompressedPath);
+  });
+};
+
+const enqueueVideoCompression = (job) => {
+  videoJobQueue.push(job);
+  processNextVideoJob();
+};
+
+const processNextVideoJob = async () => {
+  if (isProcessingVideo || videoJobQueue.length === 0) return;
+  isProcessingVideo = true;
+
+  const { decorationId, fileName } = videoJobQueue.shift();
+  const targetFilePath = path.join(VIDEO_OUTPUT_DIR, fileName);
+  const tempOutPath = path.join(TEMP_UPLOAD_DIR, `comp_${fileName}`);
+
+  try {
+    const currentDoc = await decorationModel.findById(decorationId).lean();
+    const stillExists = currentDoc?.featured_images?.some(
+      (m) => m.fileName === fileName
+    );
+
+    if (!currentDoc || !stillExists || !fs.existsSync(targetFilePath)) {
+      deleteFileIfExists(tempOutPath);
+      return;
+    }
+
+    await compressVideoFile(targetFilePath, tempOutPath);
+
+    const latestDoc = await decorationModel.findById(decorationId).lean();
+    const stillValid = latestDoc?.featured_images?.some(
+      (m) => m.fileName === fileName
+    );
+    if (!latestDoc || !stillValid) {
+      deleteFileIfExists(tempOutPath);
+      return;
+    }
+
+    const rawSizeMB = (fs.statSync(targetFilePath).size / (1024 * 1024)).toFixed(2);
+    const compSizeMB = (fs.statSync(tempOutPath).size / (1024 * 1024)).toFixed(2);
+
+    // Atomic replace: deletes original raw video & puts compressed MP4 in its place
+    await fsPromises.rename(tempOutPath, targetFilePath);
+
+    await decorationModel.updateOne(
+      { _id: decorationId, "featured_images.fileName": fileName },
+      { $set: { "featured_images.$.videoStatus": "ready" } }
+    );
+
+    console.log(`📦 [BG VIDEO] Replaced ${fileName} (${rawSizeMB}MB -> ${compSizeMB}MB)`);
+  } catch (err) {
+    deleteFileIfExists(tempOutPath);
+    await decorationModel
+      .updateOne(
+        { _id: decorationId, "featured_images.fileName": fileName },
+        { $set: { "featured_images.$.videoStatus": "ready" } }
+      )
+      .catch(() => {});
+  } finally {
+    isProcessingVideo = false;
+    processNextVideoJob();
+  }
+};
+
+// ============================================================================
+// ROUTE: /decoration/add (Unified `featured_images` for Images + Videos)
+// ============================================================================
 router.post(
   "/decoration/add",
-  upload.array("featured_images", 10),
+  mediaUpload.array("featured_images", 10),
   async (req, res, next) => {
-    try {
-      const files = req.files;
+    const files = req.files || [];
 
-      if (!files || files.length === 0) {
+    try {
+      if (files.length === 0) {
         return res.status(400).json({
           error: true,
-          message: "At least 1 image required",
+          message: "At least 1 image or video is required",
         });
       }
 
-      const outputFolder = path.resolve(
-        __dirname,
-        "../uploads/compressed_webp",
-      );
-
-      if (!fs.existsSync(outputFolder)) {
-        fs.mkdirSync(outputFolder, { recursive: true });
-      }
-
-      // 🧠 PROCESS ALL IMAGES
-      const images = [];
-
-      for (let file of files) {
-        const fileName = `${Date.now()}-${path.parse(file.originalname).name}.webp`;
-        const outputPath = path.join(outputFolder, fileName);
-
-        await compressImageToWebP(file.buffer, outputPath);
-
-        images.push({
-          fileName,
-        });
-      }
-
+      // Check duplicate BEFORE heavy image/video processing
       const existing = await decorationModel.findOne({
         name: req.body.name,
       });
 
       if (existing) {
+        files.forEach((f) => deleteFileIfExists(f.path));
         return res.json({
           error: true,
           status: 503,
@@ -123,27 +251,68 @@ router.post(
         });
       }
 
-      const tags = req.body.mealId
-        ? JSON.parse(req.body.mealId)
-        : [];
+      // 🧠 PROCESS ALL IMAGES & VIDEOS INTO `featured_images`
+      const mediaItems = [];
+      const queuedVideos = [];
+
+      for (const file of files) {
+        const cleanName = sanitizeBaseName(file.originalname);
+        const uniquePrefix = `${Date.now()}-${Math.round(Math.random() * 1e4)}`;
+
+        if (isVideoFile(file)) {
+          const fileName = `${uniquePrefix}-${cleanName}.mp4`;
+          const finalVideoPath = path.join(VIDEO_OUTPUT_DIR, fileName);
+
+          // Move raw video from temp to compressed_webp (will be replaced after FFmpeg)
+          await fsPromises.rename(file.path, finalVideoPath);
+
+          mediaItems.push({
+            fileName,
+            url: `/uploads/compressed_webp/${fileName}`,
+            mediaType: "video",
+            videoStatus: "processing",
+            createdAt: new Date(),
+          });
+          queuedVideos.push(fileName);
+        } else {
+          const fileName = `${uniquePrefix}-${cleanName}.webp`;
+          const outputPath = path.join(IMAGE_OUTPUT_DIR, fileName);
+
+          await compressImageToWebP(file.path, outputPath);
+          deleteFileIfExists(file.path);
+
+          mediaItems.push({
+            fileName,
+            url: `/uploads/compressed_webp/${fileName}`,
+            mediaType: "image",
+            videoStatus: "ready",
+            createdAt: new Date(),
+          });
+        }
+      }
+
+      const tags = req.body.mealId ? JSON.parse(req.body.mealId) : [];
 
       const addonIds = await AddOn.find({
         categoryType: "Decoration",
         $or: [
           {
-            eventId: { $in: tags }
+            eventId: { $in: tags },
           },
           {
             eventId: { $size: 0 },
-            productId: { $size: 0 }
-          }
-        ]
+            productId: { $size: 0 },
+          },
+        ],
       }).distinct("_id");
+
+      const firstImage = mediaItems.find((m) => m.mediaType === "image");
 
       const data = new decorationModel({
         name: req.body.name,
         short_link: "",
-        featured_images: images, // 👈 MAIN CHANGE
+        featured_image: firstImage ? firstImage.fileName : mediaItems[0]?.fileName,
+        featured_images: mediaItems,
         caption: req.body.description || "",
         addons: addonIds,
         badge: null,
@@ -153,10 +322,8 @@ router.post(
         is_wishlisted: null,
         ratings: null,
         attributes: null,
-        inclusion: normalizeInclusion(
-           req.body.preperationtext,
-        ),
-        tag: req.body.mealId ? JSON.parse(req.body.mealId) : [],
+        inclusion: normalizeInclusion(req.body.preperationtext),
+        tag: tags,
         vendorMaterialPrice: req.body.vendorMaterialPrice,
         executionPrice: req.body.executionPrice,
         horaAdvance: req.body.horaAdvance,
@@ -168,17 +335,29 @@ router.post(
 
       const saved = await data.save();
 
+      // Trigger background FFmpeg compression after DB save
+      queuedVideos.forEach((fileName) => {
+        enqueueVideoCompression({
+          decorationId: saved._id,
+          fileName,
+        });
+      });
+
       return res.json({
         error: false,
         status: 200,
-        message: "Decoration created successfully",
+        message:
+          queuedVideos.length > 0
+            ? "Decoration created successfully. Video is compressing in background."
+            : "Decoration created successfully",
         data: saved,
       });
     } catch (err) {
-    err.isPublic = true;
-    next(err);
+      files.forEach((f) => deleteFileIfExists(f.path));
+      err.isPublic = true;
+      next(err);
     }
-  },
+  }
 );
 
 router.post("/add", async (req, res, next) => {

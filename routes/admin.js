@@ -432,7 +432,9 @@ const INCLUSION_TO_API_KEY = {
   "Edited Video": "editedVideos",
   "Raw Video Clips": "rawVideoClips",
   "Drone Shoot": "droneShoot",
-  "Edited Reel": "editedReel"
+  "Edited Reel": "editedReel",
+  "Album": "album", 
+  "Cinematic Video": "cinematicVideo",
 };
 
 const buildDriveStatusStages = () => {
@@ -445,7 +447,24 @@ const buildDriveStatusStages = () => {
     $gt: [{ $strLenCP: { $trim: { input: { $ifNull: [field, ""] } } } }, 0],
   });
 
+  const PHOTO_KEYS = ["rawPhotos", "colorCorrectedPhotos"];
+
+  const appInclusions = {
+    $ifNull: [{ $arrayElemAt: ["$_folderData.appUploadInclusions", 0] }, []],
+  };
+
   return [
+    {
+      $lookup: {
+        from: "folders",
+        let: { orderId: { $toString: "$order_id" } },
+        pipeline: [
+          { $match: { $expr: { $eq: ["$orderId", "$$orderId"] } } },
+          { $project: { _id: 0, appUploadInclusions: 1 } },
+        ],
+        as: "_folderData",
+      },
+    },
     {
       $addFields: {
         _expectedKeys: {
@@ -485,22 +504,25 @@ const buildDriveStatusStages = () => {
             input: "$_expectedKeys",
             as: "k",
             cond: {
-              $or: [
-                {
-                  $gt: [
-                    {
-                      $size: {
-                        $filter: {
-                          input: { $ifNull: ["$allDriveLinks", []] },
-                          as: "l",
-                          cond: {
-                            $and: [
-                              {
-                                $or: [
-                                  { $eq: ["$$l.linkType", "$$k"] },
-                                  {
+              $switch: {
+                branches: [
+                  {
+                    case: { $eq: ["$$k", "album"] },
+                    then: { $eq: ["$isAlbumVerified", true] },
+                  },
+                  {
+                    case: { $in: ["$$k", PHOTO_KEYS] },
+                    then: {
+                      $or: [
+                        {
+                          $gt: [
+                            {
+                              $size: {
+                                $filter: {
+                                  input: { $ifNull: ["$allDriveLinks", []] },
+                                  as: "l",
+                                  cond: {
                                     $and: [
-                                      { $in: ["$$k", ["rawPhotos", "colorCorrectedPhotos"]] },
                                       {
                                         $in: [
                                           "$$l.linkType",
@@ -508,32 +530,88 @@ const buildDriveStatusStages = () => {
                                             "rawPhotos",
                                             "Raw Photos",
                                             "colorCorrectedPhotos",
-                                            "Color Corrected Photos"
-                                          ]
-                                        ]
-                                      }
-                                    ]
-                                  }
-                                ]
+                                            "Color Corrected Photos",
+                                          ],
+                                        ],
+                                      },
+                                      nonEmpty("$$l.link"),
+                                    ],
+                                  },
+                                },
                               },
-                              nonEmpty("$$l.link"),
-                            ],
+                            },
+                            0,
+                          ],
+                        },
+                        nonEmpty("$orderDriveLink"),
+                        { $eq: ["$imageUploadByApp", true] },
+                        {
+                          $gt: [
+                            {
+                              $size: {
+                                $filter: {
+                                  input: appInclusions,
+                                  as: "a",
+                                  cond: {
+                                    $and: [
+                                      { $in: ["$$a.inclusionType", PHOTO_KEYS] },
+                                      { $eq: ["$$a.value", true] },
+                                    ],
+                                  },
+                                },
+                              },
+                            },
+                            0,
+                          ],
+                        },
+                      ],
+                    },
+                  },
+                ],
+
+                default: {
+                  $or: [
+                    {
+                      $gt: [
+                        {
+                          $size: {
+                            $filter: {
+                              input: { $ifNull: ["$allDriveLinks", []] },
+                              as: "l",
+                              cond: {
+                                $and: [
+                                  { $eq: ["$$l.linkType", "$$k"] },
+                                  nonEmpty("$$l.link"),
+                                ],
+                              },
+                            },
                           },
                         },
-                      },
+                        0,
+                      ],
                     },
-                    0,
-                  ],
-                },
-                {
-                  $and: [
                     {
-                      $in: ["$$k", ["rawPhotos", "colorCorrectedPhotos"]]
+                      $gt: [
+                        {
+                          $size: {
+                            $filter: {
+                              input: appInclusions,
+                              as: "a",
+                              cond: {
+                                $and: [
+                                  { $eq: ["$$a.inclusionType", "$$k"] },
+                                  { $eq: ["$$a.value", true] },
+                                ],
+                              },
+                            },
+                          },
+                        },
+                        0,
+                      ],
                     },
-                    nonEmpty("$orderDriveLink"),
                   ],
                 },
-              ],
+              },
             },
           },
         },
@@ -555,6 +633,7 @@ const buildDriveStatusStages = () => {
         },
       },
     },
+    { $project: { _folderData: 0, _expectedKeys: 0, _filledKeys: 0 } },
   ];
 };
 
@@ -582,13 +661,20 @@ router.post("/adminOrderList", async (req, res, next) => {
       order_date,
       driveLinkStatus,
       emergencyOrderStatus,
+      customProduct,
     } = req.body;
 
     // Build the query object
     const finder = { status: { $ne: 2 } };
 
     if (order_id) finder.order_id = order_id;
-    if (type) finder.type = type;
+    if (customProduct) {
+      finder.items = {
+        $in: ["67d0102bf188f092cdf80e11"]
+      };
+    } else if (type) {
+      finder.type = type;
+    }
     if (order_status) finder.order_status = order_status;
     if (status) finder.status = status;
     if (phone_no) finder.phone_no = phone_no;
@@ -716,7 +802,8 @@ router.post("/adminOrderList", async (req, res, next) => {
             {
               $project: {
                 _id: 0,
-                rawVideoClips: 1
+                rawVideoClips: 1,
+                appUploadInclusions: 1,
               }
             }
           ],

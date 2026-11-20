@@ -1092,6 +1092,35 @@ app.get("/test-s3", async (req, res) => {
   }
 });
 
+app.get("/api/download-image", (req, res) => {
+  try {
+    const { filename, mode } = req.query;
+
+    if (!filename || path.basename(filename) !== filename) {
+      return res.status(400).json({ message: "Invalid filename" });
+    }
+
+    const filePath = path.join(__dirname, "uploads", filename);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ message: "Image not found" });
+    }
+
+    if (mode === "view") {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Content-Type", "application/octet-stream");
+      return res.sendFile(filePath);
+    }
+
+    return res.download(filePath, filename);
+  } catch (error) {
+    console.error("Download image error:", error);
+    return res.status(500).json({ message: "Download failed" });
+  }
+});
+
+
+
 app.use((req, res, next) => {
   if (req.path.startsWith("/socket.io")) {
     return next();

@@ -1092,6 +1092,145 @@ app.get("/test-s3", async (req, res) => {
   }
 });
 
+
+
+const {
+  S3Client,
+  ListObjectsV2Command,
+  CopyObjectCommand,
+} = require("@aws-sdk/client-s3");
+
+const BUCKET = "photography-hora";
+
+const s3Client = new S3Client({
+  region: "eu-north-1",
+});
+
+const copyS3FolderMultiple = async (
+  sourceFolder,
+  destinationFolders
+) => {
+  try {
+    if (
+      !sourceFolder ||
+      !Array.isArray(destinationFolders) ||
+      destinationFolders.length === 0
+    ) {
+      throw new Error("Source and destination folders are required");
+    }
+
+    const sourcePrefix = sourceFolder.replace(/\/?$/, "/");
+
+    for (const folder of destinationFolders) {
+      const destinationPrefix = folder.replace(/\/?$/, "/");
+
+      if (
+        !destinationPrefix ||
+        destinationPrefix.startsWith(sourcePrefix)
+      ) {
+        throw new Error(`Invalid destination folder: ${folder}`);
+      }
+    }
+
+    let continuationToken;
+    let copiedCount = 0;
+    let failedCount = 0;
+    const errors = [];
+
+    do {
+      const list = await s3Client.send(
+        new ListObjectsV2Command({
+          Bucket: BUCKET,
+          Prefix: sourcePrefix,
+          ContinuationToken: continuationToken,
+        })
+      );
+
+      const files = (list.Contents || []).filter(
+        (file) => file.Key && !file.Key.endsWith("/")
+      );
+
+      const tasks = [];
+
+      for (const file of files) {
+        for (const destination of destinationFolders) {
+          const destinationPrefix = destination.replace(/\/?$/, "/");
+
+          const destinationKey =
+            destinationPrefix +
+            file.Key.substring(sourcePrefix.length);
+
+          tasks.push({
+            sourceKey: file.Key,
+            destinationKey,
+          });
+        }
+      }
+
+      for (let i = 0; i < tasks.length; i += 5) {
+        const results = await Promise.allSettled(
+          tasks.slice(i, i + 5).map((task) =>
+            s3Client.send(
+              new CopyObjectCommand({
+                Bucket: BUCKET,
+                CopySource:
+                  `${BUCKET}/` +
+                  task.sourceKey
+                    .split("/")
+                    .map(encodeURIComponent)
+                    .join("/"),
+                Key: task.destinationKey,
+              })
+            )
+          )
+        );
+
+        results.forEach((result, index) => {
+          if (result.status === "fulfilled") {
+            copiedCount++;
+          } else {
+            failedCount++;
+            errors.push({
+              destination: tasks[i + index].destinationKey,
+              message: result.reason?.message,
+            });
+          }
+        });
+      }
+
+      continuationToken = list.NextContinuationToken;
+
+    } while (continuationToken);
+
+    return {
+      success: failedCount === 0,
+      copiedCount,
+      failedCount,
+      errors,
+    };
+
+  } catch (error) {
+    console.error("S3 folder copy error:", error);
+    throw error;
+  }
+};
+
+(async () => {
+  try {
+    const result = await copyS3FolderMultiple(
+      "38755_6a7f09a01144665025c88d8e_9406754372/",
+      [
+        "sameple-copy-A/12345/",
+      ]
+    );
+
+    console.log("S3 COPY RESULT:", result);
+
+  } catch (error) {
+    console.error("S3 COPY TEST FAILED:", error);
+  }
+})();
+
 app.use((req, res, next) => {
   if (req.path.startsWith("/socket.io")) {
     return next();

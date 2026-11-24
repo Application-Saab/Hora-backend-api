@@ -91,4 +91,9 @@ userCitiesSchema.pre("validate", function () {
   }
 });
 
+userCitiesSchema.index(
+  { cityName: 1, createdAt: -1 },
+  { collation: { locale: "en", strength: 2 } }
+);
+
 module.exports = mongoose.model("user-cities", userCitiesSchema);

@@ -61,6 +61,7 @@ const userSchema = new mongoose.Schema(
         fromWonderland: {type: Boolean, default: false}, 
         fromCapsule: {type: Boolean, default: false}, 
         fromWonderlandInternational: {type: Boolean, default: false}, 
+        fromVenue: {type: Boolean, default: false}, 
         userSpecializations: [{
             type: mongoose.Schema.Types.ObjectId,
             ref: "specialization"

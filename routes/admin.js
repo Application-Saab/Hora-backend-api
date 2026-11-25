@@ -667,6 +667,17 @@ router.post("/adminOrderList", async (req, res, next) => {
     // Build the query object
     const finder = { status: { $ne: 2 } };
 
+    if (emergencyOrderStatus === "lostOrders") {
+      finder.isEmergencyOrder = true;
+      finder.order_status = 6;
+      finder.status = 0;
+      finder.processedBy = {
+        $not: {
+          $elemMatch: { action: "yes" }
+        }
+      };
+    }
+
     if (order_id) finder.order_id = order_id;
     if (customProduct) {
       finder.items = {
@@ -736,6 +747,59 @@ router.post("/adminOrderList", async (req, res, next) => {
       driveLinkStatus === "completed" || driveLinkStatus === "pending";
 
     const basePipeline = [{ $match: finder }];
+
+
+    if (emergencyOrderStatus === "lostOrders") {
+      basePipeline.push(
+        {
+          $lookup: {
+            from: "orders",
+            let: {
+              phone: "$phone_no",
+              orderDate: "$order_date",
+              orderType: "$type",
+              customerId: "$fromId",
+            },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      { $eq: ["$phone_no", "$$phone"] },
+                      { $eq: ["$fromId", "$$customerId"] },
+                      {
+                        $eq: ["$order_date", "$$orderDate"]
+                      },
+                      { $eq: ["$type", "$$orderType"] },
+                      {
+                        $eq: [
+                          { $ifNull: ["$isEmergencyOrder", false] },
+                          false
+                        ]
+                      }
+                      // { $ne: ["$status", 2] },
+                    ],
+                  },
+                },
+              },
+              { $limit: 1 },
+              { $project: { _id: 1 } },
+            ],
+            as: "matchedNormalOrder",
+          },
+        },
+        {
+          $match: {
+            "matchedNormalOrder.0": { $exists: false },
+          },
+        },
+        {
+          $project: {
+            matchedNormalOrder: 0,
+          },
+        }
+      );
+    }
 
     if (useDriveFilter) {
       const today = new Date();
@@ -838,7 +902,7 @@ router.post("/adminOrderList", async (req, res, next) => {
     ]);
 
     let totalorder;
-    if (useDriveFilter) {
+    if (useDriveFilter || emergencyOrderStatus === "lostOrders") {
       const countResult = await orderModel.aggregate([
         ...basePipeline,
         { $count: "total" },

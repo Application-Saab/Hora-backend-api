@@ -6,71 +6,10 @@ const EventDates = require("../models/event-dates");
 const UserCities = require("../models/user-cities");
 const SearchTrackings = require("../models/search-tracking");
 const { CustomResponse } = require("../store/commonFunction");
+const Users = require("../models/user") 
 
 function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function buildMatch({
-  cityName,
-  startDate,
-  endDate,
-  searchedUsers,
-  eventDateUsers,
-  whatsappUsers,
-  loggedInUsers,
-}) {
-  const match = {};
-
-  if (cityName?.trim()) {
-    match.cityName = {
-      $regex: escapeRegex(cityName.trim()),
-      $options: "i",
-    };
-  }
-
-  if (searchedUsers === "true") {
-    match.searchCount = { $gt: 0 };
-  }
-
-  if (eventDateUsers === "true") {
-    match.eventDateCount = { $gt: 0 };
-  }
-
-  if (whatsappUsers === "true") {
-    match["clickCounts.whatsapp"] = { $gt: 0 };
-  }
-
-  if (startDate || endDate) {
-    match.createdAt = {};
-
-    if (startDate) {
-      const start = new Date(startDate);
-      if (!Number.isNaN(start.getTime())) {
-        start.setHours(0, 0, 0, 0);
-        match.createdAt.$gte = start;
-      }
-    }
-
-    if (endDate) {
-      const end = new Date(endDate);
-      if (!Number.isNaN(end.getTime())) {
-        end.setHours(23, 59, 59, 999);
-        match.createdAt.$lte = end;
-      }
-    }
-
-    if (Object.keys(match.createdAt).length === 0) {
-      delete match.createdAt;
-    }
-  }
-
-  if (loggedInUsers === "true") {
-    match.userId = { $ne: null };
-    match.visitorId = { $ne: null };
-  }
-
-  return match;
 }
 
 // Create new entry of event dates for a user or visitor
@@ -258,7 +197,7 @@ router.patch("/update-date", async (req, res, next) => {
         res,
         400,
         true,
-        "Either userId or visitorId is required"
+        "Either userId or visitorId is required",
       );
     }
 
@@ -290,7 +229,9 @@ router.patch("/update-date", async (req, res, next) => {
       updateQuery = {
         $set: {
           "eventDates.$.date": eventDate,
-          ...(eventTitle !== undefined && { "eventDates.$.eventTitle": eventTitle || "" }),
+          ...(eventTitle !== undefined && {
+            "eventDates.$.eventTitle": eventTitle || "",
+          }),
         },
       };
     } else {
@@ -298,19 +239,16 @@ router.patch("/update-date", async (req, res, next) => {
       // (MongoDB arrayFilters or fallback logic)
       const doc = await EventDates.findOne(query);
       if (!doc || !doc.eventDates?.length) {
-        return CustomResponse(
-          res,
-          404,
-          true,
-          "No event found to update"
-        );
+        return CustomResponse(res, 404, true, "No event found to update");
       }
       const lastIndex = doc.eventDates.length - 1;
       query["_id"] = doc._id;
       updateQuery = {
         $set: {
           [`eventDates.${lastIndex}.date`]: eventDate,
-          ...(eventTitle !== undefined && { [`eventDates.${lastIndex}.eventTitle`]: eventTitle || "" }),
+          ...(eventTitle !== undefined && {
+            [`eventDates.${lastIndex}.eventTitle`]: eventTitle || "",
+          }),
         },
       };
     }
@@ -324,7 +262,7 @@ router.patch("/update-date", async (req, res, next) => {
         res,
         404,
         true,
-        "No entry found matching the criteria"
+        "No entry found matching the criteria",
       );
     }
 
@@ -333,7 +271,7 @@ router.patch("/update-date", async (req, res, next) => {
       200,
       false,
       "Event date updated successfully",
-      updatedEntry
+      updatedEntry,
     );
   } catch (err) {
     console.error("Update Event Date Error:", err);
@@ -725,8 +663,94 @@ router.patch("/assign-user-city", async (req, res, next) => {
     next(error);
   }
 });
+// Resolve matching User IDs first when `search` or `userSource` is active
+const resolveFilteredUserIds = async (search = "", userSource = "") => {
+  const trimmedSearch = search.trim();
+  const hasSource = ["venue", "wonderland", "capsule"].includes(userSource);
 
-// City tracking list API
+  if (!trimmedSearch && !hasSource) {
+    return null; // No user-level filter active
+  }
+
+  const userQuery = {};
+
+  if (hasSource) {
+    if (userSource === "venue") userQuery.fromVenue = true;
+    if (userSource === "wonderland") userQuery.fromWonderland = true;
+    if (userSource === "capsule") userQuery.fromCapsule = true;
+  }
+
+  if (trimmedSearch) {
+    const escaped = escapeRegex(trimmedSearch);
+    userQuery.$or = [
+      { name: { $regex: escaped, $options: "i" } },
+      { phone: { $regex: escaped, $options: "i" } },
+    ];
+  }
+
+  // Fetch only _id (uses covered/lean query)
+  const users = await Users.find(userQuery).select("_id").lean();
+  return users.map((u) => u._id);
+};
+
+//  Build base match query on UserCities
+const buildMatch = ({
+  cityName = "",
+  startDate = "",
+  endDate = "",
+  searchedUsers = "",
+  eventDateUsers = "",
+  whatsappUsers = "",
+  loggedInUsers = "",
+  filteredUserIds = null,
+}) => {
+  const match = {};
+
+  if (filteredUserIds !== null) {
+    match.userId = { $in: filteredUserIds };
+  } else if (String(loggedInUsers) === "true") {
+    match.userId = { $ne: null };
+    match.visitorId = { $nin: [null, ""] };
+  }
+
+  if (filteredUserIds !== null && String(loggedInUsers) === "true") {
+    match.visitorId = { $nin: [null, ""] };
+  }
+
+  if (cityName && cityName.trim()) {
+    match.cityName = cityName.trim();
+  }
+
+  if (startDate || endDate) {
+    match.createdAt = {};
+    if (startDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      match.createdAt.$gte = start;
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      match.createdAt.$lte = end;
+    }
+  }
+
+  if (String(searchedUsers) === "true") {
+    match.searchCount = { $gt: 0 };
+  }
+
+  if (String(eventDateUsers) === "true") {
+    match.eventDateCount = { $gt: 0 };
+  }
+
+  if (String(whatsappUsers) === "true") {
+    match["clickCounts.whatsapp"] = { $gt: 0 };
+  }
+
+  return match;
+};
+
+// City Tracking List
 router.get("/city-tracking-list", async (req, res, next) => {
   try {
     const {
@@ -740,11 +764,21 @@ router.get("/city-tracking-list", async (req, res, next) => {
       eventDateUsers = "",
       whatsappUsers = "",
       loggedInUsers = "",
+      userSource = "",
     } = req.query;
 
     const currentPage = Math.max(Number(page) || 1, 1);
     const perPage = Math.min(Math.max(Number(limit) || 10, 1), 100);
     const skip = (currentPage - 1) * perPage;
+
+    const filteredUserIds = await resolveFilteredUserIds(search, userSource);
+
+    if (filteredUserIds !== null && filteredUserIds.length === 0) {
+      return CustomResponse(res, 200, false, "City tracking list fetched", {
+        cityList: [],
+        pagination: { total: 0, page: currentPage, limit: perPage, totalPages: 0 },
+      });
+    }
 
     const match = buildMatch({
       cityName,
@@ -754,93 +788,61 @@ router.get("/city-tracking-list", async (req, res, next) => {
       eventDateUsers,
       whatsappUsers,
       loggedInUsers,
+      filteredUserIds,
     });
 
-    const pipeline = [{ $match: match }];
+    const collation = { locale: "en", strength: 2 };
 
-    const hasSearch = search.trim().length > 0;
-    if (hasSearch) {
-      const escapedSearch = escapeRegex(search.trim());
+    const [rawList, total] = await Promise.all([
+      UserCities.find(match)
+        .collation(collation)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(perPage)
+        .lean(),
+      Object.keys(match).length === 0
+        ? UserCities.estimatedDocumentCount()
+        : UserCities.countDocuments(match).collation(collation),
+    ]);
 
-      pipeline.push(
-        {
-          $lookup: {
-            from: "users",
-            localField: "userId",
-            foreignField: "_id",
-            pipeline: [{ $project: { _id: 1, name: 1, phone: 1 } }],
-            as: "user",
-          },
-        },
-        {
-          $unwind: {
-            path: "$user",
-            preserveNullAndEmptyArrays: true,
-          },
-        },
-        {
-          $match: {
-            $or: [
-              { "user.name": { $regex: escapedSearch, $options: "i" } },
-              { "user.phone": { $regex: escapedSearch, $options: "i" } },
-            ],
-          },
-        },
-      );
+    // Populate user details ONLY for the 10-50 rows on the current page
+    const userIds = [
+      ...new Set(rawList.map((item) => item.userId).filter(Boolean)),
+    ];
+
+    const usersMap = new Map();
+    if (userIds.length > 0) {
+      const users = await Users.find({ _id: { $in: userIds } })
+        .select("_id name phone fromVenue fromWonderland fromCapsule")
+        .lean();
+      for (const u of users) {
+        usersMap.set(String(u._id), u);
+      }
     }
 
-    pipeline.push({
-      $facet: {
-        list: [
-          { $sort: { createdAt: -1 } },
-          { $skip: skip },
-          { $limit: perPage },
-          ...(!hasSearch
-            ? [
-                {
-                  $lookup: {
-                    from: "users",
-                    localField: "userId",
-                    foreignField: "_id",
-                    pipeline: [{ $project: { _id: 1, name: 1, phone: 1 } }],
-                    as: "user",
-                  },
-                },
-                {
-                  $unwind: {
-                    path: "$user",
-                    preserveNullAndEmptyArrays: true,
-                  },
-                },
-              ]
-            : []),
-
-          {
-            $project: {
-              _id: 1,
-              cityName: 1,
-              visitorId: 1,
-              createdAt: 1,
-              updatedAt: 1,
-              searchCount: { $ifNull: ["$searchCount", 0] },
-              eventDateCount: { $ifNull: ["$eventDateCount", 0] },
-              clickCounts: { $ifNull: ["$clickCounts", {}] },
-              user: {
-                _id: "$user._id",
-                name: "$user.name",
-                phone: "$user.phone",
-              },
-            },
-          },
-        ],
-        total: [{ $count: "count" }],
-      },
+    const cityList = rawList.map((item) => {
+      const u = item.userId ? usersMap.get(String(item.userId)) : null;
+      return {
+        _id: item._id,
+        cityName: item.cityName,
+        visitorId: item.visitorId,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+        searchCount: item.searchCount || 0,
+        eventDateCount: item.eventDateCount || 0,
+        clickCounts: item.clickCounts || {},
+        user: u
+          ? {
+              _id: u._id,
+              name: u.name,
+              phone: u.phone,
+              fromVenue: Boolean(u.fromVenue),
+              fromWonderland: Boolean(u.fromWonderland),
+              fromCapsule: Boolean(u.fromCapsule),
+            }
+          : null,
+      };
     });
-
-    const [result] = await UserCities.aggregate(pipeline).allowDiskUse(true);
-
-    const cityList = result?.list || [];
-    const total = result?.total?.[0]?.count || 0;
 
     return CustomResponse(res, 200, false, "City tracking list fetched", {
       cityList,
@@ -857,7 +859,7 @@ router.get("/city-tracking-list", async (req, res, next) => {
   }
 });
 
-// City tracking stats
+// City Tracking Stats 
 router.get("/city-tracking-stats", async (req, res, next) => {
   try {
     const {
@@ -869,7 +871,29 @@ router.get("/city-tracking-stats", async (req, res, next) => {
       eventDateUsers = "",
       whatsappUsers = "",
       loggedInUsers = "",
+      userSource = "",
     } = req.query;
+
+    const filteredUserIds = await resolveFilteredUserIds(search, userSource);
+
+    if (filteredUserIds !== null && filteredUserIds.length === 0) {
+      return CustomResponse(res, 200, false, "City tracking stats fetched", {
+        stats: {
+          totalUsers: 0,
+          totalSearchCount: 0,
+          totalEventDateCount: 0,
+          searchedUsers: 0,
+          eventDateUsers: 0,
+          whatsappUsers: 0,
+          totalWhatsappClicks: 0,
+          notSelectedUsers: 0,
+          loggedInUsers: 0,
+          venueUsers: 0,
+          wonderlandUsers: 0,
+          capsuleUsers: 0,
+        },
+      });
+    }
 
     const match = buildMatch({
       cityName,
@@ -879,105 +903,134 @@ router.get("/city-tracking-stats", async (req, res, next) => {
       eventDateUsers,
       whatsappUsers,
       loggedInUsers,
+      filteredUserIds,
     });
 
-    const pipeline = [{ $match: match }];
-    const hasSearch = search.trim().length > 0;
-    if (hasSearch) {
-      const escapedSearch = escapeRegex(search.trim());
+    const collation = { locale: "en", strength: 2 };
 
-      pipeline.push(
-        {
-          $lookup: {
-            from: "users",
-            localField: "userId",
-            foreignField: "_id",
-            pipeline: [{ $project: { _id: 1, name: 1, phone: 1 } }],
-            as: "user",
-          },
-        },
-        {
-          $unwind: {
-            path: "$user",
-            preserveNullAndEmptyArrays: true,
-          },
-        },
-        {
-          $match: {
-            $or: [
-              { "user.name": { $regex: escapedSearch, $options: "i" } },
-              { "user.phone": { $regex: escapedSearch, $options: "i" } },
-            ],
-          },
-        },
-      );
-    }
+    // Fetch source user IDs in parallel using Users indexes
+    const [venueIds, wonderlandIds, capsuleIds] = await Promise.all([
+      userSource && userSource !== "venue"
+        ? Promise.resolve([])
+        : Users.find({ fromVenue: true }).distinct("_id"),
+      userSource && userSource !== "wonderland"
+        ? Promise.resolve([])
+        : Users.find({ fromWonderland: true }).distinct("_id"),
+      userSource && userSource !== "capsule"
+        ? Promise.resolve([])
+        : Users.find({ fromCapsule: true }).distinct("_id"),
+    ]);
 
-    pipeline.push({
-      $group: {
-        _id: null,
-        totalSearchCount: { $sum: { $ifNull: ["$searchCount", 0] } },
-        totalEventDateCount: { $sum: { $ifNull: ["$eventDateCount", 0] } },
-        searchedUsers: {
-          $sum: {
-            $cond: [{ $gt: [{ $ifNull: ["$searchCount", 0] }, 0] }, 1, 0],
-          },
-        },
-        eventDateUsers: {
-          $sum: {
-            $cond: [{ $gt: [{ $ifNull: ["$eventDateCount", 0] }, 0] }, 1, 0],
-          },
-        },
-        whatsappUsers: {
-          $sum: {
-            $cond: [
-              { $gt: [{ $ifNull: ["$clickCounts.whatsapp", 0] }, 0] },
-              1,
-              0,
-            ],
-          },
-        },
-        totalWhatsappClicks: {
-          $sum: { $ifNull: ["$clickCounts.whatsapp", 0] },
-        },
-        notSelectedUsers: {
-          $sum: {
-            $cond: [{ $eq: ["$cityName", "NOT_SELECTED"] }, 1, 0],
-          },
-        },
-        loggedInUsers: {
-          $sum: {
-            $cond: [
-              {
-                $and: [
-                  { $ne: ["$userId", null] },
-                  { $ne: ["$visitorId", null] },
-                  { $ne: ["$visitorId", ""] },
-                ],
+    // Pure aggregation on UserCities
+    const [aggResult, venueUsers, wonderlandUsers, capsuleUsers] =
+      await Promise.all([
+        UserCities.aggregate([
+          { $match: match },
+          {
+            $group: {
+              _id: null,
+              totalUsers: { $sum: 1 },
+              totalSearchCount: { $sum: { $ifNull: ["$searchCount", 0] } },
+              totalEventDateCount: {
+                $sum: { $ifNull: ["$eventDateCount", 0] },
               },
-              1,
-              0,
-            ],
+              searchedUsers: {
+                $sum: {
+                  $cond: [{ $gt: [{ $ifNull: ["$searchCount", 0] }, 0] }, 1, 0],
+                },
+              },
+              eventDateUsers: {
+                $sum: {
+                  $cond: [
+                    { $gt: [{ $ifNull: ["$eventDateCount", 0] }, 0] },
+                    1,
+                    0,
+                  ],
+                },
+              },
+              whatsappUsers: {
+                $sum: {
+                  $cond: [
+                    { $gt: [{ $ifNull: ["$clickCounts.whatsapp", 0] }, 0] },
+                    1,
+                    0,
+                  ],
+                },
+              },
+              totalWhatsappClicks: {
+                $sum: { $ifNull: ["$clickCounts.whatsapp", 0] },
+              },
+              notSelectedUsers: {
+                $sum: {
+                  $cond: [{ $eq: ["$cityName", "NOT_SELECTED"] }, 1, 0],
+                },
+              },
+              loggedInUsers: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        { $ne: ["$userId", null] },
+                        { $ne: ["$visitorId", null] },
+                        { $ne: ["$visitorId", ""] },
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
+              },
+            },
           },
-        },
-      },
-    });
+        ])
+          .collation(collation)
+          .allowDiskUse(true),
 
-    const [stats] = await UserCities.aggregate(pipeline).allowDiskUse(true);
+        venueIds.length
+          ? UserCities.countDocuments({
+              ...match,
+              userId: {
+                $in: filteredUserIds
+                  ? venueIds.filter((id) =>
+                      filteredUserIds.some((fid) => String(fid) === String(id))
+                    )
+                  : venueIds,
+              },
+            }).collation(collation)
+          : 0,
 
-    const finalStats = stats || {
-      totalSearchCount: 0,
-      totalEventDateCount: 0,
-      searchedUsers: 0,
-      eventDateUsers: 0,
-      whatsappUsers: 0,
-      totalWhatsappClicks: 0,
-      notSelectedUsers: 0,
-      loggedInUsers: 0,
-    };
+        wonderlandIds.length
+          ? UserCities.countDocuments({
+              ...match,
+              userId: {
+                $in: filteredUserIds
+                  ? wonderlandIds.filter((id) =>
+                      filteredUserIds.some((fid) => String(fid) === String(id))
+                    )
+                  : wonderlandIds,
+              },
+            }).collation(collation)
+          : 0,
+
+        capsuleIds.length
+          ? UserCities.countDocuments({
+              ...match,
+              userId: {
+                $in: filteredUserIds
+                  ? capsuleIds.filter((id) =>
+                      filteredUserIds.some((fid) => String(fid) === String(id))
+                    )
+                  : capsuleIds,
+              },
+            }).collation(collation)
+          : 0,
+      ]);
+
+    const finalStats = aggResult?.[0] || {};
 
     return CustomResponse(res, 200, false, "City tracking stats fetched", {
       stats: {
+        totalUsers: finalStats.totalUsers || 0,
         totalSearchCount: finalStats.totalSearchCount || 0,
         totalEventDateCount: finalStats.totalEventDateCount || 0,
         searchedUsers: finalStats.searchedUsers || 0,
@@ -986,6 +1039,9 @@ router.get("/city-tracking-stats", async (req, res, next) => {
         totalWhatsappClicks: finalStats.totalWhatsappClicks || 0,
         notSelectedUsers: finalStats.notSelectedUsers || 0,
         loggedInUsers: finalStats.loggedInUsers || 0,
+        venueUsers: venueUsers || 0,
+        wonderlandUsers: wonderlandUsers || 0,
+        capsuleUsers: capsuleUsers || 0,
       },
     });
   } catch (error) {

@@ -91,6 +91,7 @@ router.post("/otp_generate", async (req, res, next) => {
     fromCapsule = false,
     fromWonderland,
     fromWonderlandInternational,
+    fromVenue
   } = req.body;
 
   if (!phone) {
@@ -170,6 +171,7 @@ router.post("/otp_generate", async (req, res, next) => {
         fromCapsule: fromCapsule,
         fromWonderland: fromWonderland || false,
         fromWonderlandInternational: fromWonderlandInternational || false,
+        fromVenue : fromVenue || false,
       });
 
       // Send OTP via SMS for new user

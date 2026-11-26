@@ -136,5 +136,6 @@ orderSchema.index({
 });
 
 orderSchema.index({ phone_no: 1 });
+orderSchema.index({ order_id: 1 });
 
 module.exports = mongoose.model('order', orderSchema)

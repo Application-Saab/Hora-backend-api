@@ -759,25 +759,20 @@ router.post("/adminOrderList", async (req, res, next) => {
               orderDate: "$order_date",
               orderType: "$type",
               customerId: "$fromId",
+              currentOrderId: "$_id",
             },
             pipeline: [
               {
                 $match: {
                   $expr: {
                     $and: [
+                      { $ne: ["$_id", "$$currentOrderId"] },
                       { $eq: ["$phone_no", "$$phone"] },
                       { $eq: ["$fromId", "$$customerId"] },
                       {
                         $eq: ["$order_date", "$$orderDate"]
                       },
                       { $eq: ["$type", "$$orderType"] },
-                      {
-                        $eq: [
-                          { $ifNull: ["$isEmergencyOrder", false] },
-                          false
-                        ]
-                      }
-                      // { $ne: ["$status", 2] },
                     ],
                   },
                 },

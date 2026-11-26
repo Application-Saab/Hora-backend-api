@@ -381,7 +381,7 @@ router.post("/refresh-token", async (req, res, next) => {
   try {
     const { refreshToken } = req.body;
 
-    if (!refreshToken) {
+    if (!refreshToken || typeof refreshToken !== "string") {
       return res.status(401).json({
         error: true,
         status: 401,
@@ -390,7 +390,6 @@ router.post("/refresh-token", async (req, res, next) => {
     }
 
     let decoded;
-
     try {
       decoded = passportAuth.verifyRefreshToken(refreshToken);
     } catch (error) {
@@ -401,7 +400,9 @@ router.post("/refresh-token", async (req, res, next) => {
       });
     }
 
-    const user = await UserModel.findById(decoded._id);
+    const user = await UserModel.findById(decoded._id)
+      .select("_id name email phone role status")
+      .lean();
 
     if (!user) {
       return res.status(401).json({
@@ -411,8 +412,9 @@ router.post("/refresh-token", async (req, res, next) => {
       });
     }
 
-    // Optional but recommended
-    if (user.status === 0 && user.role !== "supplier") {
+    const userStatus = Number(user.status);
+
+    if (userStatus === 0 && user.role !== "supplier") {
       return res.status(401).json({
         error: true,
         status: 401,
@@ -420,7 +422,7 @@ router.post("/refresh-token", async (req, res, next) => {
       });
     }
 
-    if (user.status === 2) {
+    if (userStatus === 2) {
       return res.status(401).json({
         error: true,
         status: 401,

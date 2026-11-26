@@ -181,6 +181,7 @@ const FolderSchema = new mongoose.Schema(
 );
 
 FolderSchema.index({ orderId: 1 }, { unique: true });
+FolderSchema.index({ "viewedBy.userId": 1 });
 
 
 module.exports = mongoose.model("Folder", FolderSchema);

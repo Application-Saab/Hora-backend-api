@@ -16,7 +16,7 @@ const cron = require("node-cron");
 const { runPackageSync } = require("./store/import-venue-packages");
 const { router: leadsRoutes, syncLeadsFromSheet } = require("./routes/leads");
 const axios = require("axios")
-
+const InvoiceRoutes = require("./routes/invoice");
 sharp.concurrency(1);
 sharp.cache(false);
 
@@ -852,7 +852,7 @@ app.use("/api/specializations", specializationRoutes);
 app.use("/api/pincode", pinCodes)
 app.use("/api/venue-suggestion", venueSuggestion)
 app.use("/api/error-log", ErrorLogRoutes.router);
-
+app.use("/api/invoices", InvoiceRoutes);
 const notificationFunction = require("./store/notifications");
 const UserModel = require("./models/user");
 
